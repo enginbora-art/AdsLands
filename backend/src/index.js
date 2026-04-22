@@ -3,6 +3,8 @@ const cors = require('cors');
 require('dotenv').config();
 
 const routes = require('./routes');
+const authRoutes = require('./routes/auth');
+const invitationRoutes = require('./routes/invitations');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,6 +14,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
+app.use('/api/auth', authRoutes);
+app.use('/api/invitations', invitationRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

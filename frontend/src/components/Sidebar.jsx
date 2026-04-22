@@ -1,4 +1,7 @@
-export default function Sidebar({ active, onNav }) {
+import { useAuth } from '../context/AuthContext';
+
+export default function Sidebar({ active, onNav, onLogout }) {
+  const { user } = useAuth();
   const nav = [
     {
       label: 'Online', items: [
@@ -68,12 +71,17 @@ export default function Sidebar({ active, onNav }) {
       </nav>
       <div className="sidebar-footer">
         <div className="workspace">
-          <div className="workspace-avatar">TM</div>
+          <div className="workspace-avatar">{user?.company_name?.slice(0, 2).toUpperCase() || 'TM'}</div>
           <div className="workspace-info">
-            <div className="workspace-name">TechModa A.Ş.</div>
-            <div className="workspace-role">Marka yöneticisi</div>
+            <div className="workspace-name">{user?.company_name || 'TechModa A.Ş.'}</div>
+            <div className="workspace-role">{user?.user_type === 'agency' ? 'Ajans hesabı' : 'Marka yöneticisi'}</div>
           </div>
         </div>
+        {onLogout && (
+          <button onClick={onLogout} style={{ marginTop: 10, width: '100%', padding: '7px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Çıkış Yap
+          </button>
+        )}
       </div>
     </aside>
   );
