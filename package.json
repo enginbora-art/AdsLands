@@ -1,0 +1,9 @@
+{
+  "name": "adslens",
+  "version": "1.0.0",
+  "scripts": {
+    "backend": "cd backend && node src/index.js",
+    "frontend": "cd frontend && npm run dev",
+    "dev": "npm run backend & npm run frontend"
+  }
+}
