@@ -1,6 +1,6 @@
 #!/bin/bash
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-echo "🚀 AdsLens başlatılıyor..."
+echo "🚀 AdsLands başlatılıyor..."
 
 node "$ROOT/backend/src/index.js" &
 BACKEND_PID=$!
@@ -12,5 +12,5 @@ echo "✅ Frontend: http://localhost:5173 (PID: $FRONTEND_PID)"
 
 echo ""
 echo "Durdurmak için Ctrl+C"
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; echo 'AdsLens durduruldu.'" EXIT
+trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; echo 'AdsLands durduruldu.'" EXIT
 wait

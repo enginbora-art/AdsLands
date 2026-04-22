@@ -7,7 +7,7 @@ export default function InviteAccept({ token, onDone }) {
   const [invite, setInvite] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ password: '', company_name: '', user_type: '' });
+  const [form, setForm] = useState({ password: '', company_name: '', role: '' });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export default function InviteAccept({ token, onDone }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.user_type) return setError('Lütfen hesap tipini seçin.');
+    if (!form.role) return setError('Lütfen hesap tipini seçin.');
     setSubmitting(true);
     try {
       const { token: jwt, user } = await acceptInvitation({ token, ...form });
@@ -51,15 +51,15 @@ export default function InviteAccept({ token, onDone }) {
             <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
             <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
           </svg>
-          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lens</span></span>
+          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
         </div>
 
         <div style={styles.inviteBanner}>
           <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Davet</div>
           <div style={{ fontSize: 14 }}>
             <strong>{invite.sender_company}</strong>{' '}
-            <span style={{ color: 'var(--text3)' }}>({invite.sender_type === 'brand' ? 'Marka' : 'Ajans'})</span>{' '}
-            sizi AdsLens'e davet etti.
+            <span style={{ color: 'var(--text3)' }}>({invite.sender_role === 'brand' ? 'Marka' : 'Ajans'})</span>{' '}
+            sizi AdsLands'e davet etti.
           </div>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{invite.receiver_email}</div>
         </div>
@@ -73,8 +73,8 @@ export default function InviteAccept({ token, onDone }) {
           ].map(t => (
             <div
               key={t.value}
-              style={{ ...styles.typeCard, ...(form.user_type === t.value ? styles.typeCardActive : {}) }}
-              onClick={() => setForm({ ...form, user_type: t.value })}
+              style={{ ...styles.typeCard, ...(form.role === t.value ? styles.typeCardActive : {}) }}
+              onClick={() => setForm({ ...form, role: t.value })}
             >
               <span style={{ fontSize: 20 }}>{t.icon}</span>
               <span style={{ fontWeight: 700, fontSize: 13, marginLeft: 8 }}>{t.label}</span>

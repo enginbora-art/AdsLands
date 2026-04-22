@@ -30,7 +30,7 @@ export default function Login({ onSwitch }) {
             <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
             <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
           </svg>
-          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lens</span></span>
+          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
         </div>
 
         <h2 style={styles.title}>Giriş Yap</h2>

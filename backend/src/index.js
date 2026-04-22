@@ -1,10 +1,18 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+const migrate = require('./db/migrate');
+const { startCronJobs } = require('./cron');
 
 const routes = require('./routes');
 const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const usersRoutes = require('./routes/users');
 const invitationRoutes = require('./routes/invitations');
+const integrationRoutes = require('./routes/integrations');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,11 +23,23 @@ app.use(cors({
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api', usersRoutes);
 app.use('/api/invitations', invitationRoutes);
+app.use('/api/integrations', integrationRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-app.listen(PORT, () => {
-  console.log(`AdsLens API running on http://localhost:${PORT}`);
-});
+migrate()
+  .then(() => {
+    startCronJobs();
+    app.listen(PORT, () => {
+      console.log(`AdsLands API running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Veritabanı bağlantısı kurulamadı:', err.message);
+    process.exit(1);
+  });

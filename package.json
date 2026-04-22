@@ -1,5 +1,5 @@
 {
-  "name": "adslens",
+  "name": "adslands",
   "version": "1.0.0",
   "scripts": {
     "backend": "cd backend && node src/index.js",

@@ -1,24 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
 // POST /api/invitations/send
 router.post('/send', authMiddleware, async (req, res) => {
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const { receiver_email } = req.body;
 
   if (!receiver_email) {
@@ -27,28 +18,42 @@ router.post('/send', authMiddleware, async (req, res) => {
 
   try {
     const token = uuidv4();
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const inviteLink = `${frontendUrl}/invite/${token}`;
+    const inviteLink = `https://adslands-frontend.onrender.com/invite/${token}`;
 
     await pool.query(
       'INSERT INTO invitations (sender_id, receiver_email, token) VALUES ($1, $2, $3)',
       [req.user.id, receiver_email, token]
     );
 
-    const senderResult = await pool.query('SELECT company_name, user_type FROM users WHERE id = $1', [req.user.id]);
+    const senderResult = await pool.query(
+      'SELECT company_name, role FROM users WHERE id = $1',
+      [req.user.id]
+    );
     const sender = senderResult.rows[0];
-    const inviterType = sender.user_type === 'brand' ? 'Marka' : 'Ajans';
+    const inviterType = sender.role === 'brand' ? 'Marka' : 'Ajans';
 
-    await transporter.sendMail({
-      from: `"AdsLens" <${process.env.SMTP_USER}>`,
+    await resend.emails.send({
+      from: 'AdsLands <onboarding@resend.dev>',
       to: receiver_email,
-      subject: `${sender.company_name} sizi AdsLens'e davet etti`,
+      subject: 'Sizi AdsLands platformuna davet ediyoruz',
       html: `
-        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0B1219;color:#F0F5F3;padding:32px;border-radius:12px;">
-          <h2 style="color:#00BFA6;margin-bottom:8px;">AdsLens Daveti</h2>
-          <p style="color:#94A8B3;">${inviterType} hesabı <strong style="color:#F0F5F3;">${sender.company_name}</strong> sizi AdsLens platformuna davet etti.</p>
-          <a href="${inviteLink}" style="display:inline-block;margin-top:24px;padding:12px 24px;background:#00BFA6;color:#0B1219;border-radius:8px;text-decoration:none;font-weight:700;">Daveti Kabul Et</a>
-          <p style="margin-top:24px;font-size:12px;color:#5A7080;">Bu link size özel oluşturulmuştur. Başkalarıyla paylaşmayın.</p>
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0B1219;color:#F0F5F3;padding:40px;border-radius:12px;">
+          <div style="margin-bottom:28px;">
+            <span style="font-size:20px;font-weight:700;">Ads<span style="color:#00BFA6;">Lands</span></span>
+          </div>
+          <h2 style="font-size:22px;font-weight:700;margin:0 0 12px;">Platforma davet edildiniz</h2>
+          <p style="color:#94A8B3;line-height:1.6;margin:0 0 24px;">
+            ${inviterType} hesabı <strong style="color:#F0F5F3;">${sender.company_name}</strong>,
+            sizi AdsLands reklam yönetim platformuna davet etti.
+          </p>
+          <a href="${inviteLink}"
+            style="display:inline-block;padding:13px 28px;background:#00BFA6;color:#0B1219;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+            Daveti Kabul Et
+          </a>
+          <p style="margin-top:32px;font-size:12px;color:#5A7080;line-height:1.5;">
+            Bu link size özel oluşturulmuştur, başkalarıyla paylaşmayın.<br/>
+            Daveti beklemiyorsanız bu e-postayı dikkate almayınız.
+          </p>
         </div>
       `,
     });
@@ -64,7 +69,7 @@ router.post('/send', authMiddleware, async (req, res) => {
 router.get('/:token', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT i.*, u.company_name AS sender_company, u.user_type AS sender_type
+      `SELECT i.*, u.company_name AS sender_company, u.role AS sender_role
        FROM invitations i JOIN users u ON i.sender_id = u.id
        WHERE i.token = $1`,
       [req.params.token]
@@ -77,7 +82,7 @@ router.get('/:token', async (req, res) => {
     res.json({
       receiver_email: invitation.receiver_email,
       sender_company: invitation.sender_company,
-      sender_type: invitation.sender_type,
+      sender_role: invitation.sender_role,
       status: invitation.status,
     });
   } catch (err) {
@@ -88,9 +93,9 @@ router.get('/:token', async (req, res) => {
 
 // POST /api/invitations/accept
 router.post('/accept', async (req, res) => {
-  const { token, password, company_name, user_type } = req.body;
+  const { token, password, company_name, role } = req.body;
 
-  if (!token || !password || !company_name || !user_type) {
+  if (!token || !password || !company_name || !role) {
     return res.status(400).json({ error: 'Tüm alanlar zorunludur.' });
   }
 
@@ -107,15 +112,15 @@ router.post('/accept', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 12);
 
     const userResult = await pool.query(
-      'INSERT INTO users (email, password_hash, user_type, company_name) VALUES ($1, $2, $3, $4) RETURNING id, email, user_type, company_name',
-      [invitation.receiver_email, password_hash, user_type, company_name]
+      'INSERT INTO users (email, password_hash, role, company_name) VALUES ($1, $2, $3, $4) RETURNING id, email, role, company_name',
+      [invitation.receiver_email, password_hash, role, company_name]
     );
 
     await pool.query("UPDATE invitations SET status = 'accepted' WHERE token = $1", [token]);
 
     const newUser = userResult.rows[0];
     const jwtToken = jwt.sign(
-      { id: newUser.id, email: newUser.email, user_type: newUser.user_type },
+      { id: newUser.id, email: newUser.email, role: newUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );

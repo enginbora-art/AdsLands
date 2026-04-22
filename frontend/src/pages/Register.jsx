@@ -4,14 +4,14 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Register({ onSwitch }) {
   const { saveAuth } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '', company_name: '', user_type: '' });
+  const [form, setForm] = useState({ email: '', password: '', company_name: '', role: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.user_type) return setError('Lütfen hesap tipini seçin.');
+    if (!form.role) return setError('Lütfen hesap tipini seçin.');
     setLoading(true);
     try {
       const { token, user } = await register(form);
@@ -31,11 +31,11 @@ export default function Register({ onSwitch }) {
             <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
             <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
           </svg>
-          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lens</span></span>
+          <span style={styles.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
         </div>
 
         <h2 style={styles.title}>Hesap Oluştur</h2>
-        <p style={styles.sub}>AdsLens'e ücretsiz katılın</p>
+        <p style={styles.sub}>AdsLands'e ücretsiz katılın</p>
 
         <div style={styles.typeRow}>
           {[
@@ -44,8 +44,8 @@ export default function Register({ onSwitch }) {
           ].map(t => (
             <div
               key={t.value}
-              style={{ ...styles.typeCard, ...(form.user_type === t.value ? styles.typeCardActive : {}) }}
-              onClick={() => setForm({ ...form, user_type: t.value })}
+              style={{ ...styles.typeCard, ...(form.role === t.value ? styles.typeCardActive : {}) }}
+              onClick={() => setForm({ ...form, role: t.value })}
             >
               <div style={{ fontSize: 24, marginBottom: 6 }}>{t.icon}</div>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{t.label}</div>
