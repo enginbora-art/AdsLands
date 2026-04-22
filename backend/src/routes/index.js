@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const data = require('../data/mockData');
 
+router.get('/hello', (req, res) => res.json({ message: 'Merhaba! Backend çalışıyor.' }));
+
 router.get('/metrics', (req, res) => res.json(data.metrics));
 router.get('/weekly-spend', (req, res) => res.json(data.weeklySpend));
 router.get('/roas', (req, res) => res.json(data.roasData));
