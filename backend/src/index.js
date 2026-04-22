@@ -32,14 +32,9 @@ app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-migrate()
-  .then(() => {
-    startCronJobs();
-    app.listen(PORT, () => {
-      console.log(`AdsLands API running on http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('❌ Veritabanı bağlantısı kurulamadı:', err.message);
-    process.exit(1);
-  });
+app.listen(PORT, () => {
+  console.log(`AdsLands API running on http://localhost:${PORT}`);
+  migrate()
+    .then(() => startCronJobs())
+    .catch((err) => console.error('⚠️ Migration hatası:', err.message));
+});
