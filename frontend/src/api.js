@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: 'http://localhost:3001/api' });
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL });
 
 export const getMetrics = () => api.get('/metrics').then(r => r.data);
 export const getWeeklySpend = () => api.get('/weekly-spend').then(r => r.data);
