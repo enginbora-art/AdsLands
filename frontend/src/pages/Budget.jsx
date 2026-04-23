@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getBudget, getBudgetPlan, saveBudgetPlan, getBudgetLogs, getBudgetBrands } from '../api';
+import { getBudgetPlan, saveBudgetPlan, getBudgetLogs, getBudgetBrands } from '../api';
 
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
@@ -13,7 +13,6 @@ const CHANNELS = [
 const CHANNEL_LABELS = { google_ads_budget: 'Google Ads', meta_ads_budget: 'Meta Ads', tiktok_ads_budget: 'TikTok Ads' };
 
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
-const parseTR = (s) => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0;
 
 function alertLevel(r) { return r >= 100 ? 'red' : r >= 90 ? 'yellow' : 'green'; }
 
@@ -97,41 +96,69 @@ function LogPanel() {
   );
 }
 
+// Binlik ayraçlı Türk formatı: "50000" → "50.000"
+const fmtInput = (v) => {
+  if (v === '' || v === null || v === undefined) return '';
+  const n = parseInt(String(v).replace(/\./g, ''), 10);
+  if (isNaN(n)) return '';
+  return n.toLocaleString('tr-TR');
+};
+
+// Formatlı değeri raw rakama dönüştür: "50.000" → "50000"
+const parseRaw = (v) => String(v).replace(/\./g, '').replace(/[^0-9]/g, '');
+
 // ── Budget Modal ─────────────────────────────────────────────────────────────
 function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
+  const toRaw = (v) => v ? String(Math.round(Number(v))) : '';
+
   const [form, setForm] = useState({
     brand_id: brands?.[0]?.id ?? '',
     month: existing?.month ?? month,
     year: existing?.year ?? year,
-    total_budget: existing?.total_budget ?? '',
-    google_ads_budget: existing?.google_ads_budget ?? '',
-    meta_ads_budget: existing?.meta_ads_budget ?? '',
-    tiktok_ads_budget: existing?.tiktok_ads_budget ?? '',
+    total_budget: toRaw(existing?.total_budget),
+    google_ads_budget: toRaw(existing?.google_ads_budget),
+    meta_ads_budget: toRaw(existing?.meta_ads_budget),
+    tiktok_ads_budget: toRaw(existing?.tiktok_ads_budget),
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleNumberChange = (key) => (e) => {
+    set(key, parseRaw(e.target.value));
+  };
 
   const handleSave = async () => {
     if (!form.total_budget) return;
     setSaving(true);
+    setError('');
     try {
       const payload = {
         month: parseInt(form.month),
         year: parseInt(form.year),
-        total_budget: parseTR(form.total_budget),
-        google_ads_budget: parseTR(form.google_ads_budget),
-        meta_ads_budget: parseTR(form.meta_ads_budget),
-        tiktok_ads_budget: parseTR(form.tiktok_ads_budget),
+        total_budget: parseInt(form.total_budget) || 0,
+        google_ads_budget: parseInt(form.google_ads_budget) || 0,
+        meta_ads_budget: parseInt(form.meta_ads_budget) || 0,
+        tiktok_ads_budget: parseInt(form.tiktok_ads_budget) || 0,
       };
       if (role === 'agency') payload.brand_id = form.brand_id;
+      console.log('Budget save payload:', payload);
       const saved = await saveBudgetPlan(payload);
+      console.log('Budget save success:', saved);
       onSave(saved);
-    } finally { setSaving(false); }
+    } catch (err) {
+      console.error('Budget save error:', err);
+      setError(err.response?.data?.error || 'Kayıt başarısız. Tekrar deneyin.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const channelSum = CHANNELS.reduce((s, c) => s + parseTR(form[c.key]), 0);
-  const total = parseTR(form.total_budget);
+  const channelSum = CHANNELS.reduce((s, c) => s + (parseInt(form[c.key]) || 0), 0);
+  const total = parseInt(form.total_budget) || 0;
   const unallocated = total - channelSum;
+  const canSave = !!form.total_budget && !saving;
 
   return (
     <div style={ms.overlay} onClick={onClose}>
@@ -167,8 +194,8 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
 
           <div style={ms.field}>
             <label style={ms.label}>Toplam Bütçe (₺)</label>
-            <input style={ms.input} type="number" min="0" placeholder="örn: 150000"
-              value={form.total_budget} onChange={e => set('total_budget', e.target.value)} />
+            <input style={ms.input} type="text" inputMode="numeric" placeholder="örn: 150.000"
+              value={fmtInput(form.total_budget)} onChange={handleNumberChange('total_budget')} />
           </div>
 
           <div style={ms.divider} />
@@ -177,8 +204,8 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
           {CHANNELS.map(ch => (
             <div key={ch.key} style={ms.field}>
               <label style={{ ...ms.label, color: ch.color }}>{ch.label} (₺)</label>
-              <input style={ms.input} type="number" min="0" placeholder="0"
-                value={form[ch.key]} onChange={e => set(ch.key, e.target.value)} />
+              <input style={ms.input} type="text" inputMode="numeric" placeholder="0"
+                value={fmtInput(form[ch.key])} onChange={handleNumberChange(ch.key)} />
             </div>
           ))}
 
@@ -193,11 +220,18 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
               </span>
             </div>
           )}
+
+          {error && (
+            <div style={{ background: 'rgba(255,107,90,0.12)', border: '1px solid rgba(255,107,90,0.3)',
+              borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--coral)', fontWeight: 600 }}>
+              ⚠ {error}
+            </div>
+          )}
         </div>
         <div style={ms.footer}>
           <button style={ms.cancelBtn} onClick={onClose}>İptal</button>
-          <button style={{ ...ms.saveBtn, opacity: saving || !form.total_budget ? 0.6 : 1 }}
-            onClick={handleSave} disabled={saving || !form.total_budget}>
+          <button style={{ ...ms.saveBtn, opacity: canSave ? 1 : 0.6 }}
+            onClick={handleSave} disabled={!canSave}>
             {saving ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
@@ -212,13 +246,10 @@ export default function Budget() {
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
   const [selYear, setSelYear] = useState(now.getFullYear());
-  const [mockData, setMockData] = useState(null);
   const [budgetPlan, setBudgetPlan] = useState(undefined);
   const [showModal, setShowModal] = useState(false);
   const [brands, setBrands] = useState([]);
   const [selBrandId, setSelBrandId] = useState('');
-
-  useEffect(() => { getBudget().then(setMockData); }, []);
 
   useEffect(() => {
     if (user?.role === 'agency') {
@@ -240,7 +271,7 @@ export default function Budget() {
 
   const handleSave = (saved) => { setBudgetPlan(saved); setShowModal(false); loadPlan(); };
 
-  if (!mockData) return <div className="loading">Yükleniyor...</div>;
+  if (budgetPlan === undefined && user?.role !== 'admin') return <div className="loading">Yükleniyor...</div>;
 
   // Admin erişim engeli
   if (user?.role === 'admin') {
@@ -261,19 +292,14 @@ export default function Budget() {
 
   // Hesaplamalar
   const totalBudget = budgetPlan ? Number(budgetPlan.total_budget) : null;
-  const spent = mockData.spent;
-  const remaining = totalBudget !== null ? totalBudget - spent : null;
-  const burnRate = totalBudget ? Math.round((spent / totalBudget) * 1000) / 10 : null;
-  const daysInMonth = new Date(selYear, selMonth, 0).getDate();
-  const dayOfMonth = selMonth === now.getMonth() + 1 && selYear === now.getFullYear()
-    ? now.getDate() : daysInMonth;
-  const forecast = dayOfMonth > 0 && totalBudget ? Math.round((spent / dayOfMonth) * daysInMonth) : null;
-  const level = burnRate !== null ? alertLevel(burnRate) : null;
 
-  const channelData = mockData.channels.map(ch => {
-    const k = ch.name === 'Google Ads' ? 'google_ads_budget' : ch.name === 'Meta Ads' ? 'meta_ads_budget' : 'tiktok_ads_budget';
-    return { ...ch, budget: budgetPlan ? Number(budgetPlan[k]) : ch.budget };
-  });
+  const channelData = budgetPlan ? CHANNELS.map(ch => ({
+    key: ch.key,
+    name: ch.label,
+    color: ch.color,
+    budget: Number(budgetPlan[ch.key]),
+    spent: 0,
+  })) : [];
 
   const selBrand = brands.find(b => b.id === selBrandId);
 
@@ -324,136 +350,82 @@ export default function Budget() {
           </div>
         )}
 
-        {/* Metrik kartları */}
-        <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <div className="metric-card teal">
-            <div className="metric-label">Toplam Bütçe</div>
-            {totalBudget !== null ? (
-              <><div className="metric-value">₺{fmt(totalBudget)}</div>
-              <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div></>
-            ) : (
-              <><div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>Belirlenmedi</div>
-              <button onClick={() => setShowModal(true)} style={s.setBudgetBtn}>Bütçe Belirle</button></>
-            )}
-          </div>
-
-          <div className="metric-card purple">
-            <div className="metric-label">Harcanan</div>
-            <div className="metric-value">₺{fmt(spent)}</div>
-            {burnRate !== null && (
-              <span className="metric-change down"
-                style={{ color: level === 'red' ? 'var(--coral)' : level === 'yellow' ? 'var(--amber)' : undefined }}>
-                %{burnRate} kullanıldı{level === 'red' && ' ⚠'}
-              </span>
-            )}
-          </div>
-
-          <div className="metric-card amber" style={
-            level === 'red' ? { borderColor: 'rgba(255,107,90,0.4)', background: 'rgba(255,107,90,0.06)' }
-            : level === 'yellow' ? { borderColor: 'rgba(255,181,71,0.4)' } : {}}>
-            <div className="metric-label">Kalan</div>
-            {remaining !== null ? (
-              <><div className="metric-value" style={{ color: remaining < 0 ? 'var(--coral)' : undefined }}>
-                {remaining < 0 ? '-' : ''}₺{fmt(Math.abs(remaining))}
+        {/* Metrik kartları veya boş durum */}
+        {budgetPlan === null ? (
+          <div className="metrics" style={{ gridTemplateColumns: '1fr' }}>
+            <div className="metric-card" style={{ textAlign: 'center', padding: '40px 32px' }}>
+              <div style={{ fontSize: 36, marginBottom: 14 }}>📅</div>
+              <div className="metric-value" style={{ fontSize: 18, color: 'var(--text3)', marginBottom: 8 }}>Bütçe Belirlenmedi</div>
+              <div className="metric-sub" style={{ marginBottom: 20 }}>
+                {MONTHS[selMonth - 1]} {selYear} için henüz bütçe belirlenmedi.
               </div>
-              <div className="metric-sub" style={{ color: level === 'red' ? 'var(--coral)' : level === 'yellow' ? 'var(--amber)' : undefined }}>
-                {level === 'red' ? '⚠ Bütçe aşıldı' : level === 'yellow' ? '⚠ Bütçe doluyor' : 'Ay sonuna kalan'}
-              </div></>
-            ) : <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>}
+              <button onClick={() => setShowModal(true)} style={s.setBudgetBtn}>+ Bütçe Belirle</button>
+            </div>
           </div>
-
-          <div className="metric-card coral" style={
-            forecast !== null && totalBudget && forecast > totalBudget
-              ? { borderColor: 'rgba(255,107,90,0.4)', background: 'rgba(255,107,90,0.06)' } : {}}>
-            <div className="metric-label">Ay Sonu Tahmini</div>
-            {forecast !== null ? (
-              <><div className="metric-value"
-                style={{ color: totalBudget && forecast > totalBudget ? 'var(--coral)' : undefined }}>
-                ₺{fmt(forecast)}
+        ) : (
+          <>
+            <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              <div className="metric-card teal">
+                <div className="metric-label">Toplam Bütçe</div>
+                <div className="metric-value">₺{fmt(totalBudget)}</div>
+                <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div>
               </div>
-              <span className="metric-change up"
-                style={{ color: totalBudget && forecast > totalBudget ? 'var(--coral)' : 'var(--success)' }}>
-                {totalBudget && forecast > totalBudget
-                  ? `₺${fmt(forecast - totalBudget)} aşım bekleniyor` : 'Bütçe dahilinde'}
-              </span></>
-            ) : <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>}
-          </div>
-        </div>
 
-        {/* Uyarı banner */}
-        {level === 'red' && (
-          <div style={{ ...s.alertBanner, background: 'rgba(255,107,90,0.1)', borderColor: 'rgba(255,107,90,0.35)', color: 'var(--coral)' }}>
-            ⚠ Bütçeniz aşıldı! {MONTHS[selMonth - 1]} bütçesini revize etmeyi düşünün.
-          </div>
-        )}
-        {level === 'yellow' && (
-          <div style={{ ...s.alertBanner, background: 'rgba(255,181,71,0.1)', borderColor: 'rgba(255,181,71,0.35)', color: 'var(--amber)' }}>
-            ⚠ Bütçenizin %{burnRate}'i kullanıldı. Harcama hızını izleyin.
-          </div>
-        )}
+              <div className="metric-card purple">
+                <div className="metric-label">Harcanan</div>
+                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+                <div className="metric-sub">Entegrasyon verisi bekleniyor</div>
+              </div>
 
-        {/* Kanal bütçe durumu */}
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div className="card-header">
-            <div className="card-title">Kanal Bütçe Durumu</div>
-            {!budgetPlan && <span style={{ fontSize: 12, color: 'var(--text3)' }}>Bütçe girilmemiş — varsayılan değerler</span>}
-          </div>
-          <div className="card-body">
-            {channelData.map(ch => {
-              const pct = ch.budget > 0 ? (ch.spent / ch.budget) * 100 : 0;
-              const cl = alertLevel(pct);
-              return (
-                <div key={ch.name} style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: ch.color }}>{ch.name}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
-                      ₺{fmt(ch.spent)} / ₺{fmt(ch.budget)}
-                      {cl !== 'green' && <span style={{ marginLeft: 8, color: cl === 'red' ? 'var(--coral)' : 'var(--amber)', fontWeight: 700 }}>
-                        %{Math.round(pct)}{cl === 'red' ? ' ⚠' : ''}
-                      </span>}
-                    </span>
+              <div className="metric-card amber">
+                <div className="metric-label">Kalan</div>
+                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+                <div className="metric-sub">Harcama verisi yok</div>
+              </div>
+
+              <div className="metric-card coral">
+                <div className="metric-label">Ay Sonu Tahmini</div>
+                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+                <div className="metric-sub">Harcama verisi yok</div>
+              </div>
+            </div>
+
+            {/* Kanal bütçe dağılımı */}
+            <div className="card" style={{ marginBottom: 24 }}>
+              <div className="card-header">
+                <div className="card-title">Kanal Bütçe Dağılımı</div>
+                <div className="card-subtitle">Planlanan kanal bazında dağılım</div>
+              </div>
+              <div className="card-body">
+                {channelData.map(ch => {
+                  const pct = totalBudget > 0 ? (ch.budget / totalBudget) * 100 : 0;
+                  return (
+                    <div key={ch.name} style={{ marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: ch.color }}>{ch.name}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
+                          ₺{fmt(ch.budget)} — %{Math.round(pct)}
+                        </span>
+                      </div>
+                      <div className="budget-bar-wrap">
+                        <div className="budget-bar-fill" style={{
+                          width: `${Math.min(pct, 100)}%`,
+                          background: ch.color,
+                          transition: 'width 0.6s ease',
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {channelData.every(ch => ch.budget === 0) && (
+                  <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '8px 0' }}>
+                    Kanal bazında dağılım girilmemiş.
                   </div>
-                  <div className="budget-bar-wrap">
-                    <div className="budget-bar-fill" style={{
-                      width: `${Math.min(pct, 100)}%`,
-                      background: cl === 'red' ? 'var(--coral)' : cl === 'yellow' ? 'var(--amber)' : ch.color,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </div>
-                  {cl === 'green' && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>%{Math.round(pct)} kullanıldı</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Kampanya tablosu */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Kampanya Detayları</div>
-            <div className="card-subtitle">Tüm aktif kampanyalar</div>
-          </div>
-          <table className="cmp-table">
-            <thead>
-              <tr><th>Kampanya</th><th>Kanal</th><th>Bütçe</th><th>Harcanan</th><th>ROAS</th><th>Durum</th></tr>
-            </thead>
-            <tbody>
-              {mockData.campaigns.map(c => (
-                <tr key={c.name}>
-                  <td>{c.name}</td>
-                  <td style={{ color: c.channel === 'Google' ? 'var(--blue)' : 'var(--purple)' }}>{c.channel}</td>
-                  <td>₺{fmt(c.budget)}</td>
-                  <td>₺{fmt(c.spent)}</td>
-                  <td style={{ color: c.roas >= 4 ? 'var(--success)' : c.roas >= 3 ? 'var(--amber)' : 'var(--danger)' }}>{c.roas}x</td>
-                  <td><span style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                    background: c.status === 'active' ? 'rgba(52,211,153,0.15)' : 'rgba(255,181,71,0.15)',
-                    color: c.status === 'active' ? 'var(--success)' : 'var(--amber)' }}>
-                    {c.status === 'active' ? 'Aktif' : 'Uyarı'}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Canlı log paneli */}
@@ -473,8 +445,8 @@ const s = {
 };
 
 const ms = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 14, width: 420, maxWidth: '95vw', display: 'flex', flexDirection: 'column' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modal: { background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, width: 420, maxWidth: '95vw', display: 'flex', flexDirection: 'column' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px 14px', borderBottom: '1px solid var(--border2)' },
   title: { fontSize: 16, fontWeight: 700 },
   close: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text3)' },
