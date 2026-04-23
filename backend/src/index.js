@@ -35,6 +35,8 @@ app.use('/api', routes);
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
+  const dbUrl = process.env.DATABASE_URL || '(not set)';
+  console.log(`DATABASE_URL: ${dbUrl.replace(/:([^@]+)@/, ':***@')}`);
   console.log(`AdsLands API running on http://localhost:${PORT}`);
   migrate()
     .then(() => startCronJobs())
