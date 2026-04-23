@@ -98,6 +98,23 @@ async function migrate() {
     // Google OAuth token süresi için kolon
     await client.query(`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS token_expiry TIMESTAMPTZ;`);
 
+    // Bütçe tablosu
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        year INTEGER NOT NULL,
+        total_budget NUMERIC(12,2) NOT NULL DEFAULT 0,
+        google_ads_budget NUMERIC(12,2) NOT NULL DEFAULT 0,
+        meta_ads_budget NUMERIC(12,2) NOT NULL DEFAULT 0,
+        tiktok_ads_budget NUMERIC(12,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, month, year)
+      );
+    `);
+
     console.log('✅ Tablolar hazır (users, invitations, connections, integrations, ad_metrics, anomalies)');
   } finally {
     client.release();
