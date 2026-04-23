@@ -17,8 +17,11 @@ export const getChannels = () => api.get('/channels').then(r => r.data);
 export const getAiReport = () => api.get('/ai-report').then(r => r.data);
 export const getTvBroadcast = () => api.get('/tv-broadcast').then(r => r.data);
 export const getBudget = () => api.get('/budget').then(r => r.data);
-export const getBudgetPlan = (month, year) => api.get(`/budgets?month=${month}&year=${year}`).then(r => r.data);
+export const getBudgetPlan = (month, year, brandId) =>
+  api.get(`/budgets?month=${month}&year=${year}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
 export const saveBudgetPlan = (data) => api.post('/budgets', data).then(r => r.data);
+export const getBudgetLogs = (limit = 10) => api.get(`/budgets/logs?limit=${limit}`).then(r => r.data);
+export const getBudgetBrands = () => api.get('/budgets/brands').then(r => r.data);
 export const getBenchmark = () => api.get('/benchmark').then(r => r.data);
 export const getReports = () => api.get('/reports').then(r => r.data);
 export const getAgency = () => api.get('/agency').then(r => r.data);

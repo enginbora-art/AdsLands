@@ -98,7 +98,7 @@ async function migrate() {
     // Google OAuth token süresi için kolon
     await client.query(`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS token_expiry TIMESTAMPTZ;`);
 
-    // Bütçe tablosu
+    // Bütçe ve log tabloları
     await client.query(`
       CREATE TABLE IF NOT EXISTS budgets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -112,6 +112,18 @@ async function migrate() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, month, year)
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_logs (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        budget_id    UUID NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+        user_id      UUID NOT NULL REFERENCES users(id),
+        user_type    VARCHAR(10) NOT NULL,
+        company_name VARCHAR(255) NOT NULL,
+        action       VARCHAR(10) NOT NULL CHECK (action IN ('created', 'updated')),
+        old_value    JSONB,
+        new_value    JSONB NOT NULL,
+        changed_at   TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
