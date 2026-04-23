@@ -35,7 +35,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({ token, user });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.' });
+    res.status(500).json({ error: 'Sunucu hatası.', detail: err.message });
   }
 });
 
@@ -66,7 +66,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.' });
+    res.status(500).json({ error: 'Sunucu hatası.', detail: err.message });
   }
 });
 
