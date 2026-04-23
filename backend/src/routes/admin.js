@@ -13,7 +13,7 @@ async function sendSetupEmail({ email, company_name, role, setup_token }) {
   const setupLink = `${FRONTEND_URL}/setup/${setup_token}`;
 
   await resend.emails.send({
-    from: 'AdsLands <onboarding@resend.dev>',
+    from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
     to: email,
     subject: 'AdsLands hesabınız oluşturuldu — şifrenizi belirleyin',
     html: `

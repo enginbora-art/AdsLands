@@ -33,7 +33,7 @@ router.post('/send', authMiddleware, async (req, res) => {
     const inviterType = sender.role === 'brand' ? 'Marka' : 'Ajans';
 
     await resend.emails.send({
-      from: 'AdsLands <onboarding@resend.dev>',
+      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
       to: receiver_email,
       subject: 'Sizi AdsLands platformuna davet ediyoruz',
       html: `
