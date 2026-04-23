@@ -65,8 +65,7 @@ router.post('/login', async (req, res) => {
       user: { id: user.id, email: user.email, role: user.role, company_name: user.company_name, is_active: user.is_active, created_at: user.created_at },
     });
   } catch (err) {
-    console.error('LOGIN ERROR:', err.name, err.message, err.code);
-    console.error('LOGIN STACK:', err.stack);
+    console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
