@@ -33,11 +33,6 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
-app.get('/debug-db', (req, res) => {
-  const url = process.env.DATABASE_URL || '';
-  const masked = url.replace(/:([^@]+)@/, ':***@');
-  res.json({ DATABASE_URL: masked });
-});
 
 app.listen(PORT, () => {
   console.log(`AdsLands API running on http://localhost:${PORT}`);

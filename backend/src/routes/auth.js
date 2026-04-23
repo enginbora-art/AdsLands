@@ -66,7 +66,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.', detail: err.message, code: err.code, name: err.name, stack: err.stack });
+    res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
 
