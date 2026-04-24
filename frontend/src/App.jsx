@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrandProvider, useSelectedBrand } from './context/BrandContext';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './pages/AdminPanel';
 import Dashboard from './pages/Dashboard';
@@ -37,6 +38,7 @@ const pages = {
 
 function AppInner() {
   const { user, loading, logout } = useAuth();
+  const { setSelectedBrand } = useSelectedBrand();
   const [active, setActive] = useState('dashboard');
   const [authMode, setAuthMode] = useState('login');
 
@@ -78,11 +80,23 @@ function AppInner() {
 
   const Page = pages[active] || Dashboard;
 
+  const handleSelectBrand = (brand) => {
+    setSelectedBrand(brand);
+    setActive('dashboard');
+  };
+
+  const handleNav = (id) => {
+    if (id === 'agency') setSelectedBrand(null);
+    setActive(id);
+  };
+
   return (
     <div className="app">
-      <Sidebar active={active} onNav={setActive} onLogout={logout} />
+      <Sidebar active={active} onNav={handleNav} onLogout={logout} />
       <main className="main">
-        <Page key={active} />
+        {active === 'agency'
+          ? <Agency key="agency" onSelectBrand={handleSelectBrand} />
+          : <Page key={active} />}
       </main>
     </div>
   );
@@ -91,7 +105,9 @@ function AppInner() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppInner />
+      <BrandProvider>
+        <AppInner />
+      </BrandProvider>
     </AuthProvider>
   );
 }

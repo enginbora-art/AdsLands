@@ -274,7 +274,7 @@ const TABS = [
   { key: 'anomalies',     label: 'Anomaliler' },
 ];
 
-function BrandDetail({ brand, onBack }) {
+function BrandDetail({ brand, onBack, onGoToDashboard }) {
   const [tab, setTab] = useState('dashboard');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -294,6 +294,11 @@ function BrandDetail({ brand, onBack }) {
           <button onClick={onBack} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 8, padding: '5px 12px', color: 'var(--text2)', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
             ← Tüm Müşteriler
           </button>
+          {onGoToDashboard && (
+            <button onClick={() => onGoToDashboard(brand)} style={{ background: 'var(--teal)', border: 'none', borderRadius: 8, padding: '5px 14px', color: '#0B1219', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+              Sol Menüde Aç →
+            </button>
+          )}
           <div style={{ width: 1, height: 20, background: 'var(--border2)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(0,191,166,0.15)', color: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
@@ -333,10 +338,10 @@ function BrandDetail({ brand, onBack }) {
 }
 
 // ── Ajans Ana Görünüm ─────────────────────────────────────────────────────────
-function AgencyView() {
+function AgencyView({ onSelectBrand }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedBrand, setSelectedBrand] = useState(null);
+  const [detailBrand, setDetailBrand] = useState(null);
 
   useEffect(() => {
     getAgencyDashboard().then(setData).catch(console.error).finally(() => setLoading(false));
@@ -344,11 +349,11 @@ function AgencyView() {
 
   if (loading) return <div className="loading">Yükleniyor...</div>;
 
-  if (selectedBrand) {
-    return <BrandDetail brand={selectedBrand} onBack={() => setSelectedBrand(null)} />;
+  if (detailBrand) {
+    return <BrandDetail brand={detailBrand} onBack={() => setDetailBrand(null)} onGoToDashboard={onSelectBrand} />;
   }
 
-  return <AgencyOverview data={data} onSelectBrand={setSelectedBrand} />;
+  return <AgencyOverview data={data} onSelectBrand={setDetailBrand} />;
 }
 
 // ── Marka Görünüm ─────────────────────────────────────────────────────────────
@@ -394,7 +399,7 @@ function BrandView() {
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
-export default function Agency() {
+export default function Agency({ onSelectBrand }) {
   const { user } = useAuth();
-  return user?.role === 'agency' ? <AgencyView /> : <BrandView />;
+  return user?.role === 'agency' ? <AgencyView onSelectBrand={onSelectBrand} /> : <BrandView />;
 }

@@ -1,7 +1,9 @@
 import { useAuth } from '../context/AuthContext';
+import { useSelectedBrand } from '../context/BrandContext';
 
 export default function Sidebar({ active, onNav, onLogout }) {
   const { user } = useAuth();
+  const { selectedBrand, setSelectedBrand } = useSelectedBrand();
   const isAgency = user?.role === 'agency';
 
   const nav = [
@@ -54,6 +56,17 @@ export default function Sidebar({ active, onNav, onLogout }) {
         </svg>
         <div className="logo-text">Ads<span>Lands</span></div>
       </div>
+      {isAgency && selectedBrand && (
+        <div style={{ margin: '0 12px 8px', padding: '8px 12px', background: 'rgba(0,191,166,0.08)', border: '1px solid rgba(0,191,166,0.2)', borderRadius: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--teal)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>Seçili Marka</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text1)', marginBottom: 4 }}>{selectedBrand.company_name}</div>
+          <button
+            onClick={() => { setSelectedBrand(null); onNav('agency'); }}
+            style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            ← Tüm müşteriler
+          </button>
+        </div>
+      )}
       <nav className="nav">
         {nav.map(section => (
           <div className="nav-section" key={section.label}>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSelectedBrand } from '../context/BrandContext';
 import { getBudgetPlan, saveBudgetPlan, getBudgetLogs, getBudgetBrands } from '../api';
 
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -243,7 +244,29 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
 // ── Ana Sayfa ─────────────────────────────────────────────────────────────────
 export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const { user } = useAuth();
+  const { selectedBrand } = useSelectedBrand();
+  const isAgency = user?.role === 'agency';
   const now = new Date();
+
+  if (isAgency && !forceBrandId && !selectedBrand) {
+    return (
+      <div className="fade-in">
+        <div className="topbar"><div className="topbar-title">Bütçe Planlama</div></div>
+        <div className="content">
+          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>👈</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Önce bir müşteri seçin</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+              Sol menüden <strong>Müşteri Yönetimi</strong>'ne giderek bir marka seçin.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const resolvedForceBrandId = forceBrandId || (isAgency ? selectedBrand?.id : undefined);
+  const resolvedForceBrandName = forceBrandName || (isAgency ? selectedBrand?.company_name : undefined);
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
   const [selYear, setSelYear] = useState(now.getFullYear());
   const [budgetPlan, setBudgetPlan] = useState(undefined);
@@ -251,7 +274,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const [brands, setBrands] = useState([]);
   const [selBrandId, setSelBrandId] = useState('');
 
-  const isEmbedded = !!forceBrandId;
+  const isEmbedded = !!resolvedForceBrandId;
 
   useEffect(() => {
     if (!isEmbedded && user?.role === 'agency') {
@@ -262,7 +285,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     }
   }, [user, isEmbedded]);
 
-  const effectiveBrandId = forceBrandId || (user?.role === 'agency' ? selBrandId : undefined);
+  const effectiveBrandId = resolvedForceBrandId || (user?.role === 'agency' ? selBrandId : undefined);
 
   const loadPlan = useCallback(() => {
     if (user?.role === 'admin') return;
@@ -305,8 +328,8 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     spent: 0,
   })) : [];
 
-  const selBrand = forceBrandName
-    ? { company_name: forceBrandName }
+  const selBrand = resolvedForceBrandName
+    ? { company_name: resolvedForceBrandName }
     : brands.find(b => b.id === selBrandId);
 
   const monthPicker = (
@@ -402,7 +425,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const modal = showModal && (
     <BudgetModal role={user?.role} brands={brands}
       month={selMonth} year={selYear} existing={budgetPlan}
-      forceBrandId={forceBrandId}
+      forceBrandId={resolvedForceBrandId}
       onSave={handleSave} onClose={() => setShowModal(false)} />
   );
 
