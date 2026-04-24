@@ -5,7 +5,7 @@ const { Resend } = require('resend');
 const pool = require('../db');
 const { adminOnly } = require('../middleware/auth');
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://adslands-frontend.onrender.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://adslands.com';
 
 async function sendSetupEmail({ email, company_name, role, setup_token }) {
   const resend = new Resend(process.env.RESEND_API_KEY);
