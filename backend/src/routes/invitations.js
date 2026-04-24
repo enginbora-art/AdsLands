@@ -18,7 +18,7 @@ router.post('/send', authMiddleware, async (req, res) => {
 
   try {
     const token = uuidv4();
-    const inviteLink = `https://adslands-frontend.onrender.com/invite/${token}`;
+    const inviteLink = `${process.env.FRONTEND_URL || 'https://adslands.com'}/invite/${token}`;
 
     await pool.query(
       'INSERT INTO invitations (sender_id, receiver_email, token) VALUES ($1, $2, $3)',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './pages/AdminPanel';
@@ -37,8 +37,12 @@ const pages = {
 
 function AppInner() {
   const { user, loading, logout } = useAuth();
-  const [active, setActive] = useState(() => user?.role === 'agency' ? 'agency' : 'dashboard');
+  const [active, setActive] = useState('dashboard');
   const [authMode, setAuthMode] = useState('login');
+
+  useEffect(() => {
+    if (!loading && user?.role === 'agency') setActive('agency');
+  }, [loading, user]);
 
   if (loading) return <div className="loading">Yükleniyor...</div>;
 
