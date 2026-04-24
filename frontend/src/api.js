@@ -54,6 +54,7 @@ export const getGoogleData = (platform) =>
 // Dashboard
 export const getBrandDashboard = () => api.get('/dashboard/brand').then(r => r.data);
 export const getAgencyDashboard = () => api.get('/dashboard/agency').then(r => r.data);
+export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/brand/${brandId}`).then(r => r.data);
 export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
 
 // Şifre kurulumu

@@ -108,7 +108,7 @@ const fmtInput = (v) => {
 const parseRaw = (v) => String(v).replace(/\./g, '').replace(/[^0-9]/g, '');
 
 // ── Budget Modal ─────────────────────────────────────────────────────────────
-function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
+function BudgetModal({ role, brands, month, year, existing, onSave, onClose, forceBrandId }) {
   const toRaw = (v) => v ? String(Math.round(Number(v))) : '';
 
   const [form, setForm] = useState({
@@ -142,7 +142,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
         meta_ads_budget: parseInt(form.meta_ads_budget) || 0,
         tiktok_ads_budget: parseInt(form.tiktok_ads_budget) || 0,
       };
-      if (role === 'agency') payload.brand_id = form.brand_id;
+      if (role === 'agency') payload.brand_id = forceBrandId || form.brand_id;
       console.log('Budget save payload:', payload);
       const saved = await saveBudgetPlan(payload);
       console.log('Budget save success:', saved);
@@ -168,7 +168,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
           <button onClick={onClose} style={ms.close}>✕</button>
         </div>
         <div style={ms.body}>
-          {role === 'agency' && brands?.length > 0 && (
+          {role === 'agency' && !forceBrandId && brands?.length > 0 && (
             <div style={ms.field}>
               <label style={ms.label}>Marka</label>
               <select style={ms.select} value={form.brand_id} onChange={e => set('brand_id', e.target.value)}>
@@ -241,7 +241,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose }) {
 }
 
 // ── Ana Sayfa ─────────────────────────────────────────────────────────────────
-export default function Budget() {
+export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const { user } = useAuth();
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
@@ -251,21 +251,25 @@ export default function Budget() {
   const [brands, setBrands] = useState([]);
   const [selBrandId, setSelBrandId] = useState('');
 
+  const isEmbedded = !!forceBrandId;
+
   useEffect(() => {
-    if (user?.role === 'agency') {
+    if (!isEmbedded && user?.role === 'agency') {
       getBudgetBrands().then(list => {
         setBrands(list);
         if (list.length > 0) setSelBrandId(list[0].id);
       });
     }
-  }, [user]);
+  }, [user, isEmbedded]);
+
+  const effectiveBrandId = forceBrandId || (user?.role === 'agency' ? selBrandId : undefined);
 
   const loadPlan = useCallback(() => {
     if (user?.role === 'admin') return;
-    const brandId = user?.role === 'agency' ? selBrandId : undefined;
+    const brandId = user?.role === 'agency' ? effectiveBrandId : undefined;
     if (user?.role === 'agency' && !brandId) { setBudgetPlan(null); return; }
     getBudgetPlan(selMonth, selYear, brandId).then(setBudgetPlan);
-  }, [selMonth, selYear, selBrandId, user]);
+  }, [selMonth, selYear, effectiveBrandId, user]);
 
   useEffect(() => { loadPlan(); }, [loadPlan]);
 
@@ -301,134 +305,149 @@ export default function Budget() {
     spent: 0,
   })) : [];
 
-  const selBrand = brands.find(b => b.id === selBrandId);
+  const selBrand = forceBrandName
+    ? { company_name: forceBrandName }
+    : brands.find(b => b.id === selBrandId);
+
+  const monthPicker = (
+    <div style={s.picker}>
+      <button style={s.arrowBtn} onClick={() => {
+        if (selMonth === 1) { setSelMonth(12); setSelYear(y => y - 1); }
+        else setSelMonth(m => m - 1);
+      }}>‹</button>
+      <span style={s.monthLabel}>{MONTHS[selMonth - 1]} {selYear}</span>
+      <button style={s.arrowBtn} onClick={() => {
+        if (selMonth === 12) { setSelMonth(1); setSelYear(y => y + 1); }
+        else setSelMonth(m => m + 1);
+      }}>›</button>
+    </div>
+  );
+
+  const budgetBody = (
+    <>
+      {budgetPlan === null ? (
+        <div className="metrics" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="metric-card" style={{ textAlign: 'center', padding: '40px 32px' }}>
+            <div style={{ fontSize: 36, marginBottom: 14 }}>📅</div>
+            <div className="metric-value" style={{ fontSize: 18, color: 'var(--text3)', marginBottom: 8 }}>Bütçe Belirlenmedi</div>
+            <div className="metric-sub" style={{ marginBottom: 20 }}>
+              {MONTHS[selMonth - 1]} {selYear} için henüz bütçe belirlenmedi.
+            </div>
+            <button onClick={() => setShowModal(true)} style={s.setBudgetBtn}>+ Bütçe Belirle</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <div className="metric-card teal">
+              <div className="metric-label">Toplam Bütçe</div>
+              <div className="metric-value">₺{fmt(totalBudget)}</div>
+              <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div>
+            </div>
+            <div className="metric-card purple">
+              <div className="metric-label">Harcanan</div>
+              <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+              <div className="metric-sub">Entegrasyon verisi bekleniyor</div>
+            </div>
+            <div className="metric-card amber">
+              <div className="metric-label">Kalan</div>
+              <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+              <div className="metric-sub">Harcama verisi yok</div>
+            </div>
+            <div className="metric-card coral">
+              <div className="metric-label">Ay Sonu Tahmini</div>
+              <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
+              <div className="metric-sub">Harcama verisi yok</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-header">
+              <div className="card-title">Kanal Bütçe Dağılımı</div>
+              <div className="card-subtitle">Planlanan kanal bazında dağılım</div>
+            </div>
+            <div className="card-body">
+              {channelData.map(ch => {
+                const pct = totalBudget > 0 ? (ch.budget / totalBudget) * 100 : 0;
+                return (
+                  <div key={ch.name} style={{ marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: ch.color }}>{ch.name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
+                        ₺{fmt(ch.budget)} — %{Math.round(pct)}
+                      </span>
+                    </div>
+                    <div className="budget-bar-wrap">
+                      <div className="budget-bar-fill" style={{
+                        width: `${Math.min(pct, 100)}%`,
+                        background: ch.color,
+                        transition: 'width 0.6s ease',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {channelData.every(ch => ch.budget === 0) && (
+                <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '8px 0' }}>
+                  Kanal bazında dağılım girilmemiş.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const modal = showModal && (
+    <BudgetModal role={user?.role} brands={brands}
+      month={selMonth} year={selYear} existing={budgetPlan}
+      forceBrandId={forceBrandId}
+      onSave={handleSave} onClose={() => setShowModal(false)} />
+  );
+
+  // Embedded mod: Agency Layer 2 içinde, kendi topbar'ı yok
+  if (isEmbedded) {
+    return (
+      <>
+        {modal}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 20, alignItems: 'center' }}>
+          {monthPicker}
+          <button className="btn-export" onClick={() => setShowModal(true)}>
+            {budgetPlan ? 'Bütçeyi Düzenle' : '+ Bütçe Belirle'}
+          </button>
+        </div>
+        {budgetBody}
+        <LogPanel />
+      </>
+    );
+  }
 
   return (
     <div className="fade-in">
-      {showModal && (
-        <BudgetModal role={user?.role} brands={brands}
-          month={selMonth} year={selYear} existing={budgetPlan}
-          onSave={handleSave} onClose={() => setShowModal(false)} />
-      )}
-
+      {modal}
       <div className="topbar">
         <div className="topbar-title">Bütçe Planlama</div>
         <div className="topbar-right" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Ajans: marka seçici */}
           {user?.role === 'agency' && brands.length > 0 && (
-            <select
-              style={{ ...s.picker, minWidth: 160 }}
-              value={selBrandId}
-              onChange={e => setSelBrandId(e.target.value)}
-            >
+            <select style={{ ...s.picker, minWidth: 160 }} value={selBrandId} onChange={e => setSelBrandId(e.target.value)}>
               {brands.map(b => <option key={b.id} value={b.id}>{b.company_name}</option>)}
             </select>
           )}
-          {/* Ay seçici */}
-          <div style={s.picker}>
-            <button style={s.arrowBtn} onClick={() => {
-              if (selMonth === 1) { setSelMonth(12); setSelYear(y => y - 1); }
-              else setSelMonth(m => m - 1);
-            }}>‹</button>
-            <span style={s.monthLabel}>{MONTHS[selMonth - 1]} {selYear}</span>
-            <button style={s.arrowBtn} onClick={() => {
-              if (selMonth === 12) { setSelMonth(1); setSelYear(y => y + 1); }
-              else setSelMonth(m => m + 1);
-            }}>›</button>
-          </div>
+          {monthPicker}
           <button className="btn-export" onClick={() => setShowModal(true)}>
             {budgetPlan ? 'Bütçeyi Düzenle' : '+ Bütçe Belirle'}
           </button>
         </div>
       </div>
-
       <div className="content">
-        {/* Ajans bilgi satırı */}
         {user?.role === 'agency' && selBrand && (
           <div style={s.agencyInfo}>
             <span>📌 {selBrand.company_name} için bütçe görüntülüyorsunuz</span>
           </div>
         )}
-
-        {/* Metrik kartları veya boş durum */}
-        {budgetPlan === null ? (
-          <div className="metrics" style={{ gridTemplateColumns: '1fr' }}>
-            <div className="metric-card" style={{ textAlign: 'center', padding: '40px 32px' }}>
-              <div style={{ fontSize: 36, marginBottom: 14 }}>📅</div>
-              <div className="metric-value" style={{ fontSize: 18, color: 'var(--text3)', marginBottom: 8 }}>Bütçe Belirlenmedi</div>
-              <div className="metric-sub" style={{ marginBottom: 20 }}>
-                {MONTHS[selMonth - 1]} {selYear} için henüz bütçe belirlenmedi.
-              </div>
-              <button onClick={() => setShowModal(true)} style={s.setBudgetBtn}>+ Bütçe Belirle</button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-              <div className="metric-card teal">
-                <div className="metric-label">Toplam Bütçe</div>
-                <div className="metric-value">₺{fmt(totalBudget)}</div>
-                <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div>
-              </div>
-
-              <div className="metric-card purple">
-                <div className="metric-label">Harcanan</div>
-                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
-                <div className="metric-sub">Entegrasyon verisi bekleniyor</div>
-              </div>
-
-              <div className="metric-card amber">
-                <div className="metric-label">Kalan</div>
-                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
-                <div className="metric-sub">Harcama verisi yok</div>
-              </div>
-
-              <div className="metric-card coral">
-                <div className="metric-label">Ay Sonu Tahmini</div>
-                <div className="metric-value" style={{ fontSize: 16, color: 'var(--text3)' }}>—</div>
-                <div className="metric-sub">Harcama verisi yok</div>
-              </div>
-            </div>
-
-            {/* Kanal bütçe dağılımı */}
-            <div className="card" style={{ marginBottom: 24 }}>
-              <div className="card-header">
-                <div className="card-title">Kanal Bütçe Dağılımı</div>
-                <div className="card-subtitle">Planlanan kanal bazında dağılım</div>
-              </div>
-              <div className="card-body">
-                {channelData.map(ch => {
-                  const pct = totalBudget > 0 ? (ch.budget / totalBudget) * 100 : 0;
-                  return (
-                    <div key={ch.name} style={{ marginBottom: 20 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: ch.color }}>{ch.name}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
-                          ₺{fmt(ch.budget)} — %{Math.round(pct)}
-                        </span>
-                      </div>
-                      <div className="budget-bar-wrap">
-                        <div className="budget-bar-fill" style={{
-                          width: `${Math.min(pct, 100)}%`,
-                          background: ch.color,
-                          transition: 'width 0.6s ease',
-                        }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {channelData.every(ch => ch.budget === 0) && (
-                  <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '8px 0' }}>
-                    Kanal bazında dağılım girilmemiş.
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+        {budgetBody}
       </div>
-
-      {/* Canlı log paneli */}
       <LogPanel />
     </div>
   );

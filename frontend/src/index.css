@@ -261,3 +261,5 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .cmp-table td { padding: 12px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
 .cmp-table tr:last-child td { border-bottom: none; }
 .cmp-table td:not(:first-child) { text-align: right; font-family: var(--mono); }
+.cmp-table tr.hover-row:hover td { background: rgba(0,191,166,0.04); }
+.cmp-table tr.hover-row td:first-child { text-align: left; font-family: inherit; }
