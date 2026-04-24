@@ -37,7 +37,7 @@ const pages = {
 
 function AppInner() {
   const { user, loading, logout } = useAuth();
-  const [active, setActive] = useState('dashboard');
+  const [active, setActive] = useState(() => user?.role === 'agency' ? 'agency' : 'dashboard');
   const [authMode, setAuthMode] = useState('login');
 
   if (loading) return <div className="loading">Yükleniyor...</div>;
