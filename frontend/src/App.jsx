@@ -44,21 +44,21 @@ function AppInner() {
     if (!loading && user?.role === 'agency') setActive('agency');
   }, [loading, user]);
 
-  if (loading) return <div className="loading">Yükleniyor...</div>;
-
   const path = window.location.pathname;
 
-  // Davet sayfası — herkese açık
+  // Davet sayfası — auth beklenmeden açılır
   const inviteMatch = path.match(/^\/invite\/(.+)$/);
   if (inviteMatch) {
     return <InviteAccept token={inviteMatch[1]} onDone={() => window.history.pushState({}, '', '/')} />;
   }
 
-  // Şifre kurulum sayfası — herkese açık
+  // Şifre kurulum sayfası — auth beklenmeden açılır
   const setupMatch = path.match(/^\/setup\/(.+)$/);
   if (setupMatch) {
     return <SetupPassword token={setupMatch[1]} onDone={() => window.history.pushState({}, '', '/')} />;
   }
+
+  if (loading) return <div className="loading">Yükleniyor...</div>;
 
   // Giriş yapılmamış
   if (!user) {
