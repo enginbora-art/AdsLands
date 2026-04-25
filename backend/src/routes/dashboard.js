@@ -80,21 +80,25 @@ router.get('/agency/brand/:brandCompanyId', authMiddleware, async (req, res) => 
   }
 
   const { brandCompanyId } = req.params;
-  const { rows: [conn] } = await pool.query(
-    'SELECT id FROM connections WHERE agency_company_id = $1 AND brand_company_id = $2',
-    [req.user.company_id, brandCompanyId]
-  );
-  if (!conn) return res.status(403).json({ error: 'Bu markaya erişim yetkiniz yok.' });
+  console.log('[dashboard/agency/brand] agencyId=%s brandCompanyId=%s', req.user.company_id, brandCompanyId);
 
   try {
+    const { rows: [conn] } = await pool.query(
+      'SELECT id FROM connections WHERE agency_company_id = $1 AND brand_company_id = $2',
+      [req.user.company_id, brandCompanyId]
+    );
+    console.log('[dashboard/agency/brand] connection found:', !!conn);
+    if (!conn) return res.status(403).json({ error: `Bağlantı bulunamadı: agency=${req.user.company_id} brand=${brandCompanyId}` });
+
     const { rows: [brand] } = await pool.query(
       'SELECT id, name FROM companies WHERE id = $1', [brandCompanyId]
     );
     const data = await getBrandData(brandCompanyId);
+    console.log('[dashboard/agency/brand] integrations count:', data.integrations.length);
     res.json({ brand, ...data });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.' });
+    console.error('[dashboard/agency/brand] error:', err);
+    res.status(500).json({ error: 'Sunucu hatası: ' + err.message });
   }
 });
 

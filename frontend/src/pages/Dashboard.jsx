@@ -194,21 +194,35 @@ export default function Dashboard() {
   const { selectedBrand } = useSelectedBrand();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
   const [showInvite, setShowInvite] = useState(false);
   const isAgency = user?.company_type === 'agency';
 
   useEffect(() => {
     setData(null);
+    setApiError(null);
     setLoading(true);
     if (isAgency && !selectedBrand) { setLoading(false); return; }
 
+    const brandId = selectedBrand?.id;
+    console.log('[Dashboard] fetching brand data, brandId=', brandId, 'isAgency=', isAgency);
+
     const req = isAgency
-      ? getAgencyBrandDetail(selectedBrand.id)
+      ? getAgencyBrandDetail(brandId)
       : getBrandDashboard();
 
     req
-      .then(setData)
-      .catch(() => setData(EMPTY_BRAND_DATA))
+      .then(d => {
+        console.log('[Dashboard] response integrations count=', d?.integrations?.length, d);
+        setData(d);
+      })
+      .catch(err => {
+        const status = err?.response?.status;
+        const msg = err?.response?.data?.error || err?.message || 'Bilinmeyen hata';
+        console.error('[Dashboard] API error', status, msg, err);
+        setApiError({ status, msg });
+        setData(EMPTY_BRAND_DATA);
+      })
       .finally(() => setLoading(false));
   }, [isAgency, selectedBrand?.id]);
 
@@ -223,6 +237,27 @@ export default function Dashboard() {
       <div className="loading">Yükleniyor...</div>
     </div>
   );
+
+  if (apiError) {
+    return (
+      <div className="fade-in">
+        <div className="topbar"><div className="topbar-title">{title}</div></div>
+        <div className="content">
+          <div style={{ background: 'rgba(255,107,90,0.1)', border: '1px solid rgba(255,107,90,0.25)', borderRadius: 10, padding: '16px 20px', fontSize: 13, color: 'var(--coral)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              {apiError.status === 403 ? 'Erişim Reddedildi' : 'Veri Yüklenemedi'}
+            </div>
+            <div style={{ color: 'var(--text3)' }}>{apiError.msg}</div>
+            {apiError.status === 403 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)' }}>
+                Bu marka ile bağlantı kaydı bulunamadı. Markalar sayfasından bağlantı durumunu kontrol edin.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <BrandDashboardContent
