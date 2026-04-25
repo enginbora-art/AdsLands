@@ -21,34 +21,50 @@ function MetricCard({ label, value, sub, accent, danger }) {
 
 // ── Ajans özet dashboard (marka seçilmemiş) ───────────────────────────────────
 function AgencySummary() {
-  const [data, setData] = useState(null);
+  const [summary, setSummary] = useState({
+    total_managed_budget: 0,
+    total_clients: 0,
+    total_today_spend: 0,
+    total_anomalies: 0,
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAgencyDashboard().then(setData).catch(console.error);
+    getAgencyDashboard()
+      .then(d => setSummary(d?.summary || summary))
+      .catch(() => {}) // hata olsa bile 0 göster
+      .finally(() => setLoading(false));
   }, []);
-
-  if (!data) return <div className="loading">Yükleniyor...</div>;
-
-  const { summary } = data;
 
   return (
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">Dashboard</div></div>
       <div className="content">
         <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
-          <MetricCard label="Yönetilen Bütçe"   value={`₺${fmt(summary?.total_managed_budget)}`} sub="Bu ay toplam" accent="var(--teal)" />
-          <MetricCard label="Aktif Müşteri"      value={summary?.total_clients || 0} sub="Bağlı marka" accent="#A78BFA" />
-          <MetricCard label="Bugünkü Harcama"    value={`₺${fmt(summary?.total_today_spend)}`} sub="Tüm markalar" accent="#60A5FA" />
+          <MetricCard label="Toplam Müşteri"      value={loading ? '—' : summary.total_clients}                       sub="Bağlı marka"  accent="#A78BFA" />
+          <MetricCard label="Yönetilen Bütçe"     value={loading ? '—' : `₺${fmt(summary.total_managed_budget)}`}    sub="Bu ay toplam" accent="var(--teal)" />
+          <MetricCard label="Bugünkü Harcama"     value={loading ? '—' : `₺${fmt(summary.total_today_spend)}`}       sub="Tüm markalar" accent="#60A5FA" />
           <MetricCard
             label="Aktif Anomali"
-            value={summary?.total_anomalies || 0}
-            sub={summary?.total_anomalies > 0 ? 'Dikkat gerektiriyor' : 'Sorun yok'}
-            danger={summary?.total_anomalies > 0}
+            value={loading ? '—' : summary.total_anomalies}
+            sub={summary.total_anomalies > 0 ? 'Dikkat gerektiriyor' : 'Sorun yok'}
+            danger={summary.total_anomalies > 0}
           />
         </div>
-        <div style={{ padding: '14px 18px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 13, color: 'var(--text3)' }}>
-          Marka detayları için sol menüden <strong style={{ color: 'var(--text1)' }}>Markalar</strong>'a gidin ve bir marka seçin.
-        </div>
+        {!loading && summary.total_clients === 0 && (
+          <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🤝</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Henüz bağlı marka yok</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+              Sol menüden <strong style={{ color: 'var(--text1)' }}>Markalar</strong>'a gidin ve marka ekleyin veya bağlantı isteği gönderin.
+            </div>
+          </div>
+        )}
+        {!loading && summary.total_clients > 0 && (
+          <div style={{ padding: '14px 18px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 13, color: 'var(--text3)' }}>
+            Marka detayları için sol menüden <strong style={{ color: 'var(--text1)' }}>Markalar</strong>'a gidin ve bir marka seçin.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -164,27 +180,44 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
   );
 }
 
+const EMPTY_BRAND_DATA = {
+  summary: { total_spend: 0, avg_roas: 0, total_conversions: 0, total_clicks: 0 },
+  integrations: [],
+  anomalies: [],
+  today_spend: 0,
+  budget: null,
+};
+
 // ── Ana export ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
-  const isAgency = user?.role === 'agency';
+  const isAgency = user?.company_type === 'agency';
 
   useEffect(() => {
     setData(null);
-    if (isAgency && !selectedBrand) return;
-    const fetch = isAgency ? getAgencyBrandDetail(selectedBrand.id) : getBrandDashboard();
-    fetch.then(setData).catch(console.error);
+    setLoading(true);
+    if (isAgency && !selectedBrand) { setLoading(false); return; }
+
+    const req = isAgency
+      ? getAgencyBrandDetail(selectedBrand.id)
+      : getBrandDashboard();
+
+    req
+      .then(setData)
+      .catch(() => setData(EMPTY_BRAND_DATA))
+      .finally(() => setLoading(false));
   }, [isAgency, selectedBrand?.id]);
 
-  // Agency no brand → summary
+  // Agency, marka seçilmemiş → özet kartlar
   if (isAgency && !selectedBrand) return <AgencySummary />;
 
-  const title = isAgency ? selectedBrand?.company_name : 'Dashboard';
+  const title = isAgency ? (selectedBrand?.name || selectedBrand?.company_name) : 'Dashboard';
 
-  if (!data) return (
+  if (loading) return (
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">{title}</div></div>
       <div className="loading">Yükleniyor...</div>
@@ -193,7 +226,7 @@ export default function Dashboard() {
 
   return (
     <BrandDashboardContent
-      data={data}
+      data={data || EMPTY_BRAND_DATA}
       title={title}
       isAgency={isAgency}
       showInvite={showInvite}
