@@ -328,94 +328,132 @@ function DisconnectConfirmModal({ platformId, onConfirm, onCancel }) {
   );
 }
 
-// ── Metrics Table ─────────────────────────────────────────────────────────────
+// ── Detail Modal ──────────────────────────────────────────────────────────────
 
-function MetricsTable({ platform, integration, metrics, liveData, liveLoading, onFetchLive }) {
-  const isGA = platform === 'google_analytics';
-  const isGoogle = platform === 'google_analytics' || platform === 'google_ads';
+function DetailModal({ integration, platform, metrics, liveData, liveLoading, metricsLoading, onFetchLive, onRefresh, onClose }) {
+  const isGA     = integration.platform === 'google_analytics';
+  const isGoogle = integration.platform === 'google_analytics' || integration.platform === 'google_ads';
 
-  if (liveData) {
-    return (
-      <div style={s.metricsPanel}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h3 style={s.metricsTitle}>{PLATFORM_LABELS[platform]} — Canlı Veri (Son 30 Gün)</h3>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Hesap: {liveData.account_id}</span>
+  const rows = liveData ? liveData.data : metrics;
+  const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
+  const totalImpressions = metrics.reduce((a, m) => a + Number(m.impressions || 0), 0);
+  const totalClicks      = metrics.reduce((a, m) => a + Number(m.clicks      || 0), 0);
+  const totalConversions = metrics.reduce((a, m) => a + Number(m.conversions || 0), 0);
+  const roasRows = metrics.filter(m => Number(m.roas) > 0);
+  const avgRoas  = roasRows.length ? roasRows.reduce((a, m) => a + Number(m.roas), 0) / roasRows.length : 0;
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...s.modal, maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 28 }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: platform.bg, color: platform.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
+            {platform.icon}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{platform.name}</div>
+            {integration.account_id && (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Hesap: {integration.account_id}
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right', flexShrink: 0 }}>
+            <div>Son bağlantı</div>
+            <div style={{ fontWeight: 600, color: 'var(--text2)', marginTop: 2 }}>
+              {new Date(integration.created_at).toLocaleDateString('tr-TR')}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 24, cursor: 'pointer', lineHeight: 1, padding: '0 0 0 12px', flexShrink: 0 }}>×</button>
         </div>
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                {isGA
-                  ? ['Tarih', 'Oturum', 'Kullanıcı', 'Dönüşüm', 'Gelir (₺)', 'Sayfa Gör.'].map(h => <th key={h} style={s.th}>{h}</th>)
-                  : ['Tarih', 'Harcama', 'Gösterim', 'Tıklama', 'Dönüşüm'].map(h => <th key={h} style={s.th}>{h}</th>)
-                }
-              </tr>
-            </thead>
-            <tbody>
-              {liveData.data.map((row, i) => (
-                <tr key={i} style={s.tr}>
-                  <td style={s.td}>{fmtDate(row.date)}</td>
-                  {isGA ? (
-                    <>
-                      <td style={s.td}>{fmt(row.sessions)}</td>
-                      <td style={s.td}>{fmt(row.users)}</td>
-                      <td style={s.td}>{fmt(row.conversions)}</td>
-                      <td style={{ ...s.td, color: 'var(--teal)', fontWeight: 600 }}>₺{fmt(row.revenue)}</td>
-                      <td style={s.td}>{fmt(row.pageViews)}</td>
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ ...s.td, color: 'var(--teal)', fontWeight: 600 }}>₺{fmt(row.spend)}</td>
-                      <td style={s.td}>{fmt(row.impressions)}</td>
-                      <td style={s.td}>{fmt(row.clicks)}</td>
-                      <td style={s.td}>{fmt(row.conversions)}</td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
 
-  if (metrics.length > 0) {
-    return (
-      <div style={s.metricsPanel}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h3 style={s.metricsTitle}>{PLATFORM_LABELS[platform]} — Son 30 Gün</h3>
+        {/* Summary stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 18 }}>
+          {[
+            { label: 'Harcama',   val: `₺${fmt(totalSpend)}` },
+            { label: 'ROAS',      val: `${avgRoas.toFixed(2)}x` },
+            { label: 'Dönüşüm',  val: fmt(totalConversions) },
+            { label: 'Tıklama',  val: fmt(totalClicks) },
+            { label: 'Gösterim', val: fmt(totalImpressions) },
+          ].map(({ label, val }) => (
+            <div key={label} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '10px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+          <button onClick={onRefresh} disabled={metricsLoading}
+            style={{ padding: '7px 16px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, fontWeight: 600, cursor: metricsLoading ? 'not-allowed' : 'pointer' }}>
+            {metricsLoading ? 'Yükleniyor...' : '↻ Veriyi Yenile'}
+          </button>
           {isGoogle && (
             <button onClick={onFetchLive} disabled={liveLoading}
-              style={{ ...s.detailBtn, padding: '6px 14px', fontSize: 12 }}>
-              {liveLoading ? 'Yükleniyor...' : 'Canlı Veri Al'}
+              style={{ padding: '7px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#10B981', fontSize: 12, fontWeight: 600, cursor: liveLoading ? 'not-allowed' : 'pointer' }}>
+              {liveLoading ? 'Yükleniyor...' : '⚡ Canlı Veri Al'}
             </button>
           )}
+          {liveData && (
+            <span style={{ fontSize: 11, color: 'var(--text3)', alignSelf: 'center', marginLeft: 4 }}>
+              Canlı · Hesap: {liveData.account_id}
+            </span>
+          )}
         </div>
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>{['Tarih', 'Harcama', 'Gösterim', 'Tıklama', 'Dönüşüm', 'ROAS'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {metrics.map((m, i) => (
-                <tr key={i} style={s.tr}>
-                  <td style={s.td}>{fmtDate(m.date)}</td>
-                  <td style={s.td}>₺{fmt(m.spend)}</td>
-                  <td style={s.td}>{fmt(m.impressions)}</td>
-                  <td style={s.td}>{fmt(m.clicks)}</td>
-                  <td style={s.td}>{fmt(m.conversions)}</td>
-                  <td style={{ ...s.td, color: 'var(--teal)', fontWeight: 600 }}>{Number(m.roas).toFixed(2)}x</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
 
-  return null;
+        {/* Table */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {metricsLoading ? (
+            <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
+          ) : rows.length === 0 ? (
+            <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>
+              Henüz veri yok.{isGoogle ? ' Canlı veri almak için ⚡ butonunu kullanın.' : ''}
+            </div>
+          ) : (
+            <div style={s.tableWrap}>
+              <table style={s.table}>
+                <thead>
+                  <tr>
+                    {(isGA && liveData
+                      ? ['Tarih', 'Oturum', 'Kullanıcı', 'Dönüşüm', 'Gelir (₺)', 'Sayfa Gör.']
+                      : ['Tarih', 'Harcama', 'Gösterim', 'Tıklama', 'Dönüşüm', 'ROAS']
+                    ).map(h => <th key={h} style={s.th}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i} style={s.tr}>
+                      <td style={s.td}>{fmtDate(row.date)}</td>
+                      {isGA && liveData ? (
+                        <>
+                          <td style={s.td}>{fmt(row.sessions)}</td>
+                          <td style={s.td}>{fmt(row.users)}</td>
+                          <td style={s.td}>{fmt(row.conversions)}</td>
+                          <td style={{ ...s.td, color: '#10B981', fontWeight: 600 }}>₺{fmt(row.revenue)}</td>
+                          <td style={s.td}>{fmt(row.pageViews)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={{ ...s.td, color: '#10B981', fontWeight: 600 }}>₺{fmt(row.spend)}</td>
+                          <td style={s.td}>{fmt(row.impressions)}</td>
+                          <td style={s.td}>{fmt(row.clicks)}</td>
+                          <td style={s.td}>{fmt(row.conversions)}</td>
+                          <td style={s.td}>{Number(row.roas || 0).toFixed(2)}x</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -434,6 +472,7 @@ export default function Integrations() {
   const [connecting, setConnecting]       = useState(null);
   const [disconnecting, setDisconnecting] = useState(null);
   const [liveLoading, setLiveLoading]     = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(false);
   const [banner, setBanner]               = useState(null);
   const [msgBanner, setMsgBanner]         = useState(null);
   const [verifyParams, setVerifyParams]   = useState(null);
@@ -545,9 +584,19 @@ export default function Integrations() {
   };
 
   const handleSelect = async (integration) => {
-    if (selected?.id === integration.id) { setSelected(null); setMetrics([]); setLiveData(null); return; }
-    setSelected(integration); setLiveData(null);
-    setMetrics(await getIntegrationMetrics(integration.id));
+    setSelected(integration);
+    setLiveData(null);
+    setMetricsLoading(true);
+    try { setMetrics(await getIntegrationMetrics(integration.id)); }
+    finally { setMetricsLoading(false); }
+  };
+
+  const handleRefresh = async () => {
+    if (!selected) return;
+    setLiveData(null);
+    setMetricsLoading(true);
+    try { setMetrics(await getIntegrationMetrics(selected.id)); }
+    finally { setMetricsLoading(false); }
   };
 
   const handleFetchLive = async () => {
@@ -622,6 +671,19 @@ export default function Integrations() {
           onDone={handleImportDone}
         />
       )}
+      {selected && (
+        <DetailModal
+          integration={selected}
+          platform={PLATFORMS.find(p => p.id === selected.platform) || { id: selected.platform, name: PLATFORM_LABELS[selected.platform] || selected.platform, icon: '?', color: '#818CF8', bg: 'rgba(99,102,241,0.15)' }}
+          metrics={metrics}
+          liveData={liveData}
+          liveLoading={liveLoading}
+          metricsLoading={metricsLoading}
+          onFetchLive={handleFetchLive}
+          onRefresh={handleRefresh}
+          onClose={() => { setSelected(null); setMetrics([]); setLiveData(null); }}
+        />
+      )}
 
       {/* Banners */}
       {banner   && <StatusBanner params={banner} onDismiss={() => setBanner(null)} />}
@@ -674,7 +736,7 @@ export default function Integrations() {
                 {connected ? (
                   <>
                     <button style={s.detailBtn} onClick={() => handleSelect(connected)}>
-                      {selected?.id === connected.id ? 'Kapat' : 'Detay'}
+                      Detay
                     </button>
                     <button style={s.disconnectBtn} onClick={() => handleDisconnect(connected)} disabled={isDisconnecting}>
                       {isDisconnecting ? '...' : 'Bağlantıyı Kes'}
@@ -738,18 +800,6 @@ export default function Integrations() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Metrics Panel */}
-      {selected && (
-        <MetricsTable
-          platform={selected.platform}
-          integration={selected}
-          metrics={metrics}
-          liveData={liveData}
-          liveLoading={liveLoading}
-          onFetchLive={handleFetchLive}
-        />
       )}
 
       {loading && <div style={{ color: 'var(--text3)', padding: 32 }}>Yükleniyor...</div>}
