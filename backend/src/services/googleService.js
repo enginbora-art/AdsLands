@@ -98,6 +98,51 @@ async function getAnalyticsData(tokens, propertyId) {
   }));
 }
 
+async function getUserInfo(tokens) {
+  try {
+    const fresh = await refreshIfNeeded(tokens);
+    const client = createClient();
+    client.setCredentials(fresh);
+    const { token } = await client.getAccessToken();
+    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) return null;
+    return await resp.json(); // { name, email, given_name, family_name, ... }
+  } catch {
+    return null;
+  }
+}
+
+async function getAdsCustomerName(tokens, customerId) {
+  try {
+    const fresh = await refreshIfNeeded(tokens);
+    const client = createClient();
+    client.setCredentials(fresh);
+    const { token } = await client.getAccessToken();
+    const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    if (!devToken || devToken === 'your_developer_token') return null;
+    const cleanId = String(customerId).replace(/-/g, '');
+    const resp = await fetch(
+      `https://googleads.googleapis.com/v18/customers/${cleanId}/googleAds:search`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'developer-token': devToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: 'SELECT customer.descriptive_name FROM customer LIMIT 1' }),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.results?.[0]?.customer?.descriptiveName || null;
+  } catch {
+    return null;
+  }
+}
+
 async function listAdsCustomers(tokens) {
   const fresh = await refreshIfNeeded(tokens);
   const client = createClient();
@@ -173,4 +218,6 @@ module.exports = {
   getAnalyticsData,
   getAdsData,
   listAdsCustomers,
+  getUserInfo,
+  getAdsCustomerName,
 };

@@ -194,6 +194,22 @@ async function migrate() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS integration_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        integration_id UUID REFERENCES integrations(id) ON DELETE CASCADE,
+        company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+        platform VARCHAR(20) NOT NULL,
+        account_name VARCHAR(255),
+        brand_name VARCHAR(255),
+        similarity NUMERIC(5,3),
+        matched BOOLEAN,
+        action VARCHAR(20) NOT NULL DEFAULT 'auto_accepted'
+          CHECK (action IN ('auto_accepted', 'user_confirmed', 'user_cancelled')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`
