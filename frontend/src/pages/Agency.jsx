@@ -88,16 +88,21 @@ export default function Agency({ onSelectBrand }) {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    if (user?.role !== 'agency') return;
-    getAgencyDashboard().then(setData).catch(console.error).finally(() => setLoading(false));
+    if (user?.company_type !== 'agency') return;
+    getAgencyDashboard()
+      .then(setData)
+      .catch(() => setData({ clients: [] }))
+      .finally(() => setLoading(false));
   }, [user]);
 
-  if (user?.role !== 'agency') return null;
+  if (user?.company_type !== 'agency') return null;
   if (loading) return <div className="loading">Yükleniyor...</div>;
 
   const clients = data?.clients || [];
+  // brand.name (yeni şema: companies.name) veya eski company_name'e fallback
+  const brandName = (c) => c.brand?.name || c.brand?.company_name || '';
   const filtered = search.trim()
-    ? clients.filter(c => c.brand.company_name.toLowerCase().includes(search.toLowerCase()))
+    ? clients.filter(c => brandName(c).toLowerCase().includes(search.toLowerCase()))
     : clients;
   const sorted = [...filtered].sort((a, b) => b.anomalies.length - a.anomalies.length);
 
@@ -132,9 +137,16 @@ export default function Agency({ onSelectBrand }) {
         )}
         {clients.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: 56 }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>🤝</div>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Henüz bağlı marka yok</div>
-            <div style={{ fontSize: 13, color: 'var(--text3)' }}>Markalar sizi ajans olarak davet ettiğinde burada görünürler.</div>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🤝</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Henüz bağlı marka yok</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>
+              Markaları platforma davet ederek çalışmaya başlayın.
+            </div>
+            <button
+              onClick={() => setShowInvite(true)}
+              style={{ padding: '9px 22px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219' }}>
+              + Marka Davet Et
+            </button>
           </div>
         ) : (
           <>
@@ -179,10 +191,10 @@ export default function Agency({ onSelectBrand }) {
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(0,191,166,0.15)', color: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                                {avatar(client.brand.company_name)}
+                                {avatar(brandName(client))}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 600, fontSize: 13 }}>{client.brand.company_name}</div>
+                                <div style={{ fontWeight: 600, fontSize: 13 }}>{brandName(client)}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text3)' }}>{client.integrations.length} platform</div>
                               </div>
                             </div>
