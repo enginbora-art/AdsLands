@@ -88,12 +88,15 @@ export default function Agency({ onSelectBrand }) {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    if (user?.company_type !== 'agency') return;
+    if (user?.company_type !== 'agency') {
+      setLoading(false);
+      return;
+    }
     getAgencyDashboard()
       .then(setData)
       .catch(() => setData({ clients: [] }))
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user?.company_type]);
 
   if (user?.company_type !== 'agency') return null;
   if (loading) return <div className="loading">Yükleniyor...</div>;

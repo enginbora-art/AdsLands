@@ -1,25 +1,35 @@
-import { useEffect, useState } from 'react';
-import { getSettings, updateSettings } from '../api';
+import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+
+const NOTIF_DEFAULTS = {
+  anomalyAlerts: true,
+  weeklyReport: false,
+  tvDetection: true,
+  budgetWarnings: true,
+  emailDigest: false,
+};
+
+const ROLE_LABELS = { agency: 'Ajans', brand: 'Marka' };
 
 export default function Settings() {
-  const [data, setData] = useState(null);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState(NOTIF_DEFAULTS);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { getSettings().then(setData); }, []);
-
-  const toggleNotif = async (key) => {
-    const updated = { ...data, notifications: { ...data.notifications, [key]: !data.notifications[key] } };
-    setData(updated);
-    await updateSettings(updated);
+  const toggleNotif = (key) => {
+    setNotifications(n => ({ ...n, [key]: !n[key] }));
   };
 
-  const handleSave = async () => {
-    await updateSettings(data);
+  const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (!data) return <div className="loading">Yükleniyor...</div>;
+  const roleLabel = user?.is_platform_admin
+    ? 'Platform Admin'
+    : user?.is_company_admin
+      ? `${ROLE_LABELS[user?.company_type] || ''} Admin`
+      : ROLE_LABELS[user?.company_type] || '';
 
   return (
     <div className="fade-in">
@@ -35,17 +45,17 @@ export default function Settings() {
             <div className="card-header"><div className="card-title">Profil bilgileri</div></div>
             <div className="card-body">
               {[
-                { label: 'Ad Soyad', field: 'name' },
-                { label: 'E-posta', field: 'email' },
-                { label: 'Şirket', field: 'company' },
-                { label: 'Rol', field: 'role' },
-              ].map(({ label, field }) => (
-                <div key={field} style={{ marginBottom: 16 }}>
+                { label: 'E-posta', value: user?.email || '' },
+                { label: 'Şirket', value: user?.company_name || '' },
+                { label: 'Hesap Türü', value: roleLabel },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
                   <input
                     className="sinput"
-                    value={data.profile[field] || ''}
-                    onChange={e => setData({ ...data, profile: { ...data.profile, [field]: e.target.value } })}
+                    value={value}
+                    readOnly
+                    style={{ opacity: 0.7, cursor: 'default' }}
                   />
                 </div>
               ))}
@@ -68,7 +78,7 @@ export default function Settings() {
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{desc}</div>
                   </div>
                   <button
-                    className={`toggle${data.notifications[key] ? ' on' : ''}`}
+                    className={`toggle${notifications[key] ? ' on' : ''}`}
                     onClick={() => toggleNotif(key)}
                   />
                 </div>
