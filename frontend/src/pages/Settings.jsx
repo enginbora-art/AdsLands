@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile } from '../api';
+import { parseJwt } from '../utils';
 
 const NOTIF_DEFAULTS = {
   anomalyAlerts: true,
@@ -27,7 +28,7 @@ export default function Settings() {
     setProfileError('');
     try {
       const { token: newJwt } = await updateProfile({ full_name: fullName.trim() });
-      const payload = JSON.parse(atob(newJwt.split('.')[1]));
+      const payload = parseJwt(newJwt);
       saveAuth(newJwt, {
         ...user,
         full_name: payload.full_name,

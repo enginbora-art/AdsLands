@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSetup, completeSetup } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { parseJwt } from '../utils';
 
 export default function SetupPassword({ token, onDone }) {
   const { saveAuth } = useAuth();
@@ -27,7 +28,7 @@ export default function SetupPassword({ token, onDone }) {
     try {
       const companyName = new URLSearchParams(window.location.search).get('company_name') || '';
       const { token: jwt } = await completeSetup({ token, password: form.password, full_name: form.full_name.trim(), company_name: companyName });
-      const payload = JSON.parse(atob(jwt.split('.')[1]));
+      const payload = parseJwt(jwt);
       saveAuth(jwt, {
         id: payload.user_id,
         email: payload.email,
