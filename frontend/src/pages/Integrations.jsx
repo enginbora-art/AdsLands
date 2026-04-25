@@ -25,21 +25,31 @@ const fmtDate = (str) => {
   return new Date(str).toLocaleDateString('tr-TR');
 };
 
+const PLATFORM_LABELS = {
+  google_ads:       'Google Ads',
+  google_analytics: 'Google Analytics',
+  meta:             'Meta Ads',
+  tiktok:           'TikTok Ads',
+};
+
 function StatusBanner({ params, onDismiss }) {
-  if (params.get('success')) {
-    const p = params.get('platform');
-    const name = PLATFORMS.find(x => x.id === p)?.name || 'Google';
+  const successPlatform = params.get('success');
+  const errorPlatform   = params.get('error');
+
+  if (successPlatform) {
+    const name = PLATFORM_LABELS[successPlatform] || successPlatform;
     return (
       <div style={s.successBanner}>
-        ✓ {name} başarıyla bağlandı.
+        ✅ {name} başarıyla bağlandı!
         <button onClick={onDismiss} style={s.bannerClose}>×</button>
       </div>
     );
   }
-  if (params.get('error')) {
+  if (errorPlatform) {
+    const name = PLATFORM_LABELS[errorPlatform] || errorPlatform;
     return (
       <div style={s.errorBanner}>
-        ✗ Bağlantı kurulamadı: {params.get('error')}
+        ❌ {name} bağlantısı başarısız, tekrar deneyin
         <button onClick={onDismiss} style={s.bannerClose}>×</button>
       </div>
     );
@@ -157,9 +167,10 @@ export default function Integrations() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('success') || params.get('error') || params.get('integration_connected')) {
+    if (params.get('success') || params.get('error')) {
       setBanner(params);
       window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => setBanner(null), 4000);
     }
     load();
   }, []);

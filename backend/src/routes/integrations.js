@@ -62,7 +62,7 @@ router.get('/google/callback', async (req, res) => {
     companyId = parsed.userId; // eski alan adı korundu (googleService.js'de)
     platform = parsed.platform;
   } catch {
-    return res.redirect(`${FRONTEND_URL}/integrations?error=invalid_state`);
+    return res.redirect(`${FRONTEND_URL}/integrations?error=google`);
   }
 
   try {
@@ -92,10 +92,10 @@ router.get('/google/callback', async (req, res) => {
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
-    res.redirect(`${FRONTEND_URL}/integrations?success=true&platform=${platform}`);
+    res.redirect(`${FRONTEND_URL}/integrations?success=${platform}`);
   } catch (err) {
     console.error('Google OAuth callback hatası:', err);
-    res.redirect(`${FRONTEND_URL}/integrations?error=oauth_failed`);
+    res.redirect(`${FRONTEND_URL}/integrations?error=${platform || 'google'}`);
   }
 });
 
@@ -163,10 +163,10 @@ router.get('/:platform/connect', authMiddleware, async (req, res) => {
       [req.user.company_id, platform, accountId]
     );
     await seedHistoricalMetrics(integration);
-    res.redirect(`${FRONTEND_URL}/integrations?integration_connected=${platform}`);
+    res.redirect(`${FRONTEND_URL}/integrations?success=${platform}`);
   } catch (err) {
     console.error(err);
-    res.redirect(`${FRONTEND_URL}/integrations?integration_error=${platform}`);
+    res.redirect(`${FRONTEND_URL}/integrations?error=${platform}`);
   }
 });
 
