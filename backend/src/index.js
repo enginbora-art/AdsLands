@@ -14,6 +14,7 @@ const invitationRoutes = require('./routes/invitations');
 const integrationRoutes = require('./routes/integrations');
 const dashboardRoutes = require('./routes/dashboard');
 const budgetRoutes = require('./routes/budgets');
+const agencyRoutes = require('./routes/agency');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/invitations', invitationRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budgets', budgetRoutes);
+app.use('/api/agency', agencyRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

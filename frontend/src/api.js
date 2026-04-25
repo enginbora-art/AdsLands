@@ -71,3 +71,6 @@ export const adminToggleActive = (id) => api.patch(`/admin/users/${id}/toggle-ac
 // Kullanıcı listeleri
 export const listBrands = () => api.get('/brands').then(r => r.data);
 export const listAgencies = () => api.get('/agencies').then(r => r.data);
+
+// Ajans - marka daveti
+export const inviteBrand = (data) => api.post('/agency/invite-brand', data).then(r => r.data);

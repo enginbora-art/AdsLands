@@ -127,7 +127,20 @@ async function migrate() {
       );
     `);
 
-    console.log('✅ Tablolar hazır (users, invitations, connections, integrations, ad_metrics, anomalies)');
+    // Ajans tarafından marka davetleri
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agency_brand_invitations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agency_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        receiver_email TEXT NOT NULL,
+        company_name TEXT NOT NULL,
+        setup_token TEXT UNIQUE NOT NULL,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    console.log('✅ Tablolar hazır (users, invitations, connections, integrations, ad_metrics, anomalies, agency_brand_invitations)');
   } finally {
     client.release();
   }

@@ -70,16 +70,24 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/setup/:token — token bilgisini getir
+// GET /api/auth/setup/:token — token bilgisini getir (admin veya ajans daveti)
 router.get('/setup/:token', async (req, res) => {
   try {
-    const result = await pool.query(
+    const userResult = await pool.query(
       'SELECT email, company_name, role FROM users WHERE setup_token = $1',
       [req.params.token]
     );
-    const user = result.rows[0];
-    if (!user) return res.status(404).json({ error: 'Geçersiz veya süresi dolmuş bağlantı.' });
-    res.json(user);
+    if (userResult.rows.length > 0) return res.json(userResult.rows[0]);
+
+    const inviteResult = await pool.query(
+      "SELECT receiver_email AS email, company_name FROM agency_brand_invitations WHERE setup_token = $1 AND status = 'pending'",
+      [req.params.token]
+    );
+    if (inviteResult.rows.length > 0) {
+      return res.json({ ...inviteResult.rows[0], role: 'brand' });
+    }
+
+    return res.status(404).json({ error: 'Geçersiz veya süresi dolmuş bağlantı.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
@@ -98,24 +106,63 @@ router.post('/setup', async (req, res) => {
   }
 
   try {
+    // Admin tarafından oluşturulan kullanıcı akışı
     const found = await pool.query('SELECT * FROM users WHERE setup_token = $1', [token]);
-    const user = found.rows[0];
-    if (!user) return res.status(404).json({ error: 'Geçersiz veya süresi dolmuş bağlantı.' });
+    if (found.rows.length > 0) {
+      const user = found.rows[0];
+      const password_hash = await bcrypt.hash(password, 12);
+      const result = await pool.query(
+        'UPDATE users SET password_hash = $1, is_active = true, setup_token = NULL WHERE id = $2 RETURNING id, email, role, company_name, is_active',
+        [password_hash, user.id]
+      );
+      const updated = result.rows[0];
+      const jwtToken = jwt.sign(
+        { id: updated.id, email: updated.email, role: updated.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      return res.json({ token: jwtToken, user: updated });
+    }
 
-    const password_hash = await bcrypt.hash(password, 12);
-    const result = await pool.query(
-      'UPDATE users SET password_hash = $1, is_active = true, setup_token = NULL WHERE id = $2 RETURNING id, email, role, company_name, is_active',
-      [password_hash, user.id]
+    // Ajans daveti akışı
+    const invite = await pool.query(
+      "SELECT * FROM agency_brand_invitations WHERE setup_token = $1 AND status = 'pending'",
+      [token]
     );
+    if (invite.rows.length > 0) {
+      const inv = invite.rows[0];
 
-    const updated = result.rows[0];
-    const jwtToken = jwt.sign(
-      { id: updated.id, email: updated.email, role: updated.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+      const existing = await pool.query('SELECT id FROM users WHERE email = $1', [inv.receiver_email]);
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ error: 'Bu e-posta zaten kayıtlı.' });
+      }
 
-    res.json({ token: jwtToken, user: updated });
+      const password_hash = await bcrypt.hash(password, 12);
+      const userResult = await pool.query(
+        'INSERT INTO users (email, password_hash, role, company_name, is_active) VALUES ($1, $2, $3, $4, true) RETURNING id, email, role, company_name, is_active',
+        [inv.receiver_email, password_hash, 'brand', inv.company_name]
+      );
+      const newUser = userResult.rows[0];
+
+      await pool.query(
+        'INSERT INTO connections (brand_id, agency_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [newUser.id, inv.agency_id]
+      );
+
+      await pool.query(
+        "UPDATE agency_brand_invitations SET status = 'accepted' WHERE id = $1",
+        [inv.id]
+      );
+
+      const jwtToken = jwt.sign(
+        { id: newUser.id, email: newUser.email, role: newUser.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      return res.json({ token: jwtToken, user: newUser });
+    }
+
+    return res.status(404).json({ error: 'Geçersiz veya süresi dolmuş bağlantı.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
