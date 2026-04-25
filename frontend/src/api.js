@@ -10,8 +10,10 @@ api.interceptors.request.use((config) => {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const login = (data) => api.post('/auth/login', data).then(r => r.data);
+export const register = (data) => api.post('/auth/register', data).then(r => r.data);
 export const getSetup = (token) => api.get(`/auth/setup/${token}`).then(r => r.data);
 export const completeSetup = (data) => api.post('/auth/setup', data).then(r => r.data);
+export const getInvitation = (token) => api.get(`/auth/invite/${token}`).then(r => r.data);
 
 // ── Platform Admin ────────────────────────────────────────────────────────────
 export const adminGetCompanies = () => api.get('/admin/companies').then(r => r.data);
@@ -69,6 +71,8 @@ export const disconnectIntegration = (id) => api.delete(`/integrations/${id}`).t
 export const disconnectGoogleIntegration = (platform, brandId) =>
   api.delete(`/integrations/google?platform=${platform}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
 export const getIntegrationMetrics = (id) => api.get(`/integrations/${id}/metrics`).then(r => r.data);
+export const logVerify = (integration_id, action) =>
+  api.post('/integrations/log-verify', { integration_id, action }).then(r => r.data);
 export const getGoogleData = (platform) =>
   api.get(`/integrations/google/data?platform=${platform}`).then(r => r.data);
 
