@@ -57,7 +57,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .sidebar-logout:hover { background: rgba(255,107,90,0.08); color: var(--coral); }
 
 /* Main */
-.main { margin-left: 220px; flex: 1; min-width: 0; }
+.main { margin-left: 220px; padding-top: 56px; flex: 1; min-width: 0; }
 .topbar { height: 60px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: var(--bg2); position: sticky; top: 0; z-index: 5; }
 .topbar-title { font-size: 16px; font-weight: 600; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }

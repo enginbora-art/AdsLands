@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandProvider, useSelectedBrand } from './context/BrandContext';
 import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 import AdminPanel from './pages/AdminPanel';
 import Dashboard from './pages/Dashboard';
 import Channels from './pages/Channels';
@@ -80,6 +81,7 @@ function AppInner() {
   return (
     <div className="app">
       <Sidebar active={active} onNav={handleNav} onLogout={logout} />
+      <Header onNav={handleNav} />
       <main className="main">
         {active === 'agency'
           ? <Agency key="agency" onSelectBrand={handleSelectBrand} />
