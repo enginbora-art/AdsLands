@@ -70,8 +70,16 @@ function RoleModal({ role, permissions, onClose, onSave }) {
   );
 }
 
-function InviteModal({ onClose, onSuccess }) {
+const PRESET_ROLES = [
+  { name: 'Yönetici',      permissions: Object.keys(PERM_LABELS) },
+  { name: 'Medya Uzmanı',  permissions: ['dashboard', 'kanal_analizi', 'entegrasyonlar', 'butce_planlama', 'anomaliler', 'benchmark'] },
+  { name: 'Raporlama',     permissions: ['dashboard', 'ai_raporlar', 'raporlar', 'benchmark', 'anomaliler'] },
+  { name: 'Salt Okunur',   permissions: ['dashboard'] },
+];
+
+function InviteModal({ roles, onClose, onSuccess }) {
   const [email, setEmail] = useState('');
+  const [roleId, setRoleId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -80,7 +88,7 @@ function InviteModal({ onClose, onSuccess }) {
     setLoading(true);
     setError('');
     try {
-      await inviteCompanyUser({ email });
+      await inviteCompanyUser({ email, role_id: roleId || undefined });
       onSuccess();
     } catch (err) {
       setError(err.response?.data?.error || 'Hata oluştu.');
@@ -89,22 +97,49 @@ function InviteModal({ onClose, onSuccess }) {
     }
   };
 
+  const lbl = { display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 };
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 420 }}>
+      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 440 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Kullanıcı Davet Et</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 20 }}>×</button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>E-posta</label>
-            <input className="sinput" type="email" placeholder="kullanici@sirket.com" value={email} onChange={e => setEmail(e.target.value)} required />
+          <div style={{ marginBottom: 16 }}>
+            <label style={lbl}>E-posta</label>
+            <input className="sinput" type="email" placeholder="kullanici@sirket.com"
+              value={email} onChange={e => setEmail(e.target.value)} required />
           </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={lbl}>Rol</label>
+            <select
+              value={roleId}
+              onChange={e => setRoleId(e.target.value)}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text2)', borderRadius: 8, padding: '9px 12px', fontSize: 13, cursor: 'pointer' }}>
+              <option value="">— Rol seçin (opsiyonel)</option>
+              {roles.length > 0
+                ? roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)
+                : PRESET_ROLES.map(r => <option key={r.name} value={`preset:${r.name}`}>{r.name}</option>)
+              }
+            </select>
+            {roles.length === 0 && (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 5 }}>
+                Henüz özel rol yok. Varsayılan roller gösteriliyor — Roller sekmesinden oluşturabilirsiniz.
+              </div>
+            )}
+          </div>
+
           {error && <div style={{ color: 'var(--coral)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, padding: '9px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>İptal</button>
-            <button type="submit" disabled={loading} style={{ flex: 1, padding: '9px 0', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: '9px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>
+              İptal
+            </button>
+            <button type="submit" disabled={loading}
+              style={{ flex: 1, padding: '9px 0', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Gönderiliyor...' : 'Davet Gönder'}
             </button>
           </div>
@@ -156,6 +191,18 @@ export default function UserManagement() {
     try { await deleteRole(id); load(); showSuccess('Rol silindi.'); } catch (err) { alert(err.response?.data?.error || 'Hata.'); }
   };
 
+  const handleCreatePresets = async () => {
+    try {
+      for (const r of PRESET_ROLES) {
+        await createRole({ name: r.name, permissions: r.permissions });
+      }
+      load();
+      showSuccess('Varsayılan roller oluşturuldu.');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Hata.');
+    }
+  };
+
   const handleSaveRole = async (data) => {
     if (editRole && editRole.id) {
       await updateRole(editRole.id, data);
@@ -171,6 +218,7 @@ export default function UserManagement() {
     <div className="fade-in">
       {showInvite && (
         <InviteModal
+          roles={roles}
           onClose={() => setShowInvite(false)}
           onSuccess={() => { setShowInvite(false); showSuccess('Davet gönderildi.'); load(); }}
         />
@@ -227,9 +275,9 @@ export default function UserManagement() {
             <table className="cmp-table">
               <thead>
                 <tr>
-                  <th>E-posta</th>
+                  <th>Kullanıcı</th>
                   <th>Rol</th>
-                  <th>Yetki</th>
+                  <th>Yetkiler</th>
                   <th>Durum</th>
                   {isAdmin && <th></th>}
                 </tr>
@@ -237,7 +285,10 @@ export default function UserManagement() {
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
-                    <td style={{ fontSize: 13 }}>{u.email}</td>
+                    <td>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{u.email}</div>
+                      {u.is_company_admin && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Şirket Yöneticisi</div>}
+                    </td>
                     <td>
                       {u.is_company_admin ? (
                         <span style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#A78BFA', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Admin</span>
@@ -280,12 +331,18 @@ export default function UserManagement() {
           <div>
             {roles.length === 0 ? (
               <div className="card" style={{ textAlign: 'center', padding: 48 }}>
-                <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12 }}>Henüz rol oluşturulmadı.</div>
+                <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>Henüz rol oluşturulmadı.</div>
                 {isAdmin && (
-                  <button onClick={() => setEditRole(false)}
-                    style={{ padding: '8px 18px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    + Yeni Rol Oluştur
-                  </button>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={handleCreatePresets}
+                      style={{ padding: '8px 18px', background: 'rgba(0,191,166,0.12)', border: '1px solid rgba(0,191,166,0.3)', borderRadius: 8, color: 'var(--teal)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      Varsayılan Rolleri Oluştur
+                    </button>
+                    <button onClick={() => setEditRole(false)}
+                      style={{ padding: '8px 18px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      + Yeni Rol Oluştur
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (

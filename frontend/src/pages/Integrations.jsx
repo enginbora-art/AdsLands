@@ -304,6 +304,30 @@ function ImportAccountsModal({ type, sessionId, onClose, onDone }) {
   );
 }
 
+// ── Disconnect Confirm Modal ──────────────────────────────────────────────────
+
+function DisconnectConfirmModal({ platformId, onConfirm, onCancel }) {
+  const name = PLATFORM_LABELS[platformId] || platformId;
+  return (
+    <div style={s.overlay}>
+      <div style={{ ...s.modal, maxWidth: 400 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Bağlantıyı Kes</div>
+        <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 24 }}>
+          <strong>{name}</strong> entegrasyonunu kesmek istediğinize emin misiniz?
+          Bağlantı silinecek ve verilerinize erişim kesilecek.
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel} style={s.btnSecondary}>İptal</button>
+          <button onClick={onConfirm}
+            style={{ flex: 1, padding: '10px 0', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.5)', borderRadius: 8, color: 'rgb(239,68,68)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+            Evet, Bağlantıyı Kes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Metrics Table ─────────────────────────────────────────────────────────────
 
 function MetricsTable({ platform, integration, metrics, liveData, liveLoading, onFetchLive }) {
@@ -415,6 +439,7 @@ export default function Integrations() {
   const [verifyParams, setVerifyParams]   = useState(null);
   const [tokenModal, setTokenModal]       = useState(null); // platform object
   const [importModal, setImportModal]     = useState(null); // { type: 'mcc'|'metabm', sessionId }
+  const [disconnectConfirm, setDisconnectConfirm] = useState(null); // integration object
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -502,7 +527,13 @@ export default function Integrations() {
     });
   };
 
-  const handleDisconnect = async (integration) => {
+  const handleDisconnect = (integration) => {
+    setDisconnectConfirm(integration);
+  };
+
+  const handleDisconnectConfirmed = async () => {
+    const integration = disconnectConfirm;
+    setDisconnectConfirm(null);
     const isGoogle = integration.platform === 'google_analytics' || integration.platform === 'google_ads';
     setDisconnecting(integration.id);
     try {
@@ -574,6 +605,13 @@ export default function Integrations() {
           onClose={() => setTokenModal(null)}
           onSuccess={handleTokenSuccess}
           onVerify={handleTokenVerify}
+        />
+      )}
+      {disconnectConfirm && (
+        <DisconnectConfirmModal
+          platformId={disconnectConfirm.platform}
+          onConfirm={handleDisconnectConfirmed}
+          onCancel={() => setDisconnectConfirm(null)}
         />
       )}
       {importModal && (
@@ -738,7 +776,7 @@ const s = {
   cardActions:  { display: 'flex', gap: 8 },
   connectBtn:   { flex: 1, padding: '8px 0', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   detailBtn:    { flex: 1, padding: '8px 0', background: 'var(--teal-dim)', border: '1px solid var(--teal-mid)', borderRadius: 8, color: 'var(--teal)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  disconnectBtn:{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 13, cursor: 'pointer' },
+  disconnectBtn:{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.5)', borderRadius: 8, color: 'rgb(239,68,68)', fontSize: 13, cursor: 'pointer' },
   accountId:    { marginTop: 10, fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' },
   metricsPanel: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24 },
   metricsTitle: { fontSize: 15, fontWeight: 700 },
