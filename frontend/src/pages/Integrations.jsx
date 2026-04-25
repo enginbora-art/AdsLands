@@ -682,7 +682,7 @@ export default function Integrations() {
                   </>
                 ) : (
                   <button
-                    style={{ ...s.connectBtn, background: isConnecting ? '#555' : undefined }}
+                    style={{ ...s.connectBtn, background: isConnecting ? '#555' : '#0EA5E9', opacity: 1 }}
                     onClick={() => handleConnect(platform)}
                     disabled={isConnecting}
                   >
