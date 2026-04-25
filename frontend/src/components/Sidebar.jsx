@@ -26,9 +26,6 @@ const AGENCY_BASE_NAV = [
   { label: 'İzleme', items: [
     { id: 'anomalies', label: 'Anomaliler',  perm: 'anomalier' },
   ]},
-  { label: 'Bağlantılar', items: [
-    { id: 'connections', label: 'Bağlantılar', perm: null },
-  ]},
   { label: 'Yönetim', items: [
     { id: 'users',    label: 'Kullanıcılar', perm: 'kullanici_yonetimi' },
     { id: 'settings', label: 'Ayarlar',      perm: 'ayarlar' },
