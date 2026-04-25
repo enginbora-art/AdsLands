@@ -67,7 +67,7 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
             <button
               style={{ padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'transparent', color: 'var(--teal)' }}
               onClick={() => setShowInvite(true)}>
-              + Davet Gönder
+              + Ajans Davet Et
             </button>
           </div>
         )}

@@ -98,7 +98,7 @@ export default function Sidebar({ active, onNav, onLogout }) {
 
   return (
     <aside className="sidebar">
-      <div className="logo">
+      <div className="logo" onClick={() => onNav('dashboard')} style={{ cursor: 'pointer' }}>
         <svg width="32" height="32" viewBox="0 0 32 32">
           <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
           <line x1="16" y1="2" x2="16" y2="7" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
