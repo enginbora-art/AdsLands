@@ -8,6 +8,7 @@ import {
   disconnectGoogleIntegration,
   getIntegrationMetrics,
   getGoogleData,
+  logVerify,
 } from '../api';
 
 const PLATFORMS = [
@@ -57,6 +58,48 @@ function StatusBanner({ params, onDismiss }) {
     );
   }
   return null;
+}
+
+function VerifyModal({ accountName, brandName, similarity, onConfirm, onCancel }) {
+  const pct = Math.round(similarity * 100);
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#1a1f2e', border: '1px solid rgba(255,181,71,0.35)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 460 }}>
+        <div style={{ fontSize: 22, marginBottom: 12 }}>⚠️</div>
+        <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>Hesap Uyuşmazlığı</div>
+
+        <div style={{ background: 'rgba(255,181,71,0.08)', border: '1px solid rgba(255,181,71,0.2)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13 }}>
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ color: 'var(--text3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Bağlanan Hesap</span>
+            <div style={{ fontWeight: 600, marginTop: 3 }}>{accountName}</div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Seçili Marka</span>
+            <div style={{ fontWeight: 600, marginTop: 3 }}>{brandName}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 8 }}>
+          Hesap adı benzerliği: <span style={{ color: 'var(--amber)', fontWeight: 700 }}>%{pct}</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 24 }}>
+          Bu hesap bu markaya ait olmayabilir. Yanlış bir hesap bağlarsanız analiz verileri karışabilir.
+          Devam etmek istiyor musunuz?
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel}
+            style={{ flex: 1, padding: '10px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+            İptal
+          </button>
+          <button onClick={onConfirm}
+            style={{ flex: 1, padding: '10px 0', background: 'rgba(255,181,71,0.15)', border: '1px solid rgba(255,181,71,0.4)', borderRadius: 8, color: 'var(--amber)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+            Yine de Bağla
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MetricsTable({ platform, integration, metrics, liveData, liveLoading, onFetchLive }) {
@@ -172,16 +215,52 @@ export default function Integrations() {
   const [disconnecting, setDisconnecting] = useState(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [banner, setBanner] = useState(null);
+  const [verifyParams, setVerifyParams] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('success') || params.get('error')) {
+    if (params.get('verify')) {
+      setVerifyParams({
+        platform:      params.get('verify'),
+        accountName:   params.get('account_name'),
+        brandName:     params.get('brand_name'),
+        similarity:    parseFloat(params.get('similarity') || '0'),
+        integrationId: params.get('integration_id'),
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (params.get('success') || params.get('error')) {
       setBanner(params);
       window.history.replaceState({}, '', window.location.pathname);
       setTimeout(() => setBanner(null), 4000);
     }
     load();
   }, [brandId]);
+
+  const handleVerifyConfirm = async () => {
+    if (!verifyParams) return;
+    try {
+      await logVerify(verifyParams.integrationId, 'confirmed');
+    } catch (err) {
+      console.error('logVerify hatası:', err);
+    }
+    setVerifyParams(null);
+    const fakeParams = new URLSearchParams(`success=${verifyParams.platform}`);
+    setBanner(fakeParams);
+    setTimeout(() => setBanner(null), 4000);
+    load();
+  };
+
+  const handleVerifyCancel = async () => {
+    if (!verifyParams) return;
+    try {
+      await logVerify(verifyParams.integrationId, 'cancelled');
+      await disconnectGoogleIntegration(verifyParams.platform, brandId);
+    } catch (err) {
+      console.error('verify iptal hatası:', err);
+    }
+    setVerifyParams(null);
+    load();
+  };
 
   const load = async () => {
     setLoading(true);
@@ -253,6 +332,16 @@ export default function Integrations() {
 
   return (
     <div style={s.page}>
+      {verifyParams && (
+        <VerifyModal
+          accountName={verifyParams.accountName}
+          brandName={verifyParams.brandName}
+          similarity={verifyParams.similarity}
+          onConfirm={handleVerifyConfirm}
+          onCancel={handleVerifyCancel}
+        />
+      )}
+
       {banner && (
         <StatusBanner params={banner} onDismiss={() => setBanner(null)} />
       )}
