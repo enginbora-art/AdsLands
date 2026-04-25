@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandProvider, useSelectedBrand } from './context/BrandContext';
 import Sidebar from './components/Sidebar';
@@ -15,45 +15,37 @@ import Reports from './pages/Reports';
 import Agency from './pages/Agency';
 import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
+import UserManagement from './pages/UserManagement';
+import Connections from './pages/Connections';
 import Login from './pages/Login';
-import Register from './pages/Register';
-import InviteAccept from './pages/InviteAccept';
 import SetupPassword from './pages/SetupPassword';
 import './index.css';
 
-const pages = {
-  dashboard: Dashboard,
-  channels: Channels,
-  report: AiReport,
-  budget: Budget,
-  tv: TvBroadcast,
-  tvplan: TvPlan,
-  anomalies: Anomalies,
-  benchmark: Benchmark,
-  reports: Reports,
-  agency: Agency,
+const PAGES = {
+  dashboard:   Dashboard,
+  channels:    Channels,
+  report:      AiReport,
+  budget:      Budget,
+  tv:          TvBroadcast,
+  tvplan:      TvPlan,
+  anomalies:   Anomalies,
+  benchmark:   Benchmark,
+  reports:     Reports,
+  agency:      Agency,
   integrations: Integrations,
-  settings: Settings,
+  settings:    Settings,
+  users:       UserManagement,
+  connections: Connections,
 };
 
 function AppInner() {
   const { user, loading, logout } = useAuth();
   const { setSelectedBrand } = useSelectedBrand();
   const [active, setActive] = useState('dashboard');
-  const [authMode, setAuthMode] = useState('login');
-
-  // agency users default to dashboard (shows summary cards)
-  // brand users also default to dashboard
 
   const path = window.location.pathname;
 
-  // Davet sayfası — auth beklenmeden açılır
-  const inviteMatch = path.match(/^\/invite\/(.+)$/);
-  if (inviteMatch) {
-    return <InviteAccept token={inviteMatch[1]} onDone={() => window.history.pushState({}, '', '/')} />;
-  }
-
-  // Şifre kurulum sayfası — auth beklenmeden açılır
+  // Setup sayfası — auth beklenmeden açılır
   const setupMatch = path.match(/^\/setup\/(.+)$/);
   if (setupMatch) {
     return <SetupPassword token={setupMatch[1]} onDone={() => window.history.pushState({}, '', '/')} />;
@@ -61,23 +53,14 @@ function AppInner() {
 
   if (loading) return <div className="loading">Yükleniyor...</div>;
 
-  // Giriş yapılmamış
-  if (!user) {
-    return authMode === 'login'
-      ? <Login onSwitch={() => setAuthMode('register')} />
-      : <Register onSwitch={() => setAuthMode('login')} />;
-  }
+  if (!user) return <Login />;
 
-  // Admin paneli
-  if (user.role === 'admin') {
+  // Platform admin
+  if (user.is_platform_admin) {
     if (path !== '/admin') window.history.pushState({}, '', '/admin');
-    return <AdminPanel onLogout={logout} user={user} />;
+    return <AdminPanel onLogout={logout} />;
   }
-
-  // /admin URL'ine admin olmayan biri geldiyse dashboard'a yönlendir
   if (path === '/admin') window.history.pushState({}, '', '/');
-
-  const Page = pages[active] || Dashboard;
 
   const handleSelectBrand = (brand) => {
     setSelectedBrand(brand);
@@ -88,6 +71,8 @@ function AppInner() {
     if (id === 'agency') setSelectedBrand(null);
     setActive(id);
   };
+
+  const Page = PAGES[active] || Dashboard;
 
   return (
     <div className="app">

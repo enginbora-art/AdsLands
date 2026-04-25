@@ -24,8 +24,19 @@ export default function SetupPassword({ token, onDone }) {
     setError('');
     setSubmitting(true);
     try {
-      const { token: jwt, user } = await completeSetup({ token, password: form.password });
-      saveAuth(jwt, user);
+      const companyName = new URLSearchParams(window.location.search).get('company_name') || '';
+      const { token: jwt } = await completeSetup({ token, password: form.password, company_name: companyName });
+      // JWT'den kullanıcı bilgilerini decode et
+      const payload = JSON.parse(atob(jwt.split('.')[1]));
+      saveAuth(jwt, {
+        id: payload.user_id,
+        company_id: payload.company_id,
+        company_name: payload.company_name,
+        company_type: payload.company_type,
+        is_company_admin: payload.is_company_admin,
+        is_platform_admin: payload.is_platform_admin,
+        permissions: payload.permissions,
+      });
       onDone?.();
     } catch (err) {
       setError(err.response?.data?.error || 'Bir hata oluştu.');

@@ -13,14 +13,27 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-const adminOnly = (req, res, next) => {
+// Platform admin (tüm sistemi yönetir)
+const platformAdmin = (req, res, next) => {
   authMiddleware(req, res, () => {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Bu işlem için admin yetkisi gerekiyor.' });
+    if (!req.user.is_platform_admin) {
+      return res.status(403).json({ error: 'Platform yöneticisi yetkisi gerekiyor.' });
+    }
+    next();
+  });
+};
+
+// Şirket admini veya belirli bir permission
+const requirePermission = (permission) => (req, res, next) => {
+  authMiddleware(req, res, () => {
+    if (req.user.is_platform_admin || req.user.is_company_admin) return next();
+    if (!req.user.permissions?.includes(permission)) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
     next();
   });
 };
 
 module.exports = authMiddleware;
-module.exports.adminOnly = adminOnly;
+module.exports.platformAdmin = platformAdmin;
+module.exports.requirePermission = requirePermission;

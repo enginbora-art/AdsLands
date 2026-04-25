@@ -8,7 +8,9 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
+    if (stored) {
+      try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem('user'); }
+    }
     setLoading(false);
   }, []);
 
@@ -24,8 +26,15 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // user.permissions içinde belirli bir izin var mı?
+  const hasPermission = (perm) => {
+    if (!user) return false;
+    if (user.is_platform_admin || user.is_company_admin) return true;
+    return user.permissions?.includes(perm) ?? false;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, saveAuth, logout }}>
+    <AuthContext.Provider value={{ user, loading, saveAuth, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

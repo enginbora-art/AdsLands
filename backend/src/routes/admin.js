@@ -3,14 +3,14 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { Resend } = require('resend');
 const pool = require('../db');
-const { adminOnly } = require('../middleware/auth');
+const { platformAdmin } = require('../middleware/auth');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://adslands.com';
 
-async function sendSetupEmail({ email, company_name, role, setup_token }) {
+async function sendSetupEmail(email, companyName, companyType, setupToken) {
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const roleLabel = role === 'brand' ? 'Marka' : 'Ajans';
-  const setupLink = `${FRONTEND_URL}/setup/${setup_token}`;
+  const typeLabel = companyType === 'agency' ? 'Ajans' : 'Marka';
+  const setupLink = `${FRONTEND_URL}/setup/${setupToken}`;
 
   await resend.emails.send({
     from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
@@ -23,8 +23,8 @@ async function sendSetupEmail({ email, company_name, role, setup_token }) {
         </div>
         <h2 style="font-size:22px;font-weight:700;margin:0 0 12px;">Hesabınız hazır</h2>
         <p style="color:#94A8B3;line-height:1.6;margin:0 0 8px;">
-          <strong style="color:#F0F5F3;">${company_name}</strong> adına
-          AdsLands platformunda bir <strong style="color:#F0F5F3;">${roleLabel}</strong> hesabı oluşturuldu.
+          <strong style="color:#F0F5F3;">${companyName}</strong> adına
+          AdsLands platformunda bir <strong style="color:#F0F5F3;">${typeLabel}</strong> hesabı oluşturuldu.
         </p>
         <p style="color:#94A8B3;line-height:1.6;margin:0 0 28px;">
           Aşağıdaki butona tıklayarak şifrenizi belirleyin ve platforma giriş yapın.
@@ -42,83 +42,100 @@ async function sendSetupEmail({ email, company_name, role, setup_token }) {
   });
 }
 
-async function createUser({ email, company_name, role }) {
-  const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-  if (exists.rows.length > 0) throw Object.assign(new Error('Bu e-posta zaten kayıtlı.'), { status: 409 });
-
-  const setup_token = uuidv4();
-  const result = await pool.query(
-    `INSERT INTO users (email, password_hash, role, company_name, is_active, setup_token)
-     VALUES ($1, '', $2, $3, false, $4)
-     RETURNING id, email, company_name, is_active, created_at`,
-    [email, role, company_name, setup_token]
-  );
-  await sendSetupEmail({ email, company_name, role, setup_token });
-  return result.rows[0];
-}
-
-router.get('/brands', adminOnly, async (req, res) => {
+// GET /api/admin/companies — tüm şirketleri listele
+router.get('/companies', platformAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT id, email, company_name, is_active, created_at FROM users WHERE role = 'brand' ORDER BY created_at DESC"
-    );
-    res.json(result.rows);
+    const { rows } = await pool.query(`
+      SELECT c.id, c.name, c.type, c.created_at,
+             COUNT(u.id) AS user_count
+      FROM companies c
+      LEFT JOIN users u ON u.company_id = c.id
+      WHERE c.type != 'admin'
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `);
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
 
-router.post('/brands', adminOnly, async (req, res) => {
-  const { email, company_name } = req.body;
-  if (!email || !company_name) {
-    return res.status(400).json({ error: 'E-posta ve şirket adı zorunludur.' });
+// POST /api/admin/companies — şirket oluştur + admin kullanıcı gönder
+router.post('/companies', platformAdmin, async (req, res) => {
+  const { name, type, admin_email } = req.body;
+  if (!name?.trim() || !type || !admin_email?.trim()) {
+    return res.status(400).json({ error: 'Şirket adı, tipi ve admin e-postası zorunludur.' });
   }
-  try {
-    const user = await createUser({ email, company_name, role: 'brand' });
-    res.status(201).json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
+  if (!['agency', 'brand'].includes(type)) {
+    return res.status(400).json({ error: 'Şirket tipi agency veya brand olmalıdır.' });
   }
-});
 
-router.get('/agencies', adminOnly, async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT id, email, company_name, is_active, created_at FROM users WHERE role = 'agency' ORDER BY created_at DESC"
+    const { rows: [emailExists] } = await pool.query(
+      'SELECT id FROM users WHERE email = $1', [admin_email]
     );
-    res.json(result.rows);
+    if (emailExists) {
+      return res.status(409).json({ error: 'Bu e-posta zaten kayıtlı.' });
+    }
+
+    const { rows: [company] } = await pool.query(
+      'INSERT INTO companies (name, type) VALUES ($1, $2) RETURNING *',
+      [name.trim(), type]
+    );
+
+    const setupToken = uuidv4();
+    const { rows: [user] } = await pool.query(
+      `INSERT INTO users (company_id, email, password_hash, is_company_admin, is_active, setup_token)
+       VALUES ($1, $2, '', true, false, $3)
+       RETURNING id, email, is_company_admin, is_active, created_at`,
+      [company.id, admin_email, setupToken]
+    );
+
+    await sendSetupEmail(admin_email, company.name, company.type, setupToken);
+
+    res.status(201).json({ company, user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
 
-router.post('/agencies', adminOnly, async (req, res) => {
-  const { email, company_name } = req.body;
-  if (!email || !company_name) {
-    return res.status(400).json({ error: 'E-posta ve şirket adı zorunludur.' });
-  }
+// GET /api/admin/companies/:id — şirket detayı + kullanıcılar
+router.get('/companies/:id', platformAdmin, async (req, res) => {
   try {
-    const user = await createUser({ email, company_name, role: 'agency' });
-    res.status(201).json(user);
+    const { rows: [company] } = await pool.query(
+      'SELECT * FROM companies WHERE id = $1', [req.params.id]
+    );
+    if (!company) return res.status(404).json({ error: 'Şirket bulunamadı.' });
+
+    const { rows: users } = await pool.query(
+      `SELECT u.id, u.email, u.is_company_admin, u.is_active, u.created_at,
+              r.name AS role_name
+       FROM users u LEFT JOIN roles r ON u.role_id = r.id
+       WHERE u.company_id = $1
+       ORDER BY u.created_at`,
+      [company.id]
+    );
+
+    res.json({ company, users });
   } catch (err) {
     console.error(err);
-    res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
+    res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
 
-router.patch('/users/:id/toggle-active', adminOnly, async (req, res) => {
+// PATCH /api/admin/users/:id/toggle — kullanıcı aktif/pasif yap
+router.patch('/users/:id/toggle', platformAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
-      "UPDATE users SET is_active = NOT is_active WHERE id = $1 AND role != 'admin' RETURNING id, email, company_name, role, is_active",
+    const { rows: [user] } = await pool.query(
+      `UPDATE users SET is_active = NOT is_active
+       WHERE id = $1 AND is_platform_admin = false
+       RETURNING id, email, is_active`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
-    }
-    res.json(result.rows[0]);
+    if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+    res.json(user);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
@@ -126,3 +143,4 @@ router.patch('/users/:id/toggle-active', adminOnly, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.sendSetupEmail = sendSetupEmail;

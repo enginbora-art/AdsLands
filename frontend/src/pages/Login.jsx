@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { login } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-export default function Login({ onSwitch }) {
+export default function Login() {
   const { saveAuth } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -67,10 +67,6 @@ export default function Login({ onSwitch }) {
           </button>
         </form>
 
-        <p style={styles.switchText}>
-          Hesabınız yok mu?{' '}
-          <span style={styles.link} onClick={onSwitch}>Kayıt olun</span>
-        </p>
       </div>
     </div>
   );

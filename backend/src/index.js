@@ -10,11 +10,12 @@ const routes = require('./routes');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const usersRoutes = require('./routes/users');
+const companyRoutes = require('./routes/company');
 const invitationRoutes = require('./routes/invitations');
+const notificationRoutes = require('./routes/notifications');
 const integrationRoutes = require('./routes/integrations');
 const dashboardRoutes = require('./routes/dashboard');
 const budgetRoutes = require('./routes/budgets');
-const agencyRoutes = require('./routes/agency');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,11 +28,12 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', usersRoutes);
+app.use('/api/company', companyRoutes);
 app.use('/api/invitations', invitationRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budgets', budgetRoutes);
-app.use('/api/agency', agencyRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

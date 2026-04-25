@@ -1,234 +1,186 @@
 import { useState, useEffect } from 'react';
-import { adminGetBrands, adminGetAgencies, adminCreateBrand, adminCreateAgency, adminToggleActive } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminToggleUser } from '../api';
 
-const emptyForm = { email: '', company_name: '' };
+const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
-export default function AdminPanel({ onLogout, user }) {
-  const [tab, setTab] = useState('brands');
-  const [brands, setBrands] = useState([]);
-  const [agencies, setAgencies] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+function CreateModal({ onClose, onSuccess }) {
+  const [form, setForm] = useState({ name: '', type: 'brand', admin_email: '' });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
-  const fetchAll = async () => {
-    try {
-      const [b, a] = await Promise.all([adminGetBrands(), adminGetAgencies()]);
-      setBrands(b);
-      setAgencies(a);
-    } catch {
-      setError('Veriler yüklenemedi.');
-    }
-  };
-
-  const handleCreate = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
     setLoading(true);
+    setError('');
     try {
-      if (tab === 'brands') {
-        const newBrand = await adminCreateBrand(form);
-        setBrands(prev => [newBrand, ...prev]);
-      } else {
-        const newAgency = await adminCreateAgency(form);
-        setAgencies(prev => [newAgency, ...prev]);
-      }
-      setForm(emptyForm);
-      setShowForm(false);
-      setSuccess(`${tab === 'brands' ? 'Marka' : 'Ajans'} başarıyla oluşturuldu.`);
-      setTimeout(() => setSuccess(''), 3000);
+      await adminCreateCompany(form);
+      onSuccess();
     } catch (err) {
-      setError(err.response?.data?.error || 'Oluşturma başarısız.');
+      setError(err.response?.data?.error || 'Hata oluştu.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggle = async (id) => {
-    try {
-      const updated = await adminToggleActive(id);
-      if (tab === 'brands') {
-        setBrands(prev => prev.map(b => b.id === id ? { ...b, is_active: updated.is_active } : b));
-      } else {
-        setAgencies(prev => prev.map(a => a.id === id ? { ...a, is_active: updated.is_active } : a));
-      }
-    } catch {
-      setError('Durum güncellenemedi.');
-    }
-  };
-
-  const list = tab === 'brands' ? brands : agencies;
-
   return (
-    <div style={s.page}>
-      <header style={s.header}>
-        <div style={s.headerLeft}>
-          <svg width="28" height="28" viewBox="0 0 32 32">
-            <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
-            <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
-          </svg>
-          <span style={s.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
-          <span style={s.adminBadge}>ADMIN</span>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 440 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Yeni Şirket Oluştur</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 20 }}>×</button>
         </div>
-        <div style={s.headerRight}>
-          <span style={s.adminEmail}>{user?.email}</span>
-          <button onClick={onLogout} style={s.logoutBtn}>Çıkış Yap</button>
-        </div>
-      </header>
-
-      <div style={s.content}>
-        <div style={s.titleRow}>
-          <h1 style={s.title}>Yönetim Paneli</h1>
-          <button style={s.addBtn} onClick={() => { setShowForm(!showForm); setError(''); setForm(emptyForm); }}>
-            {showForm ? '✕ İptal' : `+ Yeni ${tab === 'brands' ? 'Marka' : 'Ajans'}`}
-          </button>
-        </div>
-
-        {success && <div style={s.successBox}>{success}</div>}
-        {error && <div style={s.errorBox}>{error}</div>}
-
-        {showForm && (
-          <div style={s.formCard}>
-            <h3 style={s.formTitle}>Yeni {tab === 'brands' ? 'Marka' : 'Ajans'} Ekle</h3>
-            <form onSubmit={handleCreate} style={s.formGrid}>
-              <div style={s.field}>
-                <label style={s.label}>Şirket Adı</label>
-                <input
-                  className="sinput"
-                  placeholder="TechModa A.Ş."
-                  value={form.company_name}
-                  onChange={e => setForm({ ...form, company_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div style={s.field}>
-                <label style={s.label}>E-posta</label>
-                <input
-                  className="sinput"
-                  type="email"
-                  placeholder="info@sirket.com"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button type="submit" style={s.submitBtn} disabled={loading}>
-                  {loading ? 'Oluşturuluyor...' : 'Oluştur'}
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Şirket Adı</label>
+            <input className="sinput" placeholder="Şirket / Marka adı"
+              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           </div>
-        )}
-
-        <div style={s.tabs}>
-          <button
-            style={{ ...s.tab, ...(tab === 'brands' ? s.tabActive : {}) }}
-            onClick={() => { setTab('brands'); setShowForm(false); }}
-          >
-            Markalar <span style={s.count}>{brands.length}</span>
-          </button>
-          <button
-            style={{ ...s.tab, ...(tab === 'agencies' ? s.tabActive : {}) }}
-            onClick={() => { setTab('agencies'); setShowForm(false); }}
-          >
-            Ajanslar <span style={s.count}>{agencies.length}</span>
-          </button>
-        </div>
-
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                <th style={s.th}>Şirket</th>
-                <th style={s.th}>E-posta</th>
-                <th style={s.th}>Kayıt Tarihi</th>
-                <th style={s.th}>Durum</th>
-                <th style={s.th}>İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ ...s.td, textAlign: 'center', color: 'var(--text3)', padding: '32px 0' }}>
-                    Henüz kayıt yok.
-                  </td>
-                </tr>
-              ) : list.map(u => (
-                <tr key={u.id} style={s.tr}>
-                  <td style={s.td}>
-                    <div style={s.avatar}>{u.company_name.slice(0, 2).toUpperCase()}</div>
-                    <span style={{ fontWeight: 600 }}>{u.company_name}</span>
-                  </td>
-                  <td style={{ ...s.td, color: 'var(--text3)' }}>{u.email}</td>
-                  <td style={{ ...s.td, color: 'var(--text3)' }}>
-                    {new Date(u.created_at).toLocaleDateString('tr-TR')}
-                  </td>
-                  <td style={s.td}>
-                    <span style={{ ...s.badge, ...(u.is_active ? s.badgeActive : s.badgePassive) }}>
-                      {u.is_active ? 'Aktif' : 'Pasif'}
-                    </span>
-                  </td>
-                  <td style={s.td}>
-                    <button
-                      style={{ ...s.toggleBtn, ...(u.is_active ? s.toggleBtnDeactivate : s.toggleBtnActivate) }}
-                      onClick={() => handleToggle(u.id)}
-                    >
-                      {u.is_active ? 'Pasife Al' : 'Aktife Al'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Şirket Tipi</label>
+            <select className="sinput" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+              <option value="brand">Marka</option>
+              <option value="agency">Ajans</option>
+            </select>
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Admin E-posta</label>
+            <input className="sinput" type="email" placeholder="admin@sirket.com"
+              value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))} required />
+          </div>
+          {error && (
+            <div style={{ background: 'rgba(255,107,90,0.1)', color: 'var(--coral)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{error}</div>
+          )}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: '10px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>
+              İptal
+            </button>
+            <button type="submit" disabled={loading}
+              style={{ flex: 1, padding: '10px 0', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Oluşturuluyor...' : 'Oluştur & Mail Gönder'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 
-const s = {
-  page: { minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', height: 64, background: 'var(--bg2)', borderBottom: '1px solid var(--border2)' },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 12 },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 16 },
-  logoText: { fontSize: 18, fontWeight: 700 },
-  adminBadge: { fontSize: 10, fontWeight: 700, background: 'var(--teal)', color: 'var(--bg)', padding: '3px 8px', borderRadius: 4, letterSpacing: '0.5px' },
-  adminEmail: { fontSize: 13, color: 'var(--text3)' },
-  logoutBtn: { padding: '6px 16px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  content: { maxWidth: 1100, margin: '0 auto', padding: '32px 24px' },
-  titleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
-  title: { fontSize: 22, fontWeight: 700 },
-  addBtn: { padding: '8px 20px', background: 'var(--teal)', color: 'var(--bg)', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  successBox: { background: 'rgba(0,191,166,0.12)', color: '#00BFA6', border: '1px solid rgba(0,191,166,0.3)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 },
-  errorBox: { background: 'var(--coral-dim)', color: 'var(--coral)', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 },
-  formCard: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24, marginBottom: 24 },
-  formTitle: { fontSize: 15, fontWeight: 700, marginBottom: 18 },
-  formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 16, alignItems: 'start' },
-  field: { display: 'flex', flexDirection: 'column' },
-  label: { fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 },
-  submitBtn: { padding: '10px 24px', background: 'var(--teal)', color: 'var(--bg)', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' },
-  tabs: { display: 'flex', gap: 4, marginBottom: 20, background: 'var(--bg2)', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid var(--border2)' },
-  tab: { padding: '8px 20px', background: 'transparent', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8 },
-  tabActive: { background: 'var(--teal)', color: 'var(--bg)' },
-  count: { background: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: '1px 7px', fontSize: 11 },
-  tableWrap: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, overflow: 'hidden' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { padding: '12px 16px', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left', borderBottom: '1px solid var(--border2)', fontWeight: 600 },
-  tr: { borderBottom: '1px solid var(--border2)' },
-  td: { padding: '14px 16px', fontSize: 14, display: 'revert', verticalAlign: 'middle' },
-  avatar: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, background: 'var(--teal)', color: 'var(--bg)', fontSize: 11, fontWeight: 700, marginRight: 10 },
-  badge: { display: 'inline-block', padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 },
-  badgeActive: { background: 'rgba(0,191,166,0.15)', color: '#00BFA6' },
-  badgePassive: { background: 'rgba(255,107,90,0.15)', color: 'var(--coral)' },
-  toggleBtn: { padding: '5px 14px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  toggleBtnDeactivate: { background: 'rgba(255,107,90,0.12)', color: 'var(--coral)' },
-  toggleBtnActivate: { background: 'rgba(0,191,166,0.12)', color: '#00BFA6' },
-};
+export default function AdminPanel({ onLogout }) {
+  const [companies, setCompanies] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [showCreate, setShowCreate] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    adminGetCompanies()
+      .then(setCompanies)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = filter === 'all' ? companies : companies.filter(c => c.type === filter);
+
+  const handleToggleUser = async (userId) => {
+    try {
+      await adminToggleUser(userId);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Hata oluştu.');
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text1)' }}>
+      {showCreate && (
+        <CreateModal
+          onClose={() => setShowCreate(false)}
+          onSuccess={() => {
+            setShowCreate(false);
+            setSuccessMsg('Şirket oluşturuldu ve setup maili gönderildi.');
+            setTimeout(() => setSuccessMsg(''), 5000);
+            load();
+          }}
+        />
+      )}
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <svg width="28" height="28" viewBox="0 0 32 32">
+                <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
+                <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
+              </svg>
+              <span style={{ fontSize: 20, fontWeight: 700 }}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>Platform Yönetimi</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setShowCreate(true)}
+              style={{ padding: '8px 18px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              + Şirket Ekle
+            </button>
+            <button onClick={onLogout}
+              style={{ padding: '8px 18px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 13, cursor: 'pointer' }}>
+              Çıkış
+            </button>
+          </div>
+        </div>
+
+        {successMsg && (
+          <div style={{ background: 'rgba(0,191,166,0.1)', border: '1px solid rgba(0,191,166,0.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--teal)', fontWeight: 600, marginBottom: 20 }}>
+            ✓ {successMsg}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {['all', 'agency', 'brand'].map(t => (
+            <button key={t} onClick={() => setFilter(t)}
+              style={{ padding: '6px 14px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                background: filter === t ? 'var(--teal)' : 'var(--bg2)', color: filter === t ? '#0B1219' : 'var(--text3)' }}>
+              {t === 'all' ? 'Tümü' : t === 'agency' ? 'Ajans' : 'Marka'} ({t === 'all' ? companies.length : companies.filter(c => c.type === t).length})
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
+        ) : (
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12 }}>
+            <table className="cmp-table">
+              <thead>
+                <tr>
+                  <th>Şirket</th>
+                  <th>Tip</th>
+                  <th>Kullanıcı Sayısı</th>
+                  <th>Oluşturulma</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
+                ) : filtered.map(c => (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 600 }}>{c.name}</td>
+                    <td>
+                      <span style={{ background: c.type === 'agency' ? 'rgba(167,139,250,0.15)' : 'rgba(0,191,166,0.12)', color: c.type === 'agency' ? '#A78BFA' : 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+                        {c.type === 'agency' ? 'Ajans' : 'Marka'}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--text2)' }}>{c.user_count}</td>
+                    <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

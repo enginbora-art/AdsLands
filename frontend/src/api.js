@@ -8,33 +8,51 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export const getMetrics = () => api.get('/metrics').then(r => r.data);
-export const getWeeklySpend = () => api.get('/weekly-spend').then(r => r.data);
-export const getRoas = () => api.get('/roas').then(r => r.data);
-export const getSparklines = () => api.get('/sparklines').then(r => r.data);
-export const getAnomalies = () => api.get('/anomalies').then(r => r.data);
-export const getChannels = () => api.get('/channels').then(r => r.data);
-export const getAiReport = () => api.get('/ai-report').then(r => r.data);
-export const getTvBroadcast = () => api.get('/tv-broadcast').then(r => r.data);
-export const getBudget = () => api.get('/budget').then(r => r.data);
-export const getBudgetPlan = (month, year, brandId) =>
-  api.get(`/budgets?month=${month}&year=${year}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
-export const saveBudgetPlan = (data) => api.post('/budgets', data).then(r => r.data);
-export const getBudgetLogs = (limit = 10) => api.get(`/budgets/logs?limit=${limit}`).then(r => r.data);
-export const getBudgetBrands = () => api.get('/budgets/brands').then(r => r.data);
-export const getBenchmark = () => api.get('/benchmark').then(r => r.data);
-export const getReports = () => api.get('/reports').then(r => r.data);
-export const getAgency = () => api.get('/agency').then(r => r.data);
-export const getSettings = () => api.get('/settings').then(r => r.data);
-export const updateSettings = (data) => api.put('/settings', data).then(r => r.data);
-
-export const register = (data) => api.post('/auth/register', data).then(r => r.data);
+// ── Auth ──────────────────────────────────────────────────────────────────────
 export const login = (data) => api.post('/auth/login', data).then(r => r.data);
-export const sendInvitation = (receiver_email) => api.post('/invitations/send', { receiver_email }).then(r => r.data);
-export const getInvitation = (token) => api.get(`/invitations/${token}`).then(r => r.data);
-export const acceptInvitation = (data) => api.post('/invitations/accept', data).then(r => r.data);
+export const getSetup = (token) => api.get(`/auth/setup/${token}`).then(r => r.data);
+export const completeSetup = (data) => api.post('/auth/setup', data).then(r => r.data);
 
-// Entegrasyonlar
+// ── Platform Admin ────────────────────────────────────────────────────────────
+export const adminGetCompanies = () => api.get('/admin/companies').then(r => r.data);
+export const adminCreateCompany = (data) => api.post('/admin/companies', data).then(r => r.data);
+export const adminGetCompany = (id) => api.get(`/admin/companies/${id}`).then(r => r.data);
+export const adminToggleUser = (id) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data);
+
+// ── Şirket Yönetimi ───────────────────────────────────────────────────────────
+export const getCompanyUsers = () => api.get('/company/users').then(r => r.data);
+export const inviteCompanyUser = (data) => api.post('/company/users/invite', data).then(r => r.data);
+export const toggleCompanyUser = (id) => api.patch(`/company/users/${id}/toggle`).then(r => r.data);
+export const assignUserRole = (userId, roleId) => api.patch(`/company/users/${userId}/role`, { role_id: roleId }).then(r => r.data);
+
+export const getCompanyRoles = () => api.get('/company/roles').then(r => r.data);
+export const createRole = (data) => api.post('/company/roles', data).then(r => r.data);
+export const updateRole = (id, data) => api.put(`/company/roles/${id}`, data).then(r => r.data);
+export const deleteRole = (id) => api.delete(`/company/roles/${id}`).then(r => r.data);
+export const getPermissions = () => api.get('/company/permissions').then(r => r.data);
+
+// ── Davetler & Bağlantılar ────────────────────────────────────────────────────
+export const getInvitations = () => api.get('/invitations').then(r => r.data);
+export const getSentInvitations = () => api.get('/invitations/sent').then(r => r.data);
+export const getConnectableCompanies = () => api.get('/invitations/companies').then(r => r.data);
+export const getConnections = () => api.get('/invitations/connections').then(r => r.data);
+export const sendInvitation = (data) => api.post('/invitations/send', data).then(r => r.data);
+export const acceptInvitation = (id) => api.post(`/invitations/${id}/accept`).then(r => r.data);
+export const rejectInvitation = (id) => api.post(`/invitations/${id}/reject`).then(r => r.data);
+
+// ── Bildirimler ───────────────────────────────────────────────────────────────
+export const getNotifications = () => api.get('/notifications').then(r => r.data);
+export const getUnreadCount = () => api.get('/notifications/unread-count').then(r => r.data);
+export const markNotificationRead = (id) => api.post(`/notifications/${id}/read`).then(r => r.data);
+export const markAllRead = () => api.post('/notifications/read-all').then(r => r.data);
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+export const getBrandDashboard = () => api.get('/dashboard/brand').then(r => r.data);
+export const getAgencyDashboard = () => api.get('/dashboard/agency').then(r => r.data);
+export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/brand/${brandId}`).then(r => r.data);
+export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
+
+// ── Entegrasyonlar ────────────────────────────────────────────────────────────
 export const getIntegrations = () => api.get('/integrations').then(r => r.data);
 export const connectIntegration = async (platform) => {
   if (platform === 'google_analytics' || platform === 'google_ads') {
@@ -51,26 +69,13 @@ export const getIntegrationMetrics = (id) => api.get(`/integrations/${id}/metric
 export const getGoogleData = (platform) =>
   api.get(`/integrations/google/data?platform=${platform}`).then(r => r.data);
 
-// Dashboard
-export const getBrandDashboard = () => api.get('/dashboard/brand').then(r => r.data);
-export const getAgencyDashboard = () => api.get('/dashboard/agency').then(r => r.data);
-export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/brand/${brandId}`).then(r => r.data);
-export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
+// ── Bütçe ─────────────────────────────────────────────────────────────────────
+export const getBudgetPlan = (month, year, brandId) =>
+  api.get(`/budgets?month=${month}&year=${year}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
+export const saveBudgetPlan = (data) => api.post('/budgets', data).then(r => r.data);
+export const getBudgetLogs = (limit = 10) => api.get(`/budgets/logs?limit=${limit}`).then(r => r.data);
+export const getBudgetBrands = () => api.get('/budgets/brands').then(r => r.data);
 
-// Şifre kurulumu
-export const getSetup = (token) => api.get(`/auth/setup/${token}`).then(r => r.data);
-export const completeSetup = (data) => api.post('/auth/setup', data).then(r => r.data);
-
-// Admin
-export const adminGetBrands = () => api.get('/admin/brands').then(r => r.data);
-export const adminCreateBrand = (data) => api.post('/admin/brands', data).then(r => r.data);
-export const adminGetAgencies = () => api.get('/admin/agencies').then(r => r.data);
-export const adminCreateAgency = (data) => api.post('/admin/agencies', data).then(r => r.data);
-export const adminToggleActive = (id) => api.patch(`/admin/users/${id}/toggle-active`).then(r => r.data);
-
-// Kullanıcı listeleri
+// ── Şirket Listeleri ──────────────────────────────────────────────────────────
 export const listBrands = () => api.get('/brands').then(r => r.data);
 export const listAgencies = () => api.get('/agencies').then(r => r.data);
-
-// Ajans - marka daveti
-export const inviteBrand = (data) => api.post('/agency/invite-brand', data).then(r => r.data);
