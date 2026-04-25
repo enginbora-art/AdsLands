@@ -10,7 +10,23 @@ const {
   getAnalyticsData,
   getAdsData,
   listAdsCustomers,
+  getUserInfo,
+  getAdsCustomerName,
 } = require('../services/googleService');
+
+// ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
+function nameSimilarity(a, b) {
+  if (!a || !b) return 0;
+  const norm = s => s.toLowerCase().replace(/[^\w\s]/gi, '').trim();
+  const words = s => norm(s).split(/\s+/).filter(w => w.length > 1);
+  const na = norm(a), nb = norm(b);
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 1;
+  const wa = words(a), wb = words(b);
+  if (!wa.length || !wb.length) return 0;
+  const common = wa.filter(w => wb.some(bw => bw.includes(w) || w.includes(bw)));
+  return common.length / Math.max(wa.length, wb.length);
+}
 
 const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -110,6 +126,61 @@ router.get('/google/callback', async (req, res) => {
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
+
+    // ── Hesap doğrulama ───────────────────────────────────────────────────────
+    const tokenObj = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: tokens.expiry_date,
+    };
+
+    // Hesap adını çek: Google Ads → customer descriptiveName, GA → userinfo name
+    let accountName = null;
+    if (platform === 'google_ads' && accountId) {
+      accountName = await getAdsCustomerName(tokenObj, accountId).catch((e) => {
+        console.error('[verify] getAdsCustomerName hatası:', e?.message);
+        return null;
+      });
+    }
+    if (!accountName) {
+      const info = await getUserInfo(tokenObj).catch((e) => {
+        console.error('[verify] getUserInfo hatası:', e?.message);
+        return null;
+      });
+      accountName = info?.name || info?.email || null;
+    }
+
+    // Şirket (marka) adını çek
+    const { rows: [company] } = await pool.query(
+      'SELECT name FROM companies WHERE id = $1', [companyId]
+    );
+    const brandName = company?.name || '';
+
+    const similarity = nameSimilarity(accountName || '', brandName);
+    const matched = similarity >= 0.7;
+
+    console.log(`[integration verify] platform=${platform} companyId=${companyId} account="${accountName}" brand="${brandName}" similarity=${similarity.toFixed(3)} matched=${matched}`);
+
+    // Log kaydet
+    await pool.query(
+      `INSERT INTO integration_logs
+         (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [integration.id, companyId, platform, accountName, brandName,
+       similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched) {
+      const params = new URLSearchParams({
+        verify:          platform,
+        account_name:    accountName || '',
+        brand_name:      brandName,
+        similarity:      similarity.toFixed(3),
+        integration_id:  integration.id,
+      });
+      return res.redirect(`${FRONTEND_URL}/integrations?${params.toString()}`);
+    }
+
     res.redirect(`${FRONTEND_URL}/integrations?success=${platform}`);
   } catch (err) {
     console.error('Google OAuth callback hatası:', err);
@@ -143,6 +214,32 @@ router.get('/google/data', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Google data hatası:', err);
     res.status(500).json({ error: err.message || 'Veri çekilemedi.' });
+  }
+});
+
+// POST /api/integrations/log-verify — kullanıcı doğrulama kararını kaydet
+router.post('/log-verify', authMiddleware, async (req, res) => {
+  const { integration_id, action } = req.body; // action: 'confirmed' | 'cancelled'
+  if (!['confirmed', 'cancelled'].includes(action)) {
+    return res.status(400).json({ error: 'Geçersiz action.' });
+  }
+  try {
+    const dbAction = action === 'confirmed' ? 'user_confirmed' : 'user_cancelled';
+    await pool.query(
+      `UPDATE integration_logs SET action = $1
+       WHERE integration_id = $2 AND action = 'pending_verify'`,
+      [dbAction, integration_id]
+    );
+    if (action === 'cancelled') {
+      await pool.query(
+        'UPDATE integrations SET is_active = false WHERE id = $1 AND company_id IN (SELECT company_id FROM integrations WHERE id = $1)',
+        [integration_id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });
 

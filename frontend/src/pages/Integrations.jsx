@@ -71,7 +71,7 @@ function VerifyModal({ accountName, brandName, similarity, onConfirm, onCancel }
         <div style={{ background: 'rgba(255,181,71,0.08)', border: '1px solid rgba(255,181,71,0.2)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13 }}>
           <div style={{ marginBottom: 8 }}>
             <span style={{ color: 'var(--text3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Bağlanan Hesap</span>
-            <div style={{ fontWeight: 600, marginTop: 3 }}>{accountName}</div>
+            <div style={{ fontWeight: 600, marginTop: 3 }}>{accountName || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Bilinmiyor</span>}</div>
           </div>
           <div>
             <span style={{ color: 'var(--text3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Seçili Marka</span>

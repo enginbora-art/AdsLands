@@ -41,7 +41,10 @@ const PAGES = {
 function AppInner() {
   const { user, loading, logout } = useAuth();
   const { setSelectedBrand } = useSelectedBrand();
-  const [active, setActive] = useState('dashboard');
+  const [active, setActive] = useState(() => {
+    const seg = window.location.pathname.slice(1).split('/')[0];
+    return PAGES[seg] ? seg : 'dashboard';
+  });
 
   const path = window.location.pathname;
 
