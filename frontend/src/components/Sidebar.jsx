@@ -189,22 +189,18 @@ export default function Sidebar({ active, onNav, onLogout }) {
       </nav>
 
       {/* Footer */}
-      <div className="sidebar-footer">
-        <div className="sidebar-user">
-          <div className="sidebar-avatar">
-            {initials(user?.company_name)}
-          </div>
-          <div className="sidebar-user-info">
-            <div className="sidebar-user-name">{user?.company_name || '—'}</div>
-            <div className="sidebar-user-role">{roleLabel}</div>
-          </div>
-        </div>
-        {onLogout && (
-          <button className="sidebar-logout" onClick={onLogout}>
-            Çıkış Yap
+      {onLogout && (
+        <div className="sidebar-footer">
+          <button className="nav-item nav-logout" onClick={onLogout}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span>Çıkış Yap</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }

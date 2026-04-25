@@ -83,25 +83,17 @@ export default function Header({ onNav }) {
     setUnreadCount(prev => Math.max(0, prev - 1));
   };
 
-  const displayName   = user?.email?.split('@')[0] || '—';
-  const companyLabel  = companyTypeLabel(user?.company_type);
+  const roleLabel = user?.is_platform_admin ? 'Platform Admin'
+    : user?.is_company_admin ? 'Şirket Yöneticisi'
+    : companyTypeLabel(user?.company_type);
+
+  const displayName  = user?.full_name || user?.email?.split('@')[0] || '—';
+  const displaySub   = `${user?.company_name || ''} · ${roleLabel}`;
 
   return (
     <header style={s.header}>
-      {/* Logo */}
-      <div style={s.logo} onClick={() => onNav('dashboard')}>
-        <svg width="22" height="22" viewBox="0 0 32 32">
-          <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
-          <line x1="16" y1="2"  x2="16" y2="7"  stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="16" y1="25" x2="16" y2="30" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="2"  y1="16" x2="7"  y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="25" y1="16" x2="30" y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
-        </svg>
-        <span style={s.logoText}>Ads<span style={{ color: '#00BFA6' }}>Lands</span></span>
-      </div>
-
-      {/* Right side */}
+      {/* Right side — fills full width, aligns to the right */}
+      <div style={{ flex: 1 }} />
       <div style={s.right}>
 
         {/* Bell + Dropdown */}
@@ -169,7 +161,7 @@ export default function Header({ onNav }) {
           <div style={s.avatar}>{avatarLetters(user?.email)}</div>
           <div>
             <div style={s.userName}>{displayName}</div>
-            <div style={s.userSub}>{user?.company_name} · {companyLabel}</div>
+            <div style={s.userSub}>{displaySub}</div>
           </div>
         </div>
 
@@ -189,9 +181,7 @@ function BellIcon() {
 }
 
 const s = {
-  header:     { position: 'fixed', top: 0, left: 220, right: 0, height: 56, background: '#0f1117', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', zIndex: 9, boxSizing: 'border-box' },
-  logo:       { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' },
-  logoText:   { fontSize: 15, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text1)' },
+  header:     { position: 'fixed', top: 0, left: 220, right: 0, height: 56, background: '#0f1117', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 24px', zIndex: 9, boxSizing: 'border-box' },
   right:      { display: 'flex', alignItems: 'center', gap: 12 },
   bell:       { position: 'relative', border: 'none', cursor: 'pointer', padding: 7, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.12s, background 0.12s' },
   badge:      { position: 'absolute', top: 3, right: 3, minWidth: 15, height: 15, borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 },

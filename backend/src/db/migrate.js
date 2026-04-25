@@ -121,6 +121,11 @@ async function migrate() {
       );
     `);
 
+    // full_name kolonu ekle (varsa sessizce geç)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
+    `);
+
     // Platform constraint'ini güncelle (appsflyer + adjust ekle)
     await client.query(`
       DO $$

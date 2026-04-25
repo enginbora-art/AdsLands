@@ -27,6 +27,7 @@ async function buildToken(userId) {
       company_id: user.company_id,
       company_name: user.company_name,
       company_type: user.company_type,
+      full_name: user.full_name || null,
       is_company_admin: user.is_company_admin,
       is_platform_admin: user.is_platform_admin,
       permissions,
@@ -65,6 +66,7 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
+        full_name: user.full_name || null,
         company_id: user.company_id,
         company_name: user.company_name,
         company_type: user.company_type,
