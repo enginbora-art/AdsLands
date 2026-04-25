@@ -15,9 +15,22 @@ const {
 const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// GET /api/integrations
+// Ajans adına marka entegrasyonu yönetimi: brand_id varsa doğrulayıp döndür
+async function resolveCompanyId(user, brandId) {
+  if (!brandId) return user.company_id;
+  if (user.company_type !== 'agency') throw Object.assign(new Error('Yetkisiz.'), { status: 403 });
+  const { rows: [conn] } = await pool.query(
+    'SELECT id FROM connections WHERE agency_company_id = $1 AND brand_company_id = $2',
+    [user.company_id, brandId]
+  );
+  if (!conn) throw Object.assign(new Error('Bu markaya erişim yetkiniz yok.'), { status: 403 });
+  return brandId;
+}
+
+// GET /api/integrations?brand_id=xxx
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
     const { rows } = await pool.query(
       `SELECT i.id, i.platform, i.account_id, i.is_active, i.created_at,
         COALESCE(SUM(m.spend), 0) AS total_spend,
@@ -30,24 +43,29 @@ router.get('/', authMiddleware, async (req, res) => {
        WHERE i.company_id = $1 AND i.is_active = true
        GROUP BY i.id
        ORDER BY i.created_at DESC`,
-      [req.user.company_id]
+      [companyId]
     );
     res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.' });
+    res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
   }
 });
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
-router.get('/google/connect', authMiddleware, (req, res) => {
-  const { platform } = req.query;
+router.get('/google/connect', authMiddleware, async (req, res) => {
+  const { platform, brand_id } = req.query;
   if (!['google_analytics', 'google_ads'].includes(platform)) {
     return res.status(400).json({ error: 'platform google_analytics veya google_ads olmalı' });
   }
-  const authUrl = getAuthUrl(req.user.company_id, platform);
-  res.json({ authUrl });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+    const authUrl = getAuthUrl(companyId, platform);
+    res.json({ authUrl });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 router.get('/google/callback', async (req, res) => {
@@ -129,19 +147,20 @@ router.get('/google/data', authMiddleware, async (req, res) => {
 });
 
 router.delete('/google', authMiddleware, async (req, res) => {
-  const { platform } = req.query;
+  const { platform, brand_id } = req.query;
   if (!['google_analytics', 'google_ads'].includes(platform)) {
     return res.status(400).json({ error: 'Geçersiz platform.' });
   }
   try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
     await pool.query(
       'UPDATE integrations SET is_active = false WHERE company_id = $1 AND platform = $2',
-      [req.user.company_id, platform]
+      [companyId, platform]
     );
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Sunucu hatası.' });
+    res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
   }
 });
 
@@ -153,17 +172,19 @@ router.get('/:platform/connect', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Geçersiz platform.' });
   }
   try {
-    const accountId = `mock_${platform}_${req.user.company_id.slice(0, 8)}`;
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const accountId = `mock_${platform}_${companyId.slice(0, 8)}`;
     const { rows: [integration] } = await pool.query(
       `INSERT INTO integrations (company_id, platform, access_token, refresh_token, account_id, is_active)
        VALUES ($1, $2, 'mock_token', 'mock_refresh', $3, true)
        ON CONFLICT (company_id, platform) DO UPDATE
          SET is_active = true, access_token = 'mock_token', account_id = EXCLUDED.account_id
        RETURNING *`,
-      [req.user.company_id, platform, accountId]
+      [companyId, platform, accountId]
     );
     await seedHistoricalMetrics(integration);
-    res.redirect(`${FRONTEND_URL}/integrations?success=${platform}`);
+    const brandParam = req.query.brand_id ? `&brand_id=${req.query.brand_id}` : '';
+    res.redirect(`${FRONTEND_URL}/integrations?success=${platform}${brandParam}`);
   } catch (err) {
     console.error(err);
     res.redirect(`${FRONTEND_URL}/integrations?error=${platform}`);

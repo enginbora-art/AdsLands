@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useSelectedBrand } from '../context/BrandContext';
 import {
   getIntegrations,
   connectIntegration,
@@ -155,6 +157,12 @@ function MetricsTable({ platform, integration, metrics, liveData, liveLoading, o
 }
 
 export default function Integrations() {
+  const { user } = useAuth();
+  const { selectedBrand } = useSelectedBrand();
+  const isAgency = user?.company_type === 'agency';
+  // Ajans brand context'indeyken entegrasyonlar marka adına yönetilir
+  const brandId = isAgency && selectedBrand ? selectedBrand.id : null;
+
   const [integrations, setIntegrations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [metrics, setMetrics] = useState([]);
@@ -173,11 +181,12 @@ export default function Integrations() {
       setTimeout(() => setBanner(null), 4000);
     }
     load();
-  }, []);
+  }, [brandId]);
 
   const load = async () => {
+    setLoading(true);
     try {
-      const data = await getIntegrations();
+      const data = await getIntegrations(brandId);
       setIntegrations(data);
     } finally {
       setLoading(false);
@@ -187,9 +196,7 @@ export default function Integrations() {
   const handleConnect = async (platformId) => {
     setConnecting(platformId);
     try {
-      await connectIntegration(platformId);
-      // Google platforms do a full-page redirect so no reload needed here
-      // Mock platforms also redirect; reload handles the rest
+      await connectIntegration(platformId, brandId);
     } catch (err) {
       console.error('Bağlantı hatası:', err);
       setConnecting(null);
@@ -201,7 +208,7 @@ export default function Integrations() {
     setDisconnecting(integration.id);
     try {
       if (isGoogle) {
-        await disconnectGoogleIntegration(integration.platform);
+        await disconnectGoogleIntegration(integration.platform, brandId);
       } else {
         await disconnectIntegration(integration.id);
       }

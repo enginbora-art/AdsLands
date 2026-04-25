@@ -53,18 +53,21 @@ export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/bran
 export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
 
 // ── Entegrasyonlar ────────────────────────────────────────────────────────────
-export const getIntegrations = () => api.get('/integrations').then(r => r.data);
-export const connectIntegration = async (platform) => {
+export const getIntegrations = (brandId) =>
+  api.get(`/integrations${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+
+export const connectIntegration = async (platform, brandId) => {
+  const b = brandId ? `&brand_id=${brandId}` : '';
   if (platform === 'google_analytics' || platform === 'google_ads') {
-    const { authUrl } = await api.get(`/integrations/google/connect?platform=${platform}`).then(r => r.data);
+    const { authUrl } = await api.get(`/integrations/google/connect?platform=${platform}${b}`).then(r => r.data);
     window.location.href = authUrl;
   } else {
-    window.location.href = `${import.meta.env.VITE_API_URL}/integrations/${platform}/connect`;
+    window.location.href = `${import.meta.env.VITE_API_URL}/integrations/${platform}/connect${brandId ? `?brand_id=${brandId}` : ''}`;
   }
 };
 export const disconnectIntegration = (id) => api.delete(`/integrations/${id}`).then(r => r.data);
-export const disconnectGoogleIntegration = (platform) =>
-  api.delete(`/integrations/google?platform=${platform}`).then(r => r.data);
+export const disconnectGoogleIntegration = (platform, brandId) =>
+  api.delete(`/integrations/google?platform=${platform}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
 export const getIntegrationMetrics = (id) => api.get(`/integrations/${id}/metrics`).then(r => r.data);
 export const getGoogleData = (platform) =>
   api.get(`/integrations/google/data?platform=${platform}`).then(r => r.data);
