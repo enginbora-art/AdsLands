@@ -330,9 +330,9 @@ function DisconnectConfirmModal({ platformId, onConfirm, onCancel }) {
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
-function DetailModal({ integration, platform, metrics, liveData, liveLoading, metricsLoading, onFetchLive, onRefresh, onClose }) {
-  const isGA     = integration.platform === 'google_analytics';
-  const isGoogle = integration.platform === 'google_analytics' || integration.platform === 'google_ads';
+function DetailModal({ integration, platform, metrics, liveData, liveLoading, liveError, metricsLoading, onFetchLive, onRefresh, onClose }) {
+  const isGA      = integration.platform === 'google_analytics';
+  const isGoogAds = integration.platform === 'google_ads';
 
   const rows = liveData ? liveData.data : metrics;
   const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
@@ -390,7 +390,7 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, me
             style={{ padding: '7px 16px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, fontWeight: 600, cursor: metricsLoading ? 'not-allowed' : 'pointer' }}>
             {metricsLoading ? 'Yükleniyor...' : '↻ Veriyi Yenile'}
           </button>
-          {isGoogle && (
+          {isGoogAds && (
             <button onClick={onFetchLive} disabled={liveLoading}
               style={{ padding: '7px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#10B981', fontSize: 12, fontWeight: 600, cursor: liveLoading ? 'not-allowed' : 'pointer' }}>
               {liveLoading ? 'Yükleniyor...' : '⚡ Canlı Veri Al'}
@@ -402,6 +402,11 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, me
             </span>
           )}
         </div>
+        {liveError && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#EF4444', marginBottom: 14 }}>
+            ❌ {liveError}
+          </div>
+        )}
 
         {/* Table */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -409,7 +414,7 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, me
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
           ) : rows.length === 0 ? (
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>
-              Henüz veri yok.{isGoogle ? ' Canlı veri almak için ⚡ butonunu kullanın.' : ''}
+              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : ''}
             </div>
           ) : (
             <div style={s.tableWrap}>
@@ -473,6 +478,7 @@ export default function Integrations() {
   const [disconnecting, setDisconnecting] = useState(null);
   const [liveLoading, setLiveLoading]     = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [liveError, setLiveError]           = useState(null);
   const [banner, setBanner]               = useState(null);
   const [msgBanner, setMsgBanner]         = useState(null);
   const [verifyParams, setVerifyParams]   = useState(null);
@@ -601,9 +607,10 @@ export default function Integrations() {
 
   const handleFetchLive = async () => {
     if (!selected) return;
+    setLiveError(null);
     setLiveLoading(true);
     try { setLiveData(await getGoogleData(selected.platform)); }
-    catch (err) { alert(err?.response?.data?.error || err.message || 'Canlı veri çekilemedi.'); }
+    catch (err) { setLiveError(err?.response?.data?.error || err.message || 'Canlı veri çekilemedi.'); }
     finally { setLiveLoading(false); }
   };
 
@@ -679,9 +686,10 @@ export default function Integrations() {
           liveData={liveData}
           liveLoading={liveLoading}
           metricsLoading={metricsLoading}
+          liveError={liveError}
           onFetchLive={handleFetchLive}
           onRefresh={handleRefresh}
-          onClose={() => { setSelected(null); setMetrics([]); setLiveData(null); }}
+          onClose={() => { setSelected(null); setMetrics([]); setLiveData(null); setLiveError(null); }}
         />
       )}
 
