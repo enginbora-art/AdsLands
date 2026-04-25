@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getBrandDashboard, getAgencyBrandDetail } from '../api';
+import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard } from '../api';
 import InviteModal from '../components/InviteModal';
 
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
@@ -9,34 +9,53 @@ const PLATFORM_LABELS = { google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'T
 const PLATFORM_COLORS = { google_ads: '#4285F4', meta: '#1877F2', tiktok: '#00BFA6', google_analytics: '#E37400' };
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
-function MetricCard({ label, value, sub, accent }) {
+function MetricCard({ label, value, sub, accent, danger }) {
   return (
-    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '18px 20px' }}>
+    <div style={{ background: 'var(--bg2)', border: `1px solid ${danger ? 'rgba(255,107,90,0.3)' : 'var(--border2)'}`, borderRadius: 12, padding: '18px 20px' }}>
       <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: accent || 'var(--text1)' }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--coral)' : accent || 'var(--text1)' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
 
-function NoBrandSelected() {
+// ── Ajans özet dashboard (marka seçilmemiş) ───────────────────────────────────
+function AgencySummary() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    getAgencyDashboard().then(setData).catch(console.error);
+  }, []);
+
+  if (!data) return <div className="loading">Yükleniyor...</div>;
+
+  const { summary } = data;
+
   return (
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">Dashboard</div></div>
       <div className="content">
-        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>👈</div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Önce bir müşteri seçin</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>
-            Sol menüden <strong>Müşteri Yönetimi</strong>'ne giderek bir marka seçin.
-          </div>
+        <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
+          <MetricCard label="Yönetilen Bütçe"   value={`₺${fmt(summary?.total_managed_budget)}`} sub="Bu ay toplam" accent="var(--teal)" />
+          <MetricCard label="Aktif Müşteri"      value={summary?.total_clients || 0} sub="Bağlı marka" accent="#A78BFA" />
+          <MetricCard label="Bugünkü Harcama"    value={`₺${fmt(summary?.total_today_spend)}`} sub="Tüm markalar" accent="#60A5FA" />
+          <MetricCard
+            label="Aktif Anomali"
+            value={summary?.total_anomalies || 0}
+            sub={summary?.total_anomalies > 0 ? 'Dikkat gerektiriyor' : 'Sorun yok'}
+            danger={summary?.total_anomalies > 0}
+          />
+        </div>
+        <div style={{ padding: '14px 18px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 13, color: 'var(--text3)' }}>
+          Marka detayları için sol menüden <strong style={{ color: 'var(--text1)' }}>Markalar</strong>'a gidin ve bir marka seçin.
         </div>
       </div>
     </div>
   );
 }
 
-function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) {
+// ── Marka dashboard içeriği ────────────────────────────────────────────────────
+function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite }) {
   const { summary, integrations, today_spend, budget, anomalies } = data;
 
   return (
@@ -56,10 +75,10 @@ function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) 
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       <div className="content">
         <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
-          <MetricCard label="30g Harcama" value={`₺${fmt(summary?.total_spend)}`} accent="var(--teal)" />
-          <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`} accent="#60A5FA" />
-          <MetricCard label="Ort. ROAS" value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" />
-          <MetricCard label="Dönüşüm" value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="var(--amber)" />
+          <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="var(--teal)" />
+          <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#60A5FA" />
+          <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" />
+          <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="var(--amber)" />
         </div>
 
         {!integrations?.length ? (
@@ -87,7 +106,7 @@ function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) 
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 28, fontSize: 13 }}>
-                      <span style={{ color: 'var(--text2)', fontFamily: 'var(--mono)' }}>₺{fmt(i.total_spend)}</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>₺{fmt(i.total_spend)}</span>
                       <span style={{ color: 'var(--teal)', fontWeight: 600 }}>{Number(i.avg_roas).toFixed(2)}x ROAS</span>
                       <span style={{ color: 'var(--text3)' }}>{fmt(i.total_conversions)} dönüşüm</span>
                     </div>
@@ -101,28 +120,21 @@ function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) 
         {budget && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-header">
-              <div>
-                <div className="card-title">Ay Bütçesi</div>
-                <div className="card-subtitle">{MONTHS[(budget.month || 1) - 1]} {budget.year}</div>
-              </div>
+              <div><div className="card-title">Ay Bütçesi</div><div className="card-subtitle">{MONTHS[(budget.month || 1) - 1]} {budget.year}</div></div>
             </div>
             <div className="card-body" style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Toplam</div>
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)' }}>₺{fmt(budget.total_budget)}</div>
               </div>
-              {budget.google_ads_budget > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Google Ads</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#4285F4' }}>₺{fmt(budget.google_ads_budget)}</div>
-                </div>
-              )}
-              {budget.meta_budget > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Meta Ads</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#1877F2' }}>₺{fmt(budget.meta_budget)}</div>
-                </div>
-              )}
+              {budget.google_ads_budget > 0 && <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Google Ads</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#4285F4' }}>₺{fmt(budget.google_ads_budget)}</div>
+              </div>}
+              {budget.meta_budget > 0 && <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Meta Ads</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#1877F2' }}>₺{fmt(budget.meta_budget)}</div>
+              </div>}
             </div>
           </div>
         )}
@@ -139,7 +151,9 @@ function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) 
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral)' }}>{PLATFORM_LABELS[a.platform] || a.platform}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{a.metric}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>{new Date(a.detected_at).toLocaleDateString('tr-TR')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                    {a.detected_at ? new Date(a.detected_at).toLocaleDateString('tr-TR') : ''}
+                  </div>
                 </div>
               ))}
             </div>
@@ -150,6 +164,7 @@ function DashboardContent({ data, title, showInvite, setShowInvite, isAgency }) 
   );
 }
 
+// ── Ana export ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
@@ -160,13 +175,12 @@ export default function Dashboard() {
   useEffect(() => {
     setData(null);
     if (isAgency && !selectedBrand) return;
-    const fetch = isAgency
-      ? getAgencyBrandDetail(selectedBrand.id)
-      : getBrandDashboard();
+    const fetch = isAgency ? getAgencyBrandDetail(selectedBrand.id) : getBrandDashboard();
     fetch.then(setData).catch(console.error);
   }, [isAgency, selectedBrand?.id]);
 
-  if (isAgency && !selectedBrand) return <NoBrandSelected />;
+  // Agency no brand → summary
+  if (isAgency && !selectedBrand) return <AgencySummary />;
 
   const title = isAgency ? selectedBrand?.company_name : 'Dashboard';
 
@@ -178,12 +192,12 @@ export default function Dashboard() {
   );
 
   return (
-    <DashboardContent
+    <BrandDashboardContent
       data={data}
       title={title}
+      isAgency={isAgency}
       showInvite={showInvite}
       setShowInvite={setShowInvite}
-      isAgency={isAgency}
     />
   );
 }

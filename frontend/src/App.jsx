@@ -42,9 +42,8 @@ function AppInner() {
   const [active, setActive] = useState('dashboard');
   const [authMode, setAuthMode] = useState('login');
 
-  useEffect(() => {
-    if (!loading && user?.role === 'agency') setActive('agency');
-  }, [loading, user]);
+  // agency users default to dashboard (shows summary cards)
+  // brand users also default to dashboard
 
   const path = window.location.pathname;
 
