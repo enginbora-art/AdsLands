@@ -640,17 +640,17 @@ export default function Integrations() {
           const isDisconnecting = disconnecting === connected?.id;
 
           return (
-            <div key={platform.id} style={s.card}>
+            <div key={platform.id} style={{ ...s.card, border: connected ? '1px solid rgba(16,185,129,0.3)' : s.card.border }}>
               <div style={s.cardTop}>
                 <div style={{ ...s.icon, background: platform.bg, color: platform.color }}>{platform.icon}</div>
                 <div>
                   <div style={s.platformName}>{platform.name}</div>
-                  <div style={{ ...s.status, color: connected ? '#00BFA6' : 'var(--text3)' }}>
+                  <div style={{ ...s.status, color: connected ? '#10B981' : 'var(--text3)' }}>
                     {connected ? '● Bağlı' : '○ Bağlı değil'}
                   </div>
                 </div>
                 {platform.isGoogle && <div style={s.googleBadge}>Google OAuth</div>}
-                {platform.isApiToken && <div style={{ ...s.googleBadge, color: platform.color, background: platform.bg }}>API Token</div>}
+                {platform.isApiToken && <div style={s.googleBadge}>API Token</div>}
               </div>
 
               {connected && (
@@ -682,7 +682,7 @@ export default function Integrations() {
                   </>
                 ) : (
                   <button
-                    style={{ ...s.connectBtn, background: isConnecting ? '#666' : platform.color }}
+                    style={{ ...s.connectBtn, background: isConnecting ? '#555' : undefined }}
                     onClick={() => handleConnect(platform)}
                     disabled={isConnecting}
                   >
@@ -716,7 +716,7 @@ export default function Integrations() {
               <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
                 MCC (Manager) hesabınızla bağlanın. Altındaki tüm müşteri hesaplarını listeler, seçtiklerinizi platforma marka olarak ekler.
               </p>
-              <button onClick={handleMccConnect} style={{ ...s.connectBtn, background: '#4285F4', width: '100%' }}>
+              <button onClick={handleMccConnect} style={{ ...s.connectBtn, width: '100%' }}>
                 Google Ads MCC Bağla
               </button>
             </div>
@@ -732,7 +732,7 @@ export default function Integrations() {
               <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
                 Meta Business Manager hesabınızla bağlanın. Ad account'larınızı listeler, seçtiklerinizi platforma marka olarak ekler.
               </p>
-              <button onClick={handleMetaBmConnect} style={{ ...s.connectBtn, background: '#1877F2', width: '100%' }}>
+              <button onClick={handleMetaBmConnect} style={{ ...s.connectBtn, width: '100%' }}>
                 Meta Business Manager Bağla
               </button>
             </div>
@@ -768,15 +768,15 @@ const s = {
   icon:         { width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 },
   platformName: { fontSize: 15, fontWeight: 700 },
   status:       { fontSize: 12, marginTop: 2 },
-  googleBadge:  { marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#4285F4', background: 'rgba(66,133,244,0.1)', padding: '2px 8px', borderRadius: 6 },
+  googleBadge:  { marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#818CF8', background: 'rgba(99,102,241,0.15)', padding: '2px 8px', borderRadius: 6 },
   statsRow:     { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16, background: 'var(--bg3)', borderRadius: 8, padding: '10px 8px' },
   stat:         { textAlign: 'center' },
   statLabel:    { fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 },
   statVal:      { fontSize: 13, fontWeight: 700 },
   cardActions:  { display: 'flex', gap: 8 },
-  connectBtn:   { flex: 1, padding: '8px 0', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  detailBtn:    { flex: 1, padding: '8px 0', background: 'var(--teal-dim)', border: '1px solid var(--teal-mid)', borderRadius: 8, color: 'var(--teal)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  disconnectBtn:{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.5)', borderRadius: 8, color: 'rgb(239,68,68)', fontSize: 13, cursor: 'pointer' },
+  connectBtn:   { flex: 1, padding: '8px 0', border: 'none', borderRadius: 8, background: '#0EA5E9', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  detailBtn:    { flex: 1, padding: '8px 0', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#10B981', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  disconnectBtn:{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   accountId:    { marginTop: 10, fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' },
   metricsPanel: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24 },
   metricsTitle: { fontSize: 15, fontWeight: 700 },
