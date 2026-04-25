@@ -110,7 +110,7 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS integrations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-        platform VARCHAR(20) NOT NULL CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics')),
+        platform VARCHAR(20) NOT NULL CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust')),
         access_token TEXT,
         refresh_token TEXT,
         token_expiry TIMESTAMPTZ,
@@ -118,6 +118,31 @@ async function migrate() {
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(company_id, platform)
+      );
+    `);
+
+    // Platform constraint'ini güncelle (appsflyer + adjust ekle)
+    await client.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE integrations DROP CONSTRAINT IF EXISTS integrations_platform_check;
+        ALTER TABLE integrations ADD CONSTRAINT integrations_platform_check
+          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust'));
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
+    `);
+
+    // ── OAuth Sessions (MCC / Meta BM import akışı) ───────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oauth_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+        provider VARCHAR(20) NOT NULL,
+        access_token TEXT,
+        refresh_token TEXT,
+        extra JSONB DEFAULT '{}',
+        expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '15 minutes',
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 

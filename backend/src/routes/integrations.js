@@ -13,6 +13,8 @@ const {
   getUserInfo,
   getAdsCustomerName,
 } = require('../services/googleService');
+const { validateToken: validateAppsflyer, getAppName: getAppsflyerName } = require('../services/appsflyerService');
+const { validateToken: validateAdjust, getAppName: getAdjustName } = require('../services/adjustService');
 
 // ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
 function nameSimilarity(a, b) {
@@ -28,7 +30,7 @@ function nameSimilarity(a, b) {
   return common.length / Math.max(wa.length, wb.length);
 }
 
-const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics'];
+const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Ajans adına marka entegrasyonu yönetimi: brand_id varsa doğrulayıp döndür
@@ -258,6 +260,118 @@ router.delete('/google', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// ── AppsFlyer Token Connect ───────────────────────────────────────────────────
+
+router.post('/appsflyer/connect', authMiddleware, async (req, res) => {
+  const { api_token, app_id, brand_id } = req.body;
+  if (!api_token) return res.status(400).json({ error: 'api_token zorunlu.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+
+    const { valid, error: tokenErr } = await validateAppsflyer(api_token, app_id || '').catch(() => ({ valid: false, error: 'API erişilemiyor.' }));
+    if (!valid) return res.status(400).json({ error: tokenErr || 'Token doğrulanamadı.' });
+
+    const appName = app_id ? await getAppsflyerName(api_token, app_id).catch(() => app_id) : null;
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName = company?.name || '';
+    const similarity = nameSimilarity(appName || '', brandName);
+    const matched = similarity >= 0.7;
+
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, is_active)
+       VALUES ($1, 'appsflyer', $2, $3, true)
+       ON CONFLICT (company_id, platform) DO UPDATE
+         SET access_token = EXCLUDED.access_token,
+             account_id = COALESCE(EXCLUDED.account_id, integrations.account_id),
+             is_active = true
+       RETURNING *`,
+      [companyId, api_token, app_id || null]
+    );
+
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    console.log(`[appsflyer verify] app="${appName}" brand="${brandName}" similarity=${similarity.toFixed(3)} matched=${matched}`);
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'appsflyer', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, appName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched) {
+      return res.json({
+        verify: true,
+        platform: 'appsflyer',
+        account_name: appName || '',
+        brand_name: brandName,
+        similarity: similarity.toFixed(3),
+        integration_id: integration.id,
+      });
+    }
+
+    res.json({ success: true, integration_id: integration.id });
+  } catch (err) {
+    console.error('AppsFlyer connect hatası:', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// ── Adjust Token Connect ──────────────────────────────────────────────────────
+
+router.post('/adjust/connect', authMiddleware, async (req, res) => {
+  const { api_token, app_token, brand_id } = req.body;
+  if (!api_token || !app_token) return res.status(400).json({ error: 'api_token ve app_token zorunlu.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+
+    const { valid, error: tokenErr } = await validateAdjust(api_token, app_token).catch(() => ({ valid: false, error: 'API erişilemiyor.' }));
+    if (!valid) return res.status(400).json({ error: tokenErr || 'Token doğrulanamadı.' });
+
+    const appName = await getAdjustName(api_token, app_token).catch(() => app_token);
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName = company?.name || '';
+    const similarity = nameSimilarity(appName || '', brandName);
+    const matched = similarity >= 0.7;
+
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, is_active)
+       VALUES ($1, 'adjust', $2, $3, true)
+       ON CONFLICT (company_id, platform) DO UPDATE
+         SET access_token = EXCLUDED.access_token,
+             account_id = EXCLUDED.account_id,
+             is_active = true
+       RETURNING *`,
+      [companyId, api_token, app_token]
+    );
+
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    console.log(`[adjust verify] app="${appName}" brand="${brandName}" similarity=${similarity.toFixed(3)} matched=${matched}`);
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'adjust', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, appName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched) {
+      return res.json({
+        verify: true,
+        platform: 'adjust',
+        account_name: appName || '',
+        brand_name: brandName,
+        similarity: similarity.toFixed(3),
+        integration_id: integration.id,
+      });
+    }
+
+    res.json({ success: true, integration_id: integration.id });
+  } catch (err) {
+    console.error('Adjust connect hatası:', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
   }
 });
 

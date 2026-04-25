@@ -75,6 +75,18 @@ export const logVerify = (integration_id, action) =>
   api.post('/integrations/log-verify', { integration_id, action }).then(r => r.data);
 export const getGoogleData = (platform) =>
   api.get(`/integrations/google/data?platform=${platform}`).then(r => r.data);
+export const connectAppsflyer = (data) => api.post('/integrations/appsflyer/connect', data).then(r => r.data);
+export const connectAdjust = (data) => api.post('/integrations/adjust/connect', data).then(r => r.data);
+
+// ── MCC ───────────────────────────────────────────────────────────────────────
+export const getMccAuthUrl = () => api.get('/mcc/connect').then(r => r.data);
+export const getMccAccounts = (session) => api.get(`/mcc/accounts?session=${session}`).then(r => r.data);
+export const importMccAccounts = (data) => api.post('/mcc/import', data).then(r => r.data);
+
+// ── Meta Business Manager ─────────────────────────────────────────────────────
+export const getMetaBmAuthUrl = () => api.get('/metabm/connect').then(r => r.data);
+export const getMetaBmAccounts = (session) => api.get(`/metabm/accounts?session=${session}`).then(r => r.data);
+export const importMetaBmAccounts = (data) => api.post('/metabm/import', data).then(r => r.data);
 
 // ── Bütçe ─────────────────────────────────────────────────────────────────────
 export const getBudgetPlan = (month, year, brandId) =>

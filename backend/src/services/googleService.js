@@ -210,6 +210,84 @@ async function getAdsData(tokens, customerId) {
   return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// MCC OAuth URL — ayrı redirect URI + mcc platform state
+function getMccAuthUrl(agencyCompanyId) {
+  const client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_MCC_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI
+  );
+  return client.generateAuthUrl({
+    access_type: 'offline',
+    scope: ['https://www.googleapis.com/auth/adwords', 'openid', 'email', 'profile'],
+    state: Buffer.from(JSON.stringify({ companyId: agencyCompanyId, platform: 'mcc' })).toString('base64'),
+    prompt: 'consent',
+  });
+}
+
+async function getMccTokens(code) {
+  const client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_MCC_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI
+  );
+  const { tokens } = await client.getToken(code);
+  return tokens;
+}
+
+// MCC altındaki tüm müşteri hesaplarını listele
+async function listMccCustomers(tokens) {
+  const fresh = await refreshIfNeeded(tokens);
+  const client = createClient();
+  client.setCredentials(fresh);
+  const { token } = await client.getAccessToken();
+  const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken || devToken === 'your_developer_token') return [];
+
+  // Önce erişilebilir tüm müşterileri al
+  const listResp = await fetch(
+    'https://googleads.googleapis.com/v18/customers:listAccessibleCustomers',
+    { headers: { Authorization: `Bearer ${token}`, 'developer-token': devToken } }
+  );
+  if (!listResp.ok) return [];
+  const listData = await listResp.json();
+  const customerIds = (listData.resourceNames || []).map(n => n.replace('customers/', ''));
+
+  // Her müşteri için detay al
+  const customers = [];
+  for (const customerId of customerIds.slice(0, 50)) {
+    try {
+      const resp = await fetch(
+        `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:search`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'developer-token': devToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.manager FROM customer LIMIT 1',
+          }),
+        }
+      );
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const c = data.results?.[0]?.customer;
+      if (!c) continue;
+      customers.push({
+        id: String(c.id),
+        name: c.descriptiveName || `Hesap ${c.id}`,
+        currency: c.currencyCode || 'TRY',
+        isManager: c.manager || false,
+      });
+    } catch {
+      // bu hesabı atla
+    }
+  }
+  return customers;
+}
+
 module.exports = {
   getAuthUrl,
   getTokens,
@@ -220,4 +298,7 @@ module.exports = {
   listAdsCustomers,
   getUserInfo,
   getAdsCustomerName,
+  getMccAuthUrl,
+  getMccTokens,
+  listMccCustomers,
 };
