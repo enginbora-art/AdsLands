@@ -61,6 +61,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = await buildToken(user.id);
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
     res.json({
       token,
       user: {
@@ -72,6 +73,7 @@ router.post('/login', async (req, res) => {
         company_type: user.company_type,
         is_company_admin: user.is_company_admin,
         is_platform_admin: user.is_platform_admin,
+        permissions: payload.permissions,
       },
     });
   } catch (err) {
@@ -119,6 +121,8 @@ router.post('/setup', async (req, res) => {
     return res.status(400).json({ error: 'Şifre en az 6 karakter olmalıdır.' });
   }
 
+  const { full_name, company_name: bodyCompanyName } = req.body;
+
   try {
     const password_hash = await bcrypt.hash(password, 12);
 
@@ -129,8 +133,8 @@ router.post('/setup', async (req, res) => {
     );
     if (found) {
       const { rows: [updated] } = await pool.query(
-        'UPDATE users SET password_hash = $1, is_active = true, setup_token = NULL WHERE id = $2 RETURNING id',
-        [password_hash, found.id]
+        'UPDATE users SET password_hash = $1, full_name = $2, is_active = true, setup_token = NULL WHERE id = $3 RETURNING id',
+        [password_hash, full_name?.trim() || null, found.id]
       );
       const jwtToken = await buildToken(updated.id);
       return res.json({ token: jwtToken });
@@ -150,9 +154,9 @@ router.post('/setup', async (req, res) => {
       if (exists) return res.status(409).json({ error: 'Bu e-posta zaten kayıtlı.' });
 
       const { rows: [newUser] } = await pool.query(
-        `INSERT INTO users (company_id, email, password_hash, is_company_admin, is_active)
-         VALUES ($1, $2, $3, false, true) RETURNING id`,
-        [inv.sender_company_id, inv.receiver_email, password_hash]
+        `INSERT INTO users (company_id, email, password_hash, full_name, is_company_admin, is_active)
+         VALUES ($1, $2, $3, $4, false, true) RETURNING id`,
+        [inv.sender_company_id, inv.receiver_email, password_hash, full_name?.trim() || null]
       );
       await pool.query(
         "UPDATE invitations SET status = 'accepted' WHERE id = $1",
@@ -172,7 +176,7 @@ router.post('/setup', async (req, res) => {
 
       // Yeni şirket oluştur
       const companyType = inv.type === 'agency_to_brand' ? 'brand' : 'agency';
-      const companyName = req.body.company_name || inv.receiver_email.split('@')[0];
+      const companyName = bodyCompanyName || inv.receiver_email.split('@')[0];
       const { rows: [newCompany] } = await pool.query(
         'INSERT INTO companies (name, type) VALUES ($1, $2) RETURNING id',
         [companyName, companyType]
@@ -180,9 +184,9 @@ router.post('/setup', async (req, res) => {
 
       // Yeni kullanıcı (şirket admini)
       const { rows: [newUser] } = await pool.query(
-        `INSERT INTO users (company_id, email, password_hash, is_company_admin, is_active)
-         VALUES ($1, $2, $3, true, true) RETURNING id`,
-        [newCompany.id, inv.receiver_email, password_hash]
+        `INSERT INTO users (company_id, email, password_hash, full_name, is_company_admin, is_active)
+         VALUES ($1, $2, $3, $4, true, true) RETURNING id`,
+        [newCompany.id, inv.receiver_email, password_hash, full_name?.trim() || null]
       );
 
       // Bağlantı kur

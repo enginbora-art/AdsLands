@@ -103,3 +103,4 @@ export const listAgencies = () => api.get('/agencies').then(r => r.data);
 export const inviteBrand = (data) => sendInvitation({ receiver_email: data.email, company_name: data.company_name });
 export const getSettings = () => api.get('/company/settings').then(r => r.data);
 export const updateSettings = (data) => api.put('/company/settings', data).then(r => r.data);
+export const updateProfile = (data) => api.patch('/users/me', data).then(r => r.data);

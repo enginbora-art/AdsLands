@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function SetupPassword({ token, onDone }) {
   const { saveAuth } = useAuth();
   const [info, setInfo] = useState(null);
-  const [form, setForm] = useState({ password: '', confirm: '' });
+  const [form, setForm] = useState({ full_name: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -19,17 +19,19 @@ export default function SetupPassword({ token, onDone }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.full_name.trim()) return setError('Ad Soyad zorunludur.');
     if (form.password !== form.confirm) return setError('Şifreler eşleşmiyor.');
     if (form.password.length < 6) return setError('Şifre en az 6 karakter olmalıdır.');
     setError('');
     setSubmitting(true);
     try {
       const companyName = new URLSearchParams(window.location.search).get('company_name') || '';
-      const { token: jwt } = await completeSetup({ token, password: form.password, company_name: companyName });
-      // JWT'den kullanıcı bilgilerini decode et
+      const { token: jwt } = await completeSetup({ token, password: form.password, full_name: form.full_name.trim(), company_name: companyName });
       const payload = JSON.parse(atob(jwt.split('.')[1]));
       saveAuth(jwt, {
         id: payload.user_id,
+        email: payload.email,
+        full_name: payload.full_name || null,
         company_id: payload.company_id,
         company_name: payload.company_name,
         company_type: payload.company_type,
@@ -95,6 +97,18 @@ export default function SetupPassword({ token, onDone }) {
         <p style={s.sub}>Hesabınıza erişmek için bir şifre oluşturun.</p>
 
         <form onSubmit={handleSubmit}>
+          <div style={s.field}>
+            <label style={s.label}>Ad Soyad</label>
+            <input
+              className="sinput"
+              type="text"
+              placeholder="Adınız ve soyadınız"
+              value={form.full_name}
+              onChange={e => setForm({ ...form, full_name: e.target.value })}
+              required
+              autoFocus
+            />
+          </div>
           <div style={s.field}>
             <label style={s.label}>Şifre</label>
             <input

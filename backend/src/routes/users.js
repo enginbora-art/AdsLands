@@ -29,4 +29,22 @@ router.get('/agencies', authMiddleware, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me — update full_name
+router.patch('/users/me', authMiddleware, async (req, res) => {
+  const { full_name } = req.body;
+  if (!full_name?.trim()) return res.status(400).json({ error: 'Ad Soyad zorunludur.' });
+  try {
+    await pool.query(
+      'UPDATE users SET full_name = $1 WHERE id = $2',
+      [full_name.trim(), req.user.user_id]
+    );
+    const { buildToken } = require('./auth');
+    const newJwt = await buildToken(req.user.user_id);
+    res.json({ token: newJwt });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 module.exports = router;

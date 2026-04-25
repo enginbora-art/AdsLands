@@ -199,6 +199,6 @@ const s = {
   divider:    { width: 1, height: 24, background: 'rgba(255,255,255,0.07)' },
   user:       { display: 'flex', alignItems: 'center', gap: 10 },
   avatar:     { width: 32, height: 32, borderRadius: 8, background: 'rgba(0,191,166,0.15)', color: '#00BFA6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 },
-  userName:   { fontSize: 13, fontWeight: 700, color: 'var(--text1)', lineHeight: 1.3 },
-  userSub:    { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 1 },
+  userName:   { fontSize: 13, fontWeight: 700, color: '#F0F5F3', lineHeight: 1.3 },
+  userSub:    { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 };
