@@ -257,10 +257,12 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .fade-in { animation: fadeIn 0.25s ease; }
 
 /* Comparison table */
-.cmp-table { width: 100%; border-collapse: collapse; }
-.cmp-table th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-.cmp-table td { padding: 12px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+.cmp-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cmp-table th { text-align: left; padding: 10px 16px; font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid rgba(255,255,255,0.08); white-space: nowrap; }
+.cmp-table td { padding: 13px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
 .cmp-table tr:last-child td { border-bottom: none; }
-.cmp-table td:not(:first-child) { text-align: right; font-family: var(--mono); }
-.cmp-table tr.hover-row:hover td { background: rgba(0,191,166,0.04); }
-.cmp-table tr.hover-row td:first-child { text-align: left; font-family: inherit; }
+.cmp-table tr.hover-row:hover td { background: rgba(255,255,255,0.03); }
+.cmp-table .col-num { text-align: right; font-family: var(--mono); }
+.cmp-table th.col-num { text-align: right; font-family: var(--font); }
+.cmp-table .col-center { text-align: center; }
+.cmp-table th.col-center { text-align: center; }

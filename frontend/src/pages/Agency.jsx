@@ -173,13 +173,22 @@ function BrandsTab({ clients, loading, onSelectBrand, onInvite }) {
       ) : (
         <div className="card">
           <table className="cmp-table">
+            <colgroup>
+              <col style={{ width: '30%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '8%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Marka</th>
-                <th>30g Harcama</th>
-                <th>ROAS</th>
-                <th>Ay Bütçesi</th>
-                <th>Anomali</th>
+                <th className="col-num">30g Harcama</th>
+                <th className="col-num">ROAS</th>
+                <th className="col-num">Ay Bütçesi</th>
+                <th className="col-center">Anomali</th>
                 <th>Durum</th>
                 <th></th>
               </tr>
@@ -196,20 +205,20 @@ function BrandsTab({ clients, loading, onSelectBrand, onInvite }) {
                         <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(0,191,166,0.15)', color: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
                           {avatar(name)}
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{name}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
                           <div style={{ fontSize: 11, color: 'var(--text3)' }}>{client.integrations.length} platform</div>
                         </div>
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>₺{fmt(client.summary.total_spend)}</td>
-                    <td style={{ color: client.summary.avg_roas >= 3 ? 'var(--success)' : 'var(--text2)', fontWeight: 600 }}>
+                    <td className="col-num">₺{fmt(client.summary.total_spend)}</td>
+                    <td className="col-num" style={{ color: client.summary.avg_roas >= 3 ? 'var(--success)' : 'var(--text2)', fontWeight: 600 }}>
                       {Number(client.summary.avg_roas).toFixed(2)}x
                     </td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 13, color: client.monthly_budget > 0 ? 'var(--text1)' : 'var(--text3)' }}>
+                    <td className="col-num" style={{ color: client.monthly_budget > 0 ? 'var(--text1)' : 'var(--text3)' }}>
                       {client.monthly_budget > 0 ? `₺${fmt(client.monthly_budget)}` : '—'}
                     </td>
-                    <td>
+                    <td className="col-center">
                       {client.anomalies.length > 0
                         ? <span style={{ background: 'rgba(255,107,90,0.15)', color: 'var(--coral)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>{client.anomalies.length}</span>
                         : <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>
@@ -218,7 +227,7 @@ function BrandsTab({ clients, loading, onSelectBrand, onInvite }) {
                     <td>
                       <span style={{ background: ss.bg, color: ss.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 6 }}>{ss.label}</span>
                     </td>
-                    <td style={{ color: 'var(--text3)', fontSize: 16 }}>›</td>
+                    <td style={{ color: 'var(--text3)', fontSize: 16, textAlign: 'right' }}>›</td>
                   </tr>
                 );
               })}
