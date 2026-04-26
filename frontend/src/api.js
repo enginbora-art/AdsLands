@@ -63,6 +63,9 @@ export const connectIntegration = async (platform, brandId) => {
   if (platform === 'google_analytics' || platform === 'google_ads') {
     const { authUrl } = await api.get(`/integrations/google/connect?platform=${platform}${b}`).then(r => r.data);
     window.location.href = authUrl;
+  } else if (platform === 'linkedin') {
+    const { authUrl } = await api.get(`/integrations/linkedin/connect${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+    window.location.href = authUrl;
   } else {
     window.location.href = `${import.meta.env.VITE_API_URL}/integrations/${platform}/connect${brandId ? `?brand_id=${brandId}` : ''}`;
   }
@@ -76,7 +79,8 @@ export const logVerify = (integration_id, action) =>
 export const getGoogleData = (platform) =>
   api.get(`/integrations/google/data?platform=${platform}`).then(r => r.data);
 export const connectAppsflyer = (data) => api.post('/integrations/appsflyer/connect', data).then(r => r.data);
-export const connectAdjust = (data) => api.post('/integrations/adjust/connect', data).then(r => r.data);
+export const connectAdjust    = (data) => api.post('/integrations/adjust/connect', data).then(r => r.data);
+export const connectAdform    = (data) => api.post('/integrations/adform/connect', data).then(r => r.data);
 
 // ── MCC ───────────────────────────────────────────────────────────────────────
 export const getMccAuthUrl = () => api.get('/mcc/connect').then(r => r.data);

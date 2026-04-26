@@ -11,6 +11,7 @@ import {
   logVerify,
   connectAppsflyer,
   connectAdjust,
+  connectAdform,
   getMccAuthUrl,
   getMccAccounts,
   importMccAccounts,
@@ -36,6 +37,14 @@ const PLATFORMS = [
       { key: 'app_token', label: 'App Token', placeholder: 'Adjust app token', required: true },
     ]
   },
+  { id: 'adform',           name: 'Adform',             color: '#E84B37', bg: 'rgba(232,75,55,0.1)',  icon: 'AF', isApiToken: true,
+    fields: [
+      { key: 'tracking_id', label: 'Client Tracking ID', placeholder: 'Adform Tracking Setup ID',     required: false },
+      { key: 'username',    label: 'API Username',        placeholder: 'Adform API kullanıcı adı',    required: true },
+      { key: 'password',    label: 'API Password',        placeholder: 'Adform API şifresi',          required: true, type: 'password' },
+    ]
+  },
+  { id: 'linkedin',         name: 'LinkedIn Ads',       color: '#0A66C2', bg: 'rgba(10,102,194,0.1)', icon: 'in', isGoogle: false },
 ];
 
 const PLATFORM_LABELS = {
@@ -45,6 +54,8 @@ const PLATFORM_LABELS = {
   tiktok:            'TikTok Ads',
   appsflyer:         'AppsFlyer',
   adjust:            'Adjust',
+  adform:            'Adform',
+  linkedin:          'LinkedIn Ads',
   mcc:               'Google Ads MCC',
   metabm:            'Meta Business Manager',
 };
@@ -141,7 +152,8 @@ function TokenConnectModal({ platform, onClose, onSuccess, onVerify }) {
     setError('');
     setLoading(true);
     try {
-      const fn = platform.id === 'appsflyer' ? connectAppsflyer : connectAdjust;
+      const fnMap = { appsflyer: connectAppsflyer, adjust: connectAdjust, adform: connectAdform };
+      const fn = fnMap[platform.id] || connectAppsflyer;
       const result = await fn(form);
       if (result.verify) {
         onVerify(result);
@@ -171,6 +183,7 @@ function TokenConnectModal({ platform, onClose, onSuccess, onVerify }) {
               <label style={s.label11}>{f.label}</label>
               <input
                 className="sinput"
+                type={f.type || 'text'}
                 placeholder={f.placeholder}
                 required={f.required}
                 value={form[f.key] || ''}

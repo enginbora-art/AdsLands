@@ -126,13 +126,18 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
     `);
 
-    // Platform constraint'ini güncelle (appsflyer + adjust ekle)
+    // extra JSONB kolonu ekle (varsa sessizce geç)
+    await client.query(`
+      ALTER TABLE integrations ADD COLUMN IF NOT EXISTS extra JSONB DEFAULT '{}';
+    `);
+
+    // Platform constraint'ini güncelle (adform + linkedin ekle)
     await client.query(`
       DO $$
       BEGIN
         ALTER TABLE integrations DROP CONSTRAINT IF EXISTS integrations_platform_check;
         ALTER TABLE integrations ADD CONSTRAINT integrations_platform_check
-          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust'));
+          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'));
       EXCEPTION WHEN others THEN NULL;
       END $$;
     `);

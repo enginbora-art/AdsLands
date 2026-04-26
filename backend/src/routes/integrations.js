@@ -15,6 +15,8 @@ const {
 } = require('../services/googleService');
 const { validateToken: validateAppsflyer, getAppName: getAppsflyerName } = require('../services/appsflyerService');
 const { validateToken: validateAdjust, getAppName: getAdjustName } = require('../services/adjustService');
+const { validateCredentials: validateAdform, getAccountName: getAdformName } = require('../services/adformService');
+const { getLinkedinAuthUrl, exchangeToken: exchangeLinkedinToken, getAdAccounts: getLinkedinAccounts, getAccountName: getLinkedinName } = require('../services/linkedinService');
 
 // ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
 function nameSimilarity(a, b) {
@@ -30,7 +32,7 @@ function nameSimilarity(a, b) {
   return common.length / Math.max(wa.length, wb.length);
 }
 
-const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust'];
+const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Ajans adına marka entegrasyonu yönetimi: brand_id varsa doğrulayıp döndür
@@ -372,6 +374,136 @@ router.post('/adjust/connect', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Adjust connect hatası:', err);
     res.status(500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// ── Adform API Token Connect ──────────────────────────────────────────────────
+
+router.post('/adform/connect', authMiddleware, async (req, res) => {
+  const { username, password, tracking_id, brand_id } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre zorunludur.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+
+    const { valid, token, error: authErr } = await validateAdform(username, password)
+      .catch(() => ({ valid: false, error: 'Adform API erişilemiyor.' }));
+    if (!valid) return res.status(400).json({ error: authErr || 'Kimlik doğrulama başarısız.' });
+
+    const accountName = tracking_id ? await getAdformName(token, tracking_id).catch(() => null) : null;
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName = company?.name || '';
+    const similarity = nameSimilarity(accountName || '', brandName);
+    const matched    = similarity >= 0.7;
+
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, extra, is_active)
+       VALUES ($1, 'adform', $2, $3, $4, true)
+       ON CONFLICT (company_id, platform) DO UPDATE
+         SET access_token = EXCLUDED.access_token,
+             account_id   = COALESCE(EXCLUDED.account_id, integrations.account_id),
+             extra        = EXCLUDED.extra,
+             is_active    = true
+       RETURNING *`,
+      [companyId, token, tracking_id || null, JSON.stringify({ username, password })]
+    );
+
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'adform', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, accountName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched) {
+      return res.json({
+        verify:         true,
+        platform:       'adform',
+        account_name:   accountName || '',
+        brand_name:     brandName,
+        similarity:     similarity.toFixed(3),
+        integration_id: integration.id,
+      });
+    }
+
+    res.json({ success: true, integration_id: integration.id });
+  } catch (err) {
+    console.error('Adform connect hatası:', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// ── LinkedIn OAuth ────────────────────────────────────────────────────────────
+
+router.get('/linkedin/connect', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const authUrl   = getLinkedinAuthUrl(companyId, req.query.brand_id || null);
+    res.json({ authUrl });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.get('/linkedin/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect(`${FRONTEND_URL}/integrations?error=linkedin`);
+
+  let companyId;
+  try {
+    const parsed = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+    companyId = parsed.companyId;
+  } catch {
+    return res.redirect(`${FRONTEND_URL}/integrations?error=linkedin`);
+  }
+
+  try {
+    const { access_token } = await exchangeLinkedinToken(code);
+
+    const accounts = await getLinkedinAccounts(access_token).catch(() => []);
+    const account  = accounts[0] || null;
+    const accountId   = account?.id || null;
+    const accountName = account?.name || (accountId ? await getLinkedinName(access_token, accountId).catch(() => null) : null);
+
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, is_active)
+       VALUES ($1, 'linkedin', $2, $3, true)
+       ON CONFLICT (company_id, platform) DO UPDATE
+         SET access_token = EXCLUDED.access_token,
+             account_id   = COALESCE(EXCLUDED.account_id, integrations.account_id),
+             is_active    = true
+       RETURNING *`,
+      [companyId, access_token, accountId]
+    );
+
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName  = company?.name || '';
+    const similarity = nameSimilarity(accountName || '', brandName);
+    const matched    = similarity >= 0.7;
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'linkedin', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, accountName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched) {
+      const params = new URLSearchParams({
+        verify:         'linkedin',
+        account_name:   accountName || '',
+        brand_name:     brandName,
+        similarity:     similarity.toFixed(3),
+        integration_id: integration.id,
+      });
+      return res.redirect(`${FRONTEND_URL}/integrations?${params.toString()}`);
+    }
+
+    res.redirect(`${FRONTEND_URL}/integrations?success=linkedin`);
+  } catch (err) {
+    console.error('LinkedIn OAuth callback hatası:', err);
+    res.redirect(`${FRONTEND_URL}/integrations?error=linkedin`);
   }
 });
 
