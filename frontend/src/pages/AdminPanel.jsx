@@ -1,15 +1,31 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminToggleUser } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser } from '../api';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
+const SECTORS = [
+  'E-ticaret', 'Perakende', 'Finans & Sigorta', 'Otomotiv',
+  'Gıda & İçecek', 'Turizm & Seyahat', 'Teknoloji & SaaS',
+  'Sağlık & Güzellik', 'Eğitim', 'Gayrimenkul', 'Medya & Eğlence', 'Diğer',
+];
+
+const inp = {
+  padding: '9px 12px', background: 'var(--bg)', border: '1px solid var(--border2)',
+  borderRadius: 8, color: 'var(--text1)', fontSize: 14, width: '100%', boxSizing: 'border-box',
+};
+const fieldLabel = {
+  display: 'block', fontSize: 11, color: 'var(--text3)',
+  textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600,
+};
+
 function CreateModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ name: '', type: 'brand', admin_email: '' });
+  const [form, setForm] = useState({ name: '', type: 'brand', sector: '', admin_email: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.sector) { setError('Sektör seçimi zorunludur.'); return; }
     setLoading(true);
     setError('');
     try {
@@ -22,30 +38,39 @@ function CreateModal({ onClose, onSuccess }) {
     }
   };
 
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 440 }}>
+      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: 32, width: '100%', maxWidth: 460 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Yeni Şirket Oluştur</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 20 }}>×</button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Şirket Adı</label>
-            <input className="sinput" placeholder="Şirket / Marka adı"
-              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+          <div style={{ marginBottom: 14 }}>
+            <label style={fieldLabel}>Şirket Adı</label>
+            <input style={inp} placeholder="Şirket / Marka adı"
+              value={form.name} onChange={e => set('name', e.target.value)} required />
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Şirket Tipi</label>
-            <select className="sinput" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={fieldLabel}>Şirket Tipi</label>
+            <select style={inp} value={form.type} onChange={e => set('type', e.target.value)}>
               <option value="brand">Marka</option>
               <option value="agency">Ajans</option>
             </select>
           </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={fieldLabel}>Sektör <span style={{ color: 'var(--coral)' }}>*</span></label>
+            <select style={inp} value={form.sector} onChange={e => set('sector', e.target.value)}>
+              <option value="">— Seçiniz —</option>
+              {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600 }}>Admin E-posta</label>
-            <input className="sinput" type="email" placeholder="admin@sirket.com"
-              value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))} required />
+            <label style={fieldLabel}>Admin E-posta</label>
+            <input style={inp} type="email" placeholder="admin@sirket.com"
+              value={form.admin_email} onChange={e => set('admin_email', e.target.value)} required />
           </div>
           {error && (
             <div style={{ background: 'rgba(255,107,90,0.1)', color: 'var(--coral)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{error}</div>
@@ -66,6 +91,53 @@ function CreateModal({ onClose, onSuccess }) {
   );
 }
 
+function SectorCell({ company, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [sector, setSector] = useState(company.sector || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await adminUpdateCompany(company.id, { sector });
+      await onUpdate();
+      setEditing(false);
+    } catch {
+      // silently fail
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        <select value={sector} onChange={e => setSector(e.target.value)}
+          style={{ ...inp, padding: '4px 8px', fontSize: 12, width: 'auto' }}>
+          <option value="">—</option>
+          {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button onClick={save} disabled={saving}
+          style={{ padding: '3px 8px', background: 'var(--teal)', border: 'none', borderRadius: 5, color: '#0B1219', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          ✓
+        </button>
+        <button onClick={() => { setEditing(false); setSector(company.sector || ''); }}
+          style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--text3)', fontSize: 11, cursor: 'pointer' }}>
+          ✕
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span onClick={() => setEditing(true)}
+      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, color: sector ? 'var(--text2)' : 'var(--text3)', fontSize: 12 }}>
+      {sector || '— ekle'}
+      <span style={{ opacity: 0.5, fontSize: 11 }}>✎</span>
+    </span>
+  );
+}
+
 export default function AdminPanel({ onLogout }) {
   const [companies, setCompanies] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -75,7 +147,7 @@ export default function AdminPanel({ onLogout }) {
 
   const load = () => {
     setLoading(true);
-    adminGetCompanies()
+    return adminGetCompanies()
       .then(setCompanies)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -108,7 +180,7 @@ export default function AdminPanel({ onLogout }) {
         />
       )}
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -157,13 +229,14 @@ export default function AdminPanel({ onLogout }) {
                 <tr>
                   <th>Şirket</th>
                   <th>Tip</th>
-                  <th>Kullanıcı Sayısı</th>
+                  <th>Sektör</th>
+                  <th>Kullanıcı</th>
                   <th>Oluşturulma</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
+                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
                 ) : filtered.map(c => (
                   <tr key={c.id}>
                     <td style={{ fontWeight: 600 }}>{c.name}</td>
@@ -172,6 +245,7 @@ export default function AdminPanel({ onLogout }) {
                         {c.type === 'agency' ? 'Ajans' : 'Marka'}
                       </span>
                     </td>
+                    <td><SectorCell company={c} onUpdate={load} /></td>
                     <td style={{ color: 'var(--text2)' }}>{c.user_count}</td>
                     <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
                   </tr>

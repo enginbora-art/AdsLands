@@ -170,7 +170,7 @@ function AppInner() {
       <main className="main">
         {active === 'agency'
           ? <Agency key="agency" onSelectBrand={handleSelectBrand} />
-          : <Page key={active} />}
+          : <Page key={active} onNav={handleNav} />}
       </main>
     </div>
   );

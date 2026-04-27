@@ -18,6 +18,7 @@ export const getInvitation = (token) => api.get(`/auth/invite/${token}`).then(r 
 // ── Platform Admin ────────────────────────────────────────────────────────────
 export const adminGetCompanies = () => api.get('/admin/companies').then(r => r.data);
 export const adminCreateCompany = (data) => api.post('/admin/companies', data).then(r => r.data);
+export const adminUpdateCompany = (id, data) => api.patch(`/admin/companies/${id}`, data).then(r => r.data);
 export const adminGetCompany = (id) => api.get(`/admin/companies/${id}`).then(r => r.data);
 export const adminToggleUser = (id) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data);
 
@@ -81,6 +82,10 @@ export const getGoogleData = (platform) =>
 export const connectAppsflyer = (data) => api.post('/integrations/appsflyer/connect', data).then(r => r.data);
 export const connectAdjust    = (data) => api.post('/integrations/adjust/connect', data).then(r => r.data);
 export const connectAdform    = (data) => api.post('/integrations/adform/connect', data).then(r => r.data);
+
+// ── Kanallar ──────────────────────────────────────────────────────────────────
+export const getChannelData = (days, platform, brandId) =>
+  api.get(`/channels?days=${days}&platform=${platform || 'all'}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
 
 // ── MCC ───────────────────────────────────────────────────────────────────────
 export const getMccAuthUrl = () => api.get('/mcc/connect').then(r => r.data);

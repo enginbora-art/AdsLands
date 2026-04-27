@@ -131,6 +131,11 @@ async function migrate() {
       ALTER TABLE integrations ADD COLUMN IF NOT EXISTS extra JSONB DEFAULT '{}';
     `);
 
+    // sector kolonu ekle (varsa sessizce geç)
+    await client.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS sector VARCHAR(100);
+    `);
+
     // Platform constraint'ini güncelle (adform + linkedin ekle)
     await client.query(`
       DO $$

@@ -18,6 +18,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const budgetRoutes = require('./routes/budgets');
 const mccRoutes = require('./routes/mcc');
 const metabmRoutes = require('./routes/metabm');
+const channelsRoutes = require('./routes/channels');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/mcc', mccRoutes);
 app.use('/api/metabm', metabmRoutes);
+app.use('/api/channels', channelsRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

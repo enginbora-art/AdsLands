@@ -46,7 +46,7 @@ async function sendSetupEmail(email, companyName, companyType, setupToken) {
 router.get('/companies', platformAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT c.id, c.name, c.type, c.created_at,
+      SELECT c.id, c.name, c.type, c.sector, c.created_at,
              COUNT(u.id) AS user_count
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
@@ -63,7 +63,7 @@ router.get('/companies', platformAdmin, async (req, res) => {
 
 // POST /api/admin/companies — şirket oluştur + admin kullanıcı gönder
 router.post('/companies', platformAdmin, async (req, res) => {
-  const { name, type, admin_email } = req.body;
+  const { name, type, admin_email, sector } = req.body;
   if (!name?.trim() || !type || !admin_email?.trim()) {
     return res.status(400).json({ error: 'Şirket adı, tipi ve admin e-postası zorunludur.' });
   }
@@ -80,8 +80,8 @@ router.post('/companies', platformAdmin, async (req, res) => {
     }
 
     const { rows: [company] } = await pool.query(
-      'INSERT INTO companies (name, type) VALUES ($1, $2) RETURNING *',
-      [name.trim(), type]
+      'INSERT INTO companies (name, type, sector) VALUES ($1, $2, $3) RETURNING *',
+      [name.trim(), type, sector || null]
     );
 
     const setupToken = uuidv4();
@@ -119,6 +119,22 @@ router.get('/companies/:id', platformAdmin, async (req, res) => {
     );
 
     res.json({ company, users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// PATCH /api/admin/companies/:id — sektör güncelle
+router.patch('/companies/:id', platformAdmin, async (req, res) => {
+  const { sector } = req.body;
+  try {
+    const { rows: [company] } = await pool.query(
+      `UPDATE companies SET sector = $1 WHERE id = $2 AND type != 'admin' RETURNING id, name, sector`,
+      [sector || null, req.params.id]
+    );
+    if (!company) return res.status(404).json({ error: 'Şirket bulunamadı.' });
+    res.json(company);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
