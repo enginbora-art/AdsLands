@@ -19,7 +19,8 @@ const budgetRoutes = require('./routes/budgets');
 const mccRoutes = require('./routes/mcc');
 const metabmRoutes = require('./routes/metabm');
 const channelsRoutes = require('./routes/channels');
-const reportsRoutes  = require('./routes/reports');
+const reportsRoutes    = require('./routes/reports');
+const benchmarkRoutes  = require('./routes/benchmark');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,7 +42,8 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api/mcc', mccRoutes);
 app.use('/api/metabm', metabmRoutes);
 app.use('/api/channels', channelsRoutes);
-app.use('/api/reports',  reportsRoutes);
+app.use('/api/reports',   reportsRoutes);
+app.use('/api/benchmark', benchmarkRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

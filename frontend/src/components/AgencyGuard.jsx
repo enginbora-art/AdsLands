@@ -4,7 +4,7 @@ import { useSelectedBrand } from '../context/BrandContext';
 export function useAgencyBrand() {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const isAgency = user?.role === 'agency';
+  const isAgency = user?.company_type === 'agency';
   return { isAgency, selectedBrand, needsBrand: isAgency && !selectedBrand };
 }
 

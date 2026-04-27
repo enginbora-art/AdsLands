@@ -202,4 +202,19 @@ router.get('/anomalies', authMiddleware, async (req, res) => {
   }
 });
 
+// PATCH /api/dashboard/anomalies/:id/resolve
+router.patch('/anomalies/:id/resolve', authMiddleware, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE anomalies SET status = 'resolved' WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Anomali bulunamadı.' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 module.exports = router;

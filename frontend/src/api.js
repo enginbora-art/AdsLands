@@ -54,6 +54,14 @@ export const getBrandDashboard = () => api.get('/dashboard/brand').then(r => r.d
 export const getAgencyDashboard = () => api.get('/dashboard/agency').then(r => r.data);
 export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/brand/${brandId}`).then(r => r.data);
 export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
+export const resolveAnomaly = (id) => api.patch(`/dashboard/anomalies/${id}/resolve`).then(r => r.data);
+
+export const benchmarkAnalyze = (metrics, sector) =>
+  fetch(`${import.meta.env.VITE_API_URL}/benchmark/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+    body: JSON.stringify({ metrics, sector }),
+  });
 
 // ── Entegrasyonlar ────────────────────────────────────────────────────────────
 export const getIntegrations = (brandId) =>
