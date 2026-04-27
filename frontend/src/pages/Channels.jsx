@@ -18,13 +18,20 @@ const PLATFORM_COLORS = {
   meta: '#1877F2', tiktok: '#555555', linkedin: '#0A66C2',
   adform: '#E84B37', appsflyer: '#00B2FF', adjust: '#888888',
 };
-const AD_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'linkedin', 'adform'];
 
-const MAIN_PLATFORMS_LIST = [
+// Harcama bazlı reklam platformları (google_analytics hariç)
+const AD_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'linkedin', 'adform', 'appsflyer', 'adjust'];
+
+// InlineEmptyState'te gösterilecek platformlar
+const ALL_PLATFORMS_LIST = [
   { key: 'google_analytics', label: 'Google Analytics', icon: 'GA', color: '#E37400' },
   { key: 'google_ads',       label: 'Google Ads',        icon: 'G',  color: '#4285F4' },
   { key: 'meta',             label: 'Meta Ads',           icon: 'M',  color: '#1877F2' },
   { key: 'tiktok',           label: 'TikTok Ads',         icon: 'T',  color: '#555555' },
+  { key: 'linkedin',         label: 'LinkedIn Ads',       icon: 'in', color: '#0A66C2' },
+  { key: 'adform',           label: 'Adform',             icon: 'AF', color: '#E84B37' },
+  { key: 'appsflyer',        label: 'AppsFlyer',          icon: 'AF', color: '#00B2FF' },
+  { key: 'adjust',           label: 'Adjust',             icon: 'AJ', color: '#888888' },
 ];
 
 const BENCHMARKS = {
@@ -43,8 +50,8 @@ const BENCHMARKS = {
 };
 
 // ── Yardımcı fonksiyonlar ─────────────────────────────────────────────────────
-const fmtN  = (n, d = 0) => Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtTL = (n) => `₺${fmtN(n)}`;
+const fmtN   = (n, d = 0) => Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtTL  = (n) => `₺${fmtN(n)}`;
 const fmtPct = (n) => `%${Number(n || 0).toFixed(2)}`;
 
 function getBenchmark(sector, platform) {
@@ -85,7 +92,7 @@ function buildChartData(dailyMetrics, anomalyDates) {
   return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
 }
 function exportCsv(integrations, sector) {
-  const hdrs = ['Platform','Harcama','ROAS','CTR (%)','CPA (₺)','Dönüşüm','Verimlilik'];
+  const hdrs = ['Platform', 'Harcama', 'ROAS', 'CTR (%)', 'CPA (₺)', 'Dönüşüm', 'Verimlilik'];
   const rows = integrations.map(i => {
     const bm = getBenchmark(sector, i.platform);
     return [PLATFORM_LABELS[i.platform]||i.platform, i.total_spend.toFixed(2), i.avg_roas.toFixed(2),
@@ -99,7 +106,7 @@ function exportCsv(integrations, sector) {
   URL.revokeObjectURL(url);
 }
 
-// ── UI bileşenler ─────────────────────────────────────────────────────────────
+// ── UI Bileşenleri ────────────────────────────────────────────────────────────
 function SkeletonBar({ height = 12, width = '100%', style = {} }) {
   return <div style={{ height, width, borderRadius: 6, background: 'var(--bg2)', animation: 'shimmer 1.5s ease-in-out infinite', ...style }} />;
 }
@@ -108,38 +115,29 @@ function SkeletonSection({ rows = 3 }) {
     <div className="card" style={{ marginBottom: 24 }}>
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <SkeletonBar height={16} width="40%" />
-        {Array.from({ length: rows }).map((_, i) => (
-          <SkeletonBar key={i} height={12} width={`${85 - i * 10}%`} />
-        ))}
+        {Array.from({ length: rows }).map((_, i) => <SkeletonBar key={i} height={12} width={`${85 - i * 10}%`} />)}
       </div>
     </div>
   );
 }
 
-function InlineEmptyState({ connectedPlatforms, onConnect, message }) {
+function InlineEmptyState({ connectedPlatforms, onConnect }) {
   return (
     <div style={{ background: 'var(--bg)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 10, padding: '18px 20px' }}>
-      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, fontStyle: 'italic' }}>
-        {message || 'Bu bölüm için reklam verisi gerekli'}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {MAIN_PLATFORMS_LIST.map(p => {
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Bu bölüm için reklam verisi gerekli</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+        {ALL_PLATFORMS_LIST.map(p => {
           const connected = connectedPlatforms.includes(p.key);
           return (
-            <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: p.color + '20', color: p.color, borderRadius: 6, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+            <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg2)', borderRadius: 8, border: connected ? '1px solid rgba(16,185,129,0.2)' : '1px solid var(--border2)' }}>
+              <span style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: p.color + '20', color: p.color, borderRadius: 5, fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
                 {p.icon}
               </span>
-              <span style={{ flex: 1, fontSize: 13 }}>{p.label}</span>
+              <span style={{ flex: 1, fontSize: 12 }}>{p.label}</span>
               {connected
-                ? <span style={{ color: '#10B981', fontSize: 12, fontWeight: 700 }}>✓ Bağlı</span>
-                : <button onClick={onConnect}
-                    style={{ padding: '4px 12px', background: 'transparent', border: '1px solid var(--teal)',
-                      borderRadius: 6, color: 'var(--teal)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                    Bağla →
-                  </button>
-              }
+                ? <span style={{ color: '#10B981', fontSize: 11, fontWeight: 700 }}>✓</span>
+                : <button onClick={onConnect} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--teal)', borderRadius: 5, color: 'var(--teal)', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Bağla →</button>}
             </div>
           );
         })}
@@ -183,24 +181,109 @@ function CustomDot({ cx, cy, payload }) {
   return <circle cx={cx} cy={cy} r={5} fill="#EF4444" stroke="#fff" strokeWidth={1.5} />;
 }
 
+// Kanal sinerjisi infografiği (< 2 platform bağlıyken)
+function SynergyInfo({ connectedPlatforms, onConnect }) {
+  const upperFunnelPlatforms = ['tiktok', 'linkedin', 'adform', 'meta'];
+  const lowerFunnelPlatforms = ['google_ads'];
+  const hasUpper = connectedPlatforms.some(p => upperFunnelPlatforms.includes(p));
+  const hasLower = connectedPlatforms.some(p => lowerFunnelPlatforms.includes(p));
+  const adCount  = connectedPlatforms.filter(p => AD_PLATFORMS.includes(p)).length;
+
+  return (
+    <div>
+      <div style={{ background: 'rgba(14,165,233,0.07)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 10, padding: '14px 18px', marginBottom: 20, fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
+        {adCount === 0
+          ? 'Kanal sinerjisi analizi için en az 2 platform bağlayın.'
+          : 'Kanal sinerjisi analizi için en az 1 platform daha bağlayın.'}
+        {' '}Örneğin <strong style={{ color: '#1877F2' }}>Meta Ads</strong> (farkındalık) + <strong style={{ color: '#4285F4' }}>Google Ads</strong> (dönüşüm).
+      </div>
+
+      {/* Infografik */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto', paddingBottom: 8 }}>
+        {/* Üst huni */}
+        <div style={sg.funnelBox}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Farkındalık</div>
+          {[
+            { key: 'meta',    label: 'Meta Ads',    color: '#1877F2' },
+            { key: 'tiktok',  label: 'TikTok Ads',  color: '#555555' },
+            { key: 'linkedin',label: 'LinkedIn Ads', color: '#0A66C2' },
+            { key: 'adform',  label: 'Adform',       color: '#E84B37' },
+          ].map(p => {
+            const conn = connectedPlatforms.includes(p.key);
+            return (
+              <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: conn ? p.color : 'var(--border2)', flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: conn ? 'var(--text1)' : 'var(--text3)' }}>{p.label}</span>
+                {conn && <span style={{ fontSize: 10, color: '#10B981', fontWeight: 700 }}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Ok */}
+        <div style={sg.arrow}>
+          <div style={sg.arrowLine} />
+          <div style={sg.arrowLabel}>Yönlendirme</div>
+          <div style={sg.arrowHead}>›</div>
+        </div>
+
+        {/* Değerlendirme */}
+        <div style={{ ...sg.funnelBox, background: 'rgba(139,92,246,0.06)', borderColor: 'rgba(139,92,246,0.2)' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Değerlendirme</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>Yeniden pazarlama,<br/>lookalike kitleler</div>
+        </div>
+
+        {/* Ok */}
+        <div style={sg.arrow}>
+          <div style={sg.arrowLine} />
+          <div style={sg.arrowLabel}>Dönüştürme</div>
+          <div style={sg.arrowHead}>›</div>
+        </div>
+
+        {/* Alt huni */}
+        <div style={sg.funnelBox}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Dönüşüm</div>
+          {[
+            { key: 'google_ads', label: 'Google Ads', color: '#4285F4' },
+            { key: 'appsflyer',  label: 'AppsFlyer',  color: '#00B2FF' },
+            { key: 'adjust',     label: 'Adjust',      color: '#888888' },
+          ].map(p => {
+            const conn = connectedPlatforms.includes(p.key);
+            return (
+              <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: conn ? p.color : 'var(--border2)', flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: conn ? 'var(--text1)' : 'var(--text3)' }}>{p.label}</span>
+                {conn && <span style={{ fontSize: 10, color: '#10B981', fontWeight: 700 }}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <button onClick={onConnect} style={{ marginTop: 16, padding: '7px 18px', background: 'transparent', border: '1px solid var(--teal)', borderRadius: 8, color: 'var(--teal)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+        Platform Bağla →
+      </button>
+    </div>
+  );
+}
+
 // ── Ana Sayfa ─────────────────────────────────────────────────────────────────
 export default function Channels({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const isAgency = user?.company_type === 'agency';
+  const isAgency  = user?.company_type === 'agency';
   const needsBrand = isAgency && !selectedBrand;
 
-  const [days, setDays]   = useState(30);
+  const [days, setDays]         = useState(30);
   const [platFilter, setPlatFilter] = useState('all');
-  const [data, setData]   = useState(null);
-  const [loading, setLoading] = useState(true); // true → no flash on mount
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
 
-  const [aiText, setAiText]     = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError]   = useState('');
+  const [aiText, setAiText]         = useState('');
+  const [aiLoading, setAiLoading]   = useState(false);
+  const [aiError, setAiError]       = useState('');
   const aiRef = useRef(null);
 
-  // ── brand name: agency objects may use .name OR .company_name ─────────────
   const brandName = selectedBrand?.company_name || selectedBrand?.name;
   const brandId   = isAgency ? selectedBrand?.id : undefined;
 
@@ -215,7 +298,6 @@ export default function Channels({ onNav }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── "Önce marka seç" ──────────────────────────────────────────────────────
   if (needsBrand) return (
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">Kanal Analizi</div></div>
@@ -232,14 +314,24 @@ export default function Channels({ onNav }) {
   const title = isAgency && brandName ? `${brandName} — Kanal Analizi` : 'Kanal Analizi';
 
   // ── Türetilmiş veri ───────────────────────────────────────────────────────
-  const allIntegrations  = data?.integrations || [];
-  const adIntegrations   = allIntegrations.filter(i => AD_PLATFORMS.includes(i.platform));
-  const connectedKeys    = allIntegrations.map(i => i.platform);
-  const hasAnyData       = allIntegrations.length > 0;
-  const hasAdData        = adIntegrations.some(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_impressions) > 0);
-  const sector           = data?.sector || 'Diğer';
+  const allIntegrations = data?.integrations || [];
+  const gaIntegration   = allIntegrations.find(i => i.platform === 'google_analytics');
+  const adIntegrations  = allIntegrations.filter(i => AD_PLATFORMS.includes(i.platform));
+  const connectedKeys   = allIntegrations.map(i => i.platform);
+  const hasAnyData      = allIntegrations.length > 0;
+  const hasAdData       = adIntegrations.some(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_impressions) > 0);
+  const sector          = data?.sector || 'Diğer';
 
-  // Totals
+  // GA4 metrikleri (impressions=sessions, clicks=users, conversions=conversions)
+  const gaData = gaIntegration ? {
+    sessions:    parseInt(gaIntegration.total_impressions) || 0,
+    users:       parseInt(gaIntegration.total_clicks)      || 0,
+    conversions: parseInt(gaIntegration.total_conversions) || 0,
+    convRate:    parseInt(gaIntegration.total_impressions) > 0
+      ? (parseInt(gaIntegration.total_conversions) / parseInt(gaIntegration.total_impressions) * 100) : 0,
+  } : null;
+
+  // Reklam harcaması toplamları
   const totalSpend  = adIntegrations.reduce((s, i) => s + parseFloat(i.total_spend), 0);
   const totalConv   = adIntegrations.reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
   const totalClicks = adIntegrations.reduce((s, i) => s + parseInt(i.total_clicks || 0), 0);
@@ -249,16 +341,17 @@ export default function Channels({ onNav }) {
   const avgCtr      = totalImp > 0 ? (totalClicks / totalImp * 100) : 0;
   const avgCpa      = totalConv > 0 ? totalSpend / totalConv : null;
 
+  // Önceki dönem
   const prev       = data?.prevIntegrations || [];
-  const prevSpend  = prev.reduce((s, i) => s + parseFloat(i.total_spend), 0);
-  const prevConv   = prev.reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
-  const prevRoasV  = prev.filter(i => parseFloat(i.avg_roas) > 0);
+  const prevSpend  = prev.filter(i => AD_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseFloat(i.total_spend), 0);
+  const prevConv   = prev.filter(i => AD_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
+  const prevRoasV  = prev.filter(i => AD_PLATFORMS.includes(i.platform) && parseFloat(i.avg_roas) > 0);
   const prevRoas   = prevRoasV.length ? prevRoasV.reduce((s, i) => s + parseFloat(i.avg_roas), 0) / prevRoasV.length : 0;
 
-  const sectorBm   = BENCHMARKS[sector] || BENCHMARKS['Diğer'];
-  const bmRoasAvg  = (sectorBm.google_roas + sectorBm.meta_roas) / 2;
+  const sectorBm  = BENCHMARKS[sector] || BENCHMARKS['Diğer'];
+  const bmRoasAvg = (sectorBm.google_roas + sectorBm.meta_roas) / 2;
 
-  // Scored ad channels
+  // Verimlilik skorları (tüm AD platformları — harcama yoksa da dahil)
   const scored = adIntegrations.map(i => ({
     ...i,
     ctr: calcCtr(i), cpa: calcCpa(i),
@@ -268,16 +361,16 @@ export default function Channels({ onNav }) {
   const bestChannel  = scored.length ? scored.reduce((a, b) => a.efficiency > b.efficiency ? a : b) : null;
   const worstChannel = scored.length > 1 ? scored.reduce((a, b) => a.efficiency < b.efficiency ? a : b) : null;
 
-  // Chart data (all platforms for trends)
+  // Grafik verisi
   const activePlatforms = [...new Set((data?.dailyMetrics || []).map(m => m.platform))];
-  const chartData = buildChartData(data?.dailyMetrics || [], data?.anomalyDates || []);
+  const chartData       = buildChartData(data?.dailyMetrics || [], data?.anomalyDates || []);
 
-  // Pie data
+  // Pie: sadece spend > 0 olan reklam platformları
   const pieData = adIntegrations
     .filter(i => parseFloat(i.total_spend) > 0)
     .map(i => ({ name: PLATFORM_LABELS[i.platform]||i.platform, value: parseFloat(i.total_spend), color: PLATFORM_COLORS[i.platform]||'#888', platform: i.platform }));
 
-  // Optimization suggestion
+  // Optimizasyon önerisi
   const optimSuggestion = (() => {
     if (!bestChannel) return null;
     if (bestChannel.efficiency >= 80) {
@@ -286,14 +379,16 @@ export default function Channels({ onNav }) {
     }
     if (worstChannel) {
       const bm = getBenchmark(sector, worstChannel.platform);
-      return `${PLATFORM_LABELS[worstChannel.platform]} ROAS'ı (${Number(worstChannel.avg_roas).toFixed(1)}x), sektör ortalamasının (${bm.roas}x) altında. Hedefleme ve kreatif optimizasyonu önerilir.`;
+      return `${PLATFORM_LABELS[worstChannel.platform]} ROAS'ı (${Number(worstChannel.avg_roas).toFixed(1)}x) sektör ortalamasının (${bm.roas}x) altında. Hedefleme ve kreatif optimizasyonu önerilir.`;
     }
     return null;
   })();
 
+  // Kanal sinerjisi — 2+ reklam platformu mu?
+  const adPlatformCount = connectedKeys.filter(p => AD_PLATFORMS.includes(p)).length;
+
   // ── AI Analiz ─────────────────────────────────────────────────────────────
   const runAi = async () => {
-    // Use ALL integrations (including GA) for AI analysis
     const aiMetrics = allIntegrations
       .filter(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_clicks) > 0 || parseInt(i.total_conversions) > 0)
       .map(i => ({
@@ -308,10 +403,9 @@ export default function Channels({ onNav }) {
       return;
     }
 
-    const benchmarks = aiMetrics.map(m => {
-      const platform = Object.keys(PLATFORM_LABELS).find(k => PLATFORM_LABELS[k] === m.platform) || 'google_ads';
-      const bm = getBenchmark(sector, platform);
-      return { platform: m.platform, roas: bm.roas, ctr: bm.ctr };
+    const benchmarks = adIntegrations.map(i => {
+      const bm = getBenchmark(sector, i.platform);
+      return { platform: PLATFORM_LABELS[i.platform]||i.platform, roas: bm.roas, ctr: bm.ctr };
     });
 
     setAiLoading(true); setAiText(''); setAiError('');
@@ -323,43 +417,31 @@ export default function Channels({ onNav }) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ metrics: aiMetrics, sector, benchmarks, days }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'AI analiz başarısız.');
-      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'AI analiz başarısız.'); }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
+        const lines = buffer.split('\n'); buffer = lines.pop();
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
           if (payload === '[DONE]') { setAiLoading(false); return; }
-          try {
-            const { text, error } = JSON.parse(payload);
-            if (error) throw new Error(error);
-            if (text) setAiText(prev => prev + text);
-          } catch {}
+          try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setAiText(p => p + text); } catch {}
         }
       }
     } catch (err) {
       setAiError(err.message || 'AI analiz başarısız.');
-    } finally {
-      setAiLoading(false);
-    }
+    } finally { setAiLoading(false); }
   };
 
   const saveAiReport = () => {
     const blob = new Blob([aiText], { type: 'text/plain;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url;
     a.download = `ai-kanal-analizi-${new Date().toISOString().split('T')[0]}.txt`; a.click();
     URL.revokeObjectURL(url);
@@ -370,7 +452,6 @@ export default function Channels({ onNav }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="fade-in">
-      {/* Topbar */}
       <div className="topbar">
         <div className="topbar-title">{title}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -386,9 +467,7 @@ export default function Channels({ onNav }) {
             <option value="all">Tüm Kanallar</option>
             {AD_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
           </select>
-          {hasAdData && (
-            <button onClick={() => exportCsv(adIntegrations, sector)} style={s.exportBtn}>↓ CSV</button>
-          )}
+          {hasAdData && <button onClick={() => exportCsv(adIntegrations, sector)} style={s.exportBtn}>↓ CSV</button>}
         </div>
       </div>
 
@@ -399,40 +478,68 @@ export default function Channels({ onNav }) {
           <div className="metrics" style={{ gridTemplateColumns: 'repeat(5,1fr)', marginBottom: 24 }}>
             {Array.from({length:5}).map((_,i) => <div key={i} className="metric-card"><SkeletonBar height={40} /></div>)}
           </div>
-        ) : !hasAdData ? (
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text3)', marginBottom: 12 }}>Genel Performans Özeti</div>
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="Performans özeti için bir reklam kanalı bağlayın." />
-          </div>
         ) : (
           <>
-            <div className="metrics" style={{ gridTemplateColumns: 'repeat(5,1fr)', marginBottom: 16 }}>
-              {[
-                { label: 'Toplam Harcama',  value: fmtTL(totalSpend), change: pctChange(totalSpend, prevSpend) },
-                { label: 'Ort. ROAS',        value: `${avgRoas.toFixed(2)}x`,   change: pctChange(avgRoas, prevRoas) },
-                { label: 'Toplam Dönüşüm',  value: fmtN(totalConv),             change: pctChange(totalConv, prevConv) },
-                { label: 'Ort. CPA',         value: avgCpa ? fmtTL(avgCpa) : '—', change: null },
-                { label: 'Ort. CTR',         value: fmtPct(avgCtr),              change: null },
-              ].map(m => (
-                <div key={m.label} className="metric-card">
-                  <div className="metric-label">{m.label}</div>
-                  <div className="metric-value" style={{ fontSize: 20 }}>{m.value}</div>
-                  <div className="metric-sub"><ChangeArrow pct={m.change} /></div>
+            {/* Reklam kanalları özeti */}
+            {hasAdData ? (
+              <>
+                <div className="metrics" style={{ gridTemplateColumns: 'repeat(5,1fr)', marginBottom: 16 }}>
+                  {[
+                    { label: 'Toplam Harcama',  value: fmtTL(totalSpend),              change: pctChange(totalSpend, prevSpend) },
+                    { label: 'Ort. ROAS',        value: `${avgRoas.toFixed(2)}x`,       change: pctChange(avgRoas, prevRoas) },
+                    { label: 'Toplam Dönüşüm',  value: fmtN(totalConv),                change: pctChange(totalConv, prevConv) },
+                    { label: 'Ort. CPA',         value: avgCpa ? fmtTL(avgCpa) : '—',  change: null },
+                    { label: 'Ort. CTR',         value: fmtPct(avgCtr),                change: null },
+                  ].map(m => (
+                    <div key={m.label} className="metric-card">
+                      <div className="metric-label">{m.label}</div>
+                      <div className="metric-value" style={{ fontSize: 20 }}>{m.value}</div>
+                      <div className="metric-sub"><ChangeArrow pct={m.change} /></div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 18px', display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 24 }}>
-              <BenchmarkTag label="ROAS" actual={avgRoas} benchmark={bmRoasAvg} unit="x" />
-              <BenchmarkTag label="CTR"  actual={avgCtr}  benchmark={sectorBm.ctr} unit="%" />
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sektör: {sector}</span>
-            </div>
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 18px', display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <BenchmarkTag label="ROAS" actual={avgRoas} benchmark={bmRoasAvg} unit="x" />
+                  <BenchmarkTag label="CTR"  actual={avgCtr}  benchmark={sectorBm.ctr} unit="%" />
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sektör: {sector}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text3)', marginBottom: 10 }}>Reklam Harcaması Özeti</div>
+                <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
+              </div>
+            )}
+
+            {/* GA4 verileri (bağlıysa her zaman göster) */}
+            {gaData && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#E37400', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 20, height: 20, background: '#E3740020', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#E37400' }}>GA</span>
+                  Google Analytics — Web Verileri
+                </div>
+                <div className="metrics" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+                  {[
+                    { label: 'Toplam Oturum',    value: fmtN(gaData.sessions) },
+                    { label: 'Toplam Kullanıcı', value: fmtN(gaData.users) },
+                    { label: 'Dönüşüm',          value: fmtN(gaData.conversions) },
+                    { label: 'Dönüşüm Oranı',    value: fmtPct(gaData.convRate) },
+                  ].map(m => (
+                    <div key={m.label} className="metric-card" style={{ borderColor: 'rgba(227,116,0,0.2)', background: 'rgba(227,116,0,0.03)' }}>
+                      <div className="metric-label">{m.label}</div>
+                      <div className="metric-value" style={{ fontSize: 20, color: '#E37400' }}>{m.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        {/* ── BÖLÜM 2: Kanal Tablosu ──────────────────────────────────────── */}
-        <SectionCard title="Kanal Karşılaştırma" subtitle={`Son ${days} gün`}>
+        {/* ── BÖLÜM 2: Kanal Karşılaştırma Tablosu ──────────────────────── */}
+        <SectionCard title="Kanal Karşılaştırma" subtitle={`Son ${days} gün — tüm reklam platformları`}>
           {loading ? <SkeletonBar height={80} /> : !scored.length ? (
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="Kanal karşılaştırması için reklam verisi gerekli." />
+            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
           ) : (
             <table className="cmp-table">
               <thead>
@@ -474,7 +581,7 @@ export default function Channels({ onNav }) {
         {/* ── BÖLÜM 3: Trend Grafikleri ───────────────────────────────────── */}
         <SectionCard title="Harcama Trendi" subtitle={`Son ${days} gün · kırmızı nokta: anomali`}>
           {loading ? <SkeletonBar height={200} /> : chartData.length === 0 ? (
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="Trend grafiği için günlük metrik verisi gerekli." />
+            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
           ) : (
             <ResponsiveContainer width="100%" height={230}>
               <LineChart data={chartData} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
@@ -482,7 +589,7 @@ export default function Channels({ onNav }) {
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text3)' }} tickFormatter={d => d.slice(5)} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} tickFormatter={v => `₺${fmtN(v)}`} />
                 <Tooltip contentStyle={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 }}
-                  formatter={(v, name) => [fmtTL(v), (PLATFORM_LABELS[name.replace('_spend','')] || name)]}
+                  formatter={(v, name) => [fmtTL(v), PLATFORM_LABELS[name.replace('_spend','')] || name]}
                   labelFormatter={l => l} />
                 <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => PLATFORM_LABELS[v.replace('_spend','')] || v} />
                 {activePlatforms.filter(p => AD_PLATFORMS.includes(p)).map(p => (
@@ -495,7 +602,7 @@ export default function Channels({ onNav }) {
 
         <SectionCard title="ROAS Trendi" subtitle={`Son ${days} gün`}>
           {loading ? <SkeletonBar height={180} /> : chartData.length === 0 ? (
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="ROAS trendi için günlük metrik verisi gerekli." />
+            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
@@ -503,7 +610,7 @@ export default function Channels({ onNav }) {
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text3)' }} tickFormatter={d => d.slice(5)} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} tickFormatter={v => `${v.toFixed(1)}x`} />
                 <Tooltip contentStyle={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 }}
-                  formatter={(v, name) => [`${Number(v).toFixed(2)}x`, (PLATFORM_LABELS[name.replace('_roas','')] || name)]} />
+                  formatter={(v, name) => [`${Number(v).toFixed(2)}x`, PLATFORM_LABELS[name.replace('_roas','')] || name]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => PLATFORM_LABELS[v.replace('_roas','')] || v} />
                 {activePlatforms.filter(p => AD_PLATFORMS.includes(p)).map(p => (
                   <Line key={p} type="monotone" dataKey={`${p}_roas`} stroke={PLATFORM_COLORS[p]||'#888'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="4 2" />
@@ -516,7 +623,7 @@ export default function Channels({ onNav }) {
         {/* ── BÖLÜM 4: Bütçe Verimliliği ─────────────────────────────────── */}
         <SectionCard title="Bütçe Verimliliği" subtitle="Kanal bazında harcama dağılımı">
           {loading ? <SkeletonBar height={180} /> : pieData.length === 0 ? (
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="Bütçe analizi için harcama verisi gerekli." />
+            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
           ) : (
             <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <ResponsiveContainer width={200} height={200}>
@@ -540,6 +647,14 @@ export default function Channels({ onNav }) {
                       </div>
                     );
                   })}
+                  {/* GA4 dönüşüm verisi */}
+                  {gaData && gaData.conversions > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: '#E37400', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, flex: 1, color: 'var(--text3)' }}>GA4 Dönüşüm</span>
+                      <span style={{ fontSize: 12, color: '#E37400', fontWeight: 600 }}>{fmtN(gaData.conversions)} dön.</span>
+                    </div>
+                  )}
                 </div>
                 {bestChannel && optimSuggestion && (
                   <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
@@ -556,24 +671,20 @@ export default function Channels({ onNav }) {
         <div ref={aiRef}>
           <SectionCard title="AI Kanal Analizi" subtitle="Claude ile derinlemesine analiz">
             {loading ? <SkeletonBar height={60} /> : !hasAnyData ? (
-              <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="AI analizi için en az bir entegrasyon verisi gerekli." />
+              <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
             ) : (
               <>
                 {!aiText && !aiLoading && !aiError && (
                   <div style={{ textAlign: 'center', padding: '20px 16px' }}>
-                    <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>
-                      Son {days} günün performansı sektör benchmarklarıyla karşılaştırılarak analiz edilecek.
-                    </div>
-                    <button onClick={runAi}
-                      style={{ padding: '10px 28px', background: 'linear-gradient(135deg, #7C3AED, #0EA5E9)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>Son {days} günün performansı sektör benchmarklarıyla karşılaştırılarak analiz edilecek.</div>
+                    <button onClick={runAi} style={{ padding: '10px 28px', background: 'linear-gradient(135deg, #7C3AED, #0EA5E9)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                       ✦ AI Analiz Et
                     </button>
                   </div>
                 )}
                 {aiLoading && !aiText && (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>
-                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>
-                    Analiz hazırlanıyor...
+                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>Analiz hazırlanıyor...
                   </div>
                 )}
                 {aiError && (
@@ -590,14 +701,8 @@ export default function Channels({ onNav }) {
                     </div>
                     {!aiLoading && aiText && (
                       <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                        <button onClick={saveAiReport}
-                          style={{ padding: '7px 16px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>
-                          ↓ Raporu Kaydet
-                        </button>
-                        <button onClick={() => { setAiText(''); setAiError(''); }}
-                          style={{ padding: '7px 16px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>
-                          Yeni Analiz
-                        </button>
+                        <button onClick={saveAiReport} style={{ padding: '7px 16px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>↓ Raporu Kaydet</button>
+                        <button onClick={() => { setAiText(''); setAiError(''); }} style={{ padding: '7px 16px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>Yeni Analiz</button>
                       </div>
                     )}
                   </div>
@@ -609,11 +714,11 @@ export default function Channels({ onNav }) {
 
         {/* ── BÖLÜM 6: Kanal Sinerjisi ────────────────────────────────────── */}
         <SectionCard title="Kanal Sinerjisi" subtitle="Attribution özeti">
-          {loading ? <SkeletonBar height={100} /> : !hasAnyData ? (
-            <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} message="Kanal sinerjisi için entegrasyon bağlayın." />
+          {loading ? <SkeletonBar height={120} /> : adPlatformCount < 2 ? (
+            <SynergyInfo connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
           ) : (() => {
-            const upper = scored.filter(i => ['tiktok','adform','linkedin'].includes(i.platform));
-            const lower = scored.filter(i => ['google_ads','meta'].includes(i.platform));
+            const upper = scored.filter(i => ['tiktok','adform','linkedin','meta'].includes(i.platform));
+            const lower = scored.filter(i => ['google_ads','appsflyer','adjust'].includes(i.platform));
             return (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div style={s.synergyBox}>
@@ -624,7 +729,7 @@ export default function Channels({ onNav }) {
                       <span style={{ fontSize: 13 }}>{PLATFORM_LABELS[i.platform]}</span>
                       <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>{fmtN(i.total_impressions)} imp.</span>
                     </div>
-                  )) : <div style={{ fontSize: 12, color: 'var(--text3)' }}>Üst huni kanalı bağlanmadı.</div>}
+                  )) : <div style={{ fontSize: 12, color: 'var(--text3)' }}>Üst huni kanalı yok.</div>}
                 </div>
                 <div style={s.synergyBox}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Alt Huni — Dönüşüm</div>
@@ -634,7 +739,7 @@ export default function Channels({ onNav }) {
                       <span style={{ fontSize: 13 }}>{PLATFORM_LABELS[i.platform]}</span>
                       <span style={{ fontSize: 11, color: '#10B981', marginLeft: 'auto', fontWeight: 600 }}>{fmtN(i.total_conversions)} dön.</span>
                     </div>
-                  )) : <div style={{ fontSize: 12, color: 'var(--text3)' }}>Alt huni kanalı bağlanmadı.</div>}
+                  )) : <div style={{ fontSize: 12, color: 'var(--text3)' }}>Alt huni kanalı yok.</div>}
                 </div>
               </div>
             );
@@ -653,4 +758,12 @@ const s = {
   select:      { padding: '6px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' },
   exportBtn:   { padding: '6px 12px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, cursor: 'pointer', fontWeight: 600 },
   synergyBox:  { background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px' },
+};
+
+const sg = {
+  funnelBox: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', minWidth: 160 },
+  arrow:     { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 12px', gap: 4 },
+  arrowLine: { width: 40, height: 2, background: 'var(--border2)' },
+  arrowLabel:{ fontSize: 10, color: 'var(--text3)', whiteSpace: 'nowrap' },
+  arrowHead: { fontSize: 20, color: 'var(--text3)', lineHeight: 1 },
 };
