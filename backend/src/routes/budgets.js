@@ -18,7 +18,7 @@ router.get('/brands', authMiddleware, async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT c.id, c.name
+      `SELECT c.id, c.name AS company_name
        FROM connections conn
        JOIN companies c ON c.id = conn.brand_company_id
        WHERE conn.agency_company_id = $1

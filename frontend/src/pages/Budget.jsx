@@ -245,7 +245,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
 export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const isAgency = user?.role === 'agency';
+  const isAgency = user?.company_type === 'agency';
   const now = new Date();
 
   if (isAgency && !forceBrandId && !selectedBrand) {
@@ -277,7 +277,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const isEmbedded = !!resolvedForceBrandId;
 
   useEffect(() => {
-    if (!isEmbedded && user?.role === 'agency') {
+    if (!isEmbedded && user?.company_type === 'agency') {
       getBudgetBrands().then(list => {
         setBrands(list);
         if (list.length > 0) setSelBrandId(list[0].id);
@@ -285,12 +285,12 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     }
   }, [user, isEmbedded]);
 
-  const effectiveBrandId = resolvedForceBrandId || (user?.role === 'agency' ? selBrandId : undefined);
+  const effectiveBrandId = resolvedForceBrandId || (user?.company_type === 'agency' ? selBrandId : undefined);
 
   const loadPlan = useCallback(() => {
-    if (user?.role === 'admin') return;
-    const brandId = user?.role === 'agency' ? effectiveBrandId : undefined;
-    if (user?.role === 'agency' && !brandId) { setBudgetPlan(null); return; }
+    if (user?.company_type === 'admin') return;
+    const brandId = user?.company_type === 'agency' ? effectiveBrandId : undefined;
+    if (user?.company_type === 'agency' && !brandId) { setBudgetPlan(null); return; }
     getBudgetPlan(selMonth, selYear, brandId).then(setBudgetPlan);
   }, [selMonth, selYear, effectiveBrandId, user]);
 
@@ -298,10 +298,10 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
 
   const handleSave = (saved) => { setBudgetPlan(saved); setShowModal(false); loadPlan(); };
 
-  if (budgetPlan === undefined && user?.role !== 'admin') return <div className="loading">Yükleniyor...</div>;
+  if (budgetPlan === undefined && user?.company_type !== 'admin') return <div className="loading">Yükleniyor...</div>;
 
   // Admin erişim engeli
-  if (user?.role === 'admin') {
+  if (user?.company_type === 'admin') {
     return (
       <div className="fade-in">
         <div className="topbar"><div className="topbar-title">Bütçe Planlama</div></div>
@@ -423,7 +423,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   );
 
   const modal = showModal && (
-    <BudgetModal role={user?.role} brands={brands}
+    <BudgetModal role={user?.company_type} brands={brands}
       month={selMonth} year={selYear} existing={budgetPlan}
       forceBrandId={resolvedForceBrandId}
       onSave={handleSave} onClose={() => setShowModal(false)} />
@@ -452,7 +452,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
       <div className="topbar">
         <div className="topbar-title">Bütçe Planlama</div>
         <div className="topbar-right" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {user?.role === 'agency' && brands.length > 0 && (
+          {user?.company_type === 'agency' && brands.length > 0 && (
             <select style={{ ...s.picker, minWidth: 160 }} value={selBrandId} onChange={e => setSelBrandId(e.target.value)}>
               {brands.map(b => <option key={b.id} value={b.id}>{b.company_name}</option>)}
             </select>
@@ -464,7 +464,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         </div>
       </div>
       <div className="content">
-        {user?.role === 'agency' && selBrand && (
+        {user?.company_type === 'agency' && selBrand && (
           <div style={s.agencyInfo}>
             <span>📌 {selBrand.company_name} için bütçe görüntülüyorsunuz</span>
           </div>
