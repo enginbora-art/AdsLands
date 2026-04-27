@@ -19,6 +19,60 @@ function MetricCard({ label, value, sub, accent, danger }) {
   );
 }
 
+// ── Bütçe-entegrasyon uyarı banner'ı ─────────────────────────────────────────
+const BUDGET_CHECKS = [
+  { field: 'google_ads_budget', platform: 'google_ads', label: 'Google Ads' },
+  { field: 'meta_ads_budget',   platform: 'meta',       label: 'Meta Ads'   },
+  { field: 'tiktok_ads_budget', platform: 'tiktok',     label: 'TikTok Ads' },
+];
+
+function BudgetIntegrationWarning({ budget, integrations, onNav }) {
+  const dismissKey = budget
+    ? `budget_warn_${budget.company_id}_${budget.month}_${budget.year}_${new Date().toDateString()}`
+    : null;
+
+  const [dismissed, setDismissed] = useState(() =>
+    dismissKey ? !!localStorage.getItem(dismissKey) : true
+  );
+
+  if (!budget || dismissed) return null;
+
+  const connected = new Set((integrations || []).map(i => i.platform));
+  const missing = BUDGET_CHECKS.filter(c => parseFloat(budget[c.field]) > 0 && !connected.has(c.platform));
+
+  if (missing.length === 0) return null;
+
+  const dismiss = () => {
+    localStorage.setItem(dismissKey, '1');
+    setDismissed(true);
+  };
+
+  const message = missing.length === 1
+    ? `Bütçe planınızda ${missing[0].label} için ₺${fmt(budget[missing[0].field])} ayrıldı ancak hesap bağlı değil. Veri takibi yapılamıyor.`
+    : `${missing.map(m => m.label).join(' ve ')} hesapları bağlı değil. Bütçe takibi eksik.`;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)',
+      borderRadius: 10, padding: '11px 16px', marginBottom: 20,
+    }}>
+      <span style={{ fontSize: 15, flexShrink: 0 }}>⚠️</span>
+      <div style={{ flex: 1, fontSize: 13, color: '#F59E0B', lineHeight: 1.5 }}>{message}</div>
+      <button
+        onClick={() => onNav?.('integrations')}
+        style={{ padding: '6px 14px', background: 'transparent', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 7, color: '#F59E0B', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        Entegrasyona Git →
+      </button>
+      <button
+        onClick={dismiss}
+        style={{ background: 'none', border: 'none', color: 'rgba(245,158,11,0.6)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ── Ajans özet dashboard (marka seçilmemiş) ───────────────────────────────────
 function AgencySummary() {
   const [summary, setSummary] = useState({
@@ -71,7 +125,7 @@ function AgencySummary() {
 }
 
 // ── Marka dashboard içeriği ────────────────────────────────────────────────────
-function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite }) {
+function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite, onNav }) {
   const { summary, integrations, today_spend, budget, anomalies } = data;
 
   return (
@@ -90,6 +144,7 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
       </div>
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       <div className="content">
+        <BudgetIntegrationWarning budget={budget} integrations={integrations} onNav={onNav} />
         <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
           <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="var(--teal)" />
           <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#60A5FA" />
@@ -189,7 +244,7 @@ const EMPTY_BRAND_DATA = {
 };
 
 // ── Ana export ────────────────────────────────────────────────────────────────
-export default function Dashboard() {
+export default function Dashboard({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
   const [data, setData] = useState(null);
@@ -266,6 +321,7 @@ export default function Dashboard() {
       isAgency={isAgency}
       showInvite={showInvite}
       setShowInvite={setShowInvite}
+      onNav={onNav}
     />
   );
 }
