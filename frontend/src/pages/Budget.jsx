@@ -188,11 +188,12 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
     }
   };
 
-  // Entry point for the Kaydet button
+  // Entry point for the Kaydet button — compute values directly to avoid stale closure
   const handleSave = () => {
     if (!form.total_budget) return;
-    // If channel sum exceeds stated total and channels are configured → show confirm
-    if (overBudget && channelSum > 0) { setShowConfirm(true); return; }
+    const ttl = parseInt(form.total_budget) || 0;
+    const sum = channels.reduce((s, ch) => s + (parseInt(ch.amount) || 0), 0);
+    if (sum > ttl && sum > 0) { setShowConfirm(true); return; }
     doSave();
   };
 
@@ -324,28 +325,29 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
             {saving ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
-      </div>
-      {showConfirm && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-          <div style={{ background: '#1a1f2e', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 14, padding: 28, width: 380, maxWidth: '90vw' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>⚠️ Bütçe Aşımı</div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 24 }}>
-              Kanallara dağıtılan toplam (<strong>₺{fmt(channelSum)}</strong>), belirlenen bütçenizi (<strong>₺{fmt(total)}</strong>) <strong style={{ color: 'var(--coral)' }}>₺{fmt(channelSum - total)}</strong> aşıyor.<br /><br />Ne yapmak istersiniz?
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <button onClick={() => doSave(channelSum)} style={{ padding: '10px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                Bütçeyi ₺{fmt(channelSum)} Olarak Güncelle
-              </button>
-              <button onClick={() => setShowConfirm(false)} style={{ padding: '10px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                Kanalları Düzenle
-              </button>
-              <button onClick={onClose} style={{ padding: '10px', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                İptal
-              </button>
+
+        {showConfirm && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, borderRadius: 14 }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: '#1a1f2e', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 14, padding: 28, width: 340, maxWidth: '90%' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>⚠️ Bütçe Aşımı</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 24 }}>
+                Kanallara dağıtılan toplam (<strong>₺{fmt(channelSum)}</strong>), belirlenen bütçenizi (<strong>₺{fmt(total)}</strong>) <strong style={{ color: 'var(--coral)' }}>₺{fmt(channelSum - total)}</strong> aşıyor.<br /><br />Ne yapmak istersiniz?
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <button onClick={() => doSave(channelSum)} style={{ padding: '10px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                  Bütçeyi ₺{fmt(channelSum)} Olarak Güncelle
+                </button>
+                <button onClick={() => setShowConfirm(false)} style={{ padding: '10px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                  Kanalları Düzenle
+                </button>
+                <button onClick={onClose} style={{ padding: '10px', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                  İptal
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -585,7 +587,7 @@ const s = {
 
 const ms = {
   overlay:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal:     { background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, width: 460, maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowY: 'auto' },
+  modal:     { background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, width: 460, maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowY: 'auto', position: 'relative' },
   header:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px 14px', borderBottom: '1px solid var(--border2)', position: 'sticky', top: 0, background: '#1a1f2e', zIndex: 1 },
   title:     { fontSize: 16, fontWeight: 700 },
   close:     { background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text3)' },

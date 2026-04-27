@@ -40,6 +40,15 @@ async function getBrandData(companyId) {
     [companyId, now.getMonth() + 1, now.getFullYear()]
   );
 
+  let budgetChannels = [];
+  if (budget) {
+    const { rows } = await pool.query(
+      'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1 ORDER BY created_at',
+      [budget.id]
+    );
+    budgetChannels = rows;
+  }
+
   const summary = integrations.rows.reduce((acc, i) => ({
     total_spend: acc.total_spend + parseFloat(i.total_spend),
     total_conversions: acc.total_conversions + parseInt(i.total_conversions),
@@ -55,7 +64,7 @@ async function getBrandData(companyId) {
     integrations: integrations.rows,
     anomalies: anomalies.rows,
     today_spend: parseFloat(todayRow.today_spend),
-    budget: budget || null,
+    budget: budget ? { ...budget, channels: budgetChannels } : null,
     summary,
   };
 }

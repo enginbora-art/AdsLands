@@ -5,8 +5,13 @@ import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard } from '../
 import InviteModal from '../components/InviteModal';
 
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
-const PLATFORM_LABELS = { google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads', google_analytics: 'Google Analytics' };
-const PLATFORM_COLORS = { google_ads: '#4285F4', meta: '#1877F2', tiktok: '#00BFA6', google_analytics: '#E37400' };
+const PLATFORM_LABELS = { google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads', google_analytics: 'Google Analytics', linkedin: 'LinkedIn Ads', adform: 'Adform', appsflyer: 'AppsFlyer', adjust: 'Adjust', other: 'Diğer' };
+const PLATFORM_COLORS = { google_ads: '#4285F4', meta: '#1877F2', tiktok: '#69C9D0', google_analytics: '#E37400', linkedin: '#0A66C2', adform: '#FF6B00', appsflyer: '#00B4E6', adjust: '#00B2FF', other: '#6B7280' };
+const LEGACY_CHANNEL_MAP = [
+  { field: 'google_ads_budget', platform: 'google_ads' },
+  { field: 'meta_ads_budget',   platform: 'meta'       },
+  { field: 'tiktok_ads_budget', platform: 'tiktok'     },
+];
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
 function MetricCard({ label, value, sub, accent, danger }) {
@@ -188,27 +193,52 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
           </div>
         )}
 
-        {budget && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="card-header">
-              <div><div className="card-title">Ay Bütçesi</div><div className="card-subtitle">{MONTHS[(budget.month || 1) - 1]} {budget.year}</div></div>
-            </div>
-            <div className="card-body" style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Toplam</div>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)' }}>₺{fmt(budget.total_budget)}</div>
+        {budget && (() => {
+          const channels = budget.channels?.length > 0
+            ? budget.channels
+            : LEGACY_CHANNEL_MAP.filter(lc => Number(budget[lc.field]) > 0).map(lc => ({ platform: lc.platform, amount: Number(budget[lc.field]) }));
+          return (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header">
+                <div><div className="card-title">Ay Bütçesi</div><div className="card-subtitle">{MONTHS[(budget.month || 1) - 1]} {budget.year}</div></div>
               </div>
-              {budget.google_ads_budget > 0 && <div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Google Ads</div>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#4285F4' }}>₺{fmt(budget.google_ads_budget)}</div>
-              </div>}
-              {budget.meta_budget > 0 && <div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Meta Ads</div>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)', color: '#1877F2' }}>₺{fmt(budget.meta_budget)}</div>
-              </div>}
+              <div className="card-body">
+                <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginBottom: channels.length > 0 ? 16 : 0 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Toplam</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--mono)' }}>₺{fmt(budget.total_budget)}</div>
+                  </div>
+                </div>
+                {channels.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {channels.map(ch => {
+                      const label = PLATFORM_LABELS[ch.platform] || ch.platform;
+                      const color = PLATFORM_COLORS[ch.platform] || '#6B7280';
+                      const pct = Number(budget.total_budget) > 0 ? (ch.amount / Number(budget.total_budget)) * 100 : 0;
+                      return (
+                        <div key={ch.platform}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                              <span style={{ fontSize: 12, fontWeight: 600, color }}>{label}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text1)' }}>₺{fmt(ch.amount)}</span>
+                              <span style={{ fontSize: 11, color: 'var(--text3)', minWidth: 32, textAlign: 'right' }}>%{Math.round(pct)}</span>
+                            </div>
+                          </div>
+                          <div style={{ height: 4, background: 'var(--bg3,rgba(255,255,255,0.06))', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: color, borderRadius: 2, transition: 'width 0.5s ease' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {anomalies?.length > 0 && (
           <div className="card">
