@@ -150,6 +150,18 @@ async function migrate() {
       );
     `);
 
+    // budget_channels tablosu (dinamik kanal dağılımı)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS budget_channels (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        budget_id UUID NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+        platform VARCHAR(50) NOT NULL,
+        amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(budget_id, platform)
+      );
+    `);
+
     // Platform constraint'ini güncelle (adform + linkedin ekle)
     await client.query(`
       DO $$

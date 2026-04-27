@@ -90,7 +90,13 @@ router.get('/', authMiddleware, async (req, res) => {
       'SELECT * FROM budgets WHERE company_id = $1 AND month = $2 AND year = $3',
       [targetCompanyId, month, year]
     );
-    res.json(budget || null);
+    if (!budget) return res.json(null);
+
+    const { rows: channels } = await pool.query(
+      'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1 ORDER BY created_at',
+      [budget.id]
+    );
+    res.json({ ...budget, channels });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
@@ -99,7 +105,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // POST /api/budgets
 router.post('/', authMiddleware, async (req, res) => {
-  const { month, year, total_budget, google_ads_budget, meta_ads_budget, tiktok_ads_budget, brand_id } = req.body;
+  const { month, year, total_budget, channels, brand_id } = req.body;
   if (!month || !year || total_budget === undefined) {
     return res.status(400).json({ error: 'month, year ve total_budget zorunludur.' });
   }
@@ -114,15 +120,32 @@ router.post('/', authMiddleware, async (req, res) => {
     targetCompanyId = brand_id;
   }
 
+  // Derive legacy column values from channels for backward compat (dashboard warning reads these)
+  const toNum = (v) => parseFloat(v) || 0;
+  const safeChannels = (channels || []).filter(ch => ch.platform && toNum(ch.amount) > 0);
+  const googleBudget = toNum(safeChannels.find(c => c.platform === 'google_ads')?.amount);
+  const metaBudget   = toNum(safeChannels.find(c => c.platform === 'meta')?.amount);
+  const tiktokBudget = toNum(safeChannels.find(c => c.platform === 'tiktok')?.amount);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Fetch existing budget + channels (for log old_value)
     const { rows: [existing] } = await client.query(
       'SELECT * FROM budgets WHERE company_id = $1 AND month = $2 AND year = $3',
       [targetCompanyId, month, year]
     );
+    let existingChannels = [];
+    if (existing) {
+      const { rows } = await client.query(
+        'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1',
+        [existing.id]
+      );
+      existingChannels = rows;
+    }
 
+    // Upsert budget (keep legacy columns in sync)
     const { rows: [newBudget] } = await client.query(
       `INSERT INTO budgets (company_id, month, year, total_budget, google_ads_budget, meta_ads_budget, tiktok_ads_budget, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
@@ -133,22 +156,32 @@ router.post('/', authMiddleware, async (req, res) => {
          tiktok_ads_budget = EXCLUDED.tiktok_ads_budget,
          updated_at        = NOW()
        RETURNING *`,
-      [targetCompanyId, month, year, total_budget,
-       google_ads_budget || 0, meta_ads_budget || 0, tiktok_ads_budget || 0]
+      [targetCompanyId, month, year, total_budget, googleBudget, metaBudget, tiktokBudget]
     );
 
-    const toNum = (v) => parseFloat(v) || 0;
+    // Replace budget_channels
+    await client.query('DELETE FROM budget_channels WHERE budget_id = $1', [newBudget.id]);
+    for (const ch of safeChannels) {
+      await client.query(
+        'INSERT INTO budget_channels (budget_id, platform, amount) VALUES ($1, $2, $3)',
+        [newBudget.id, ch.platform, toNum(ch.amount)]
+      );
+    }
+
+    // Fetch saved channels to return
+    const { rows: savedChannels } = await client.query(
+      'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1 ORDER BY created_at',
+      [newBudget.id]
+    );
+
+    // Budget log
     const oldValue = existing ? {
       total_budget: toNum(existing.total_budget),
-      google_ads_budget: toNum(existing.google_ads_budget),
-      meta_ads_budget: toNum(existing.meta_ads_budget),
-      tiktok_ads_budget: toNum(existing.tiktok_ads_budget),
+      channels: existingChannels.map(c => ({ platform: c.platform, amount: toNum(c.amount) })),
     } : null;
     const newValue = {
       total_budget: toNum(newBudget.total_budget),
-      google_ads_budget: toNum(newBudget.google_ads_budget),
-      meta_ads_budget: toNum(newBudget.meta_ads_budget),
-      tiktok_ads_budget: toNum(newBudget.tiktok_ads_budget),
+      channels: savedChannels.map(c => ({ platform: c.platform, amount: toNum(c.amount) })),
     };
 
     await client.query(
@@ -161,7 +194,7 @@ router.post('/', authMiddleware, async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.json(newBudget);
+    res.json({ ...newBudget, channels: savedChannels });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
