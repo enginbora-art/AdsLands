@@ -711,8 +711,12 @@ export default function Integrations() {
       {msgBanner && <MsgBanner msg={msgBanner.msg} type={msgBanner.type} onDismiss={() => setMsgBanner(null)} />}
 
       <div style={s.header}>
-        <h1 style={s.title}>Reklam Entegrasyonları</h1>
-        <p style={s.sub}>Reklam platformlarınızı bağlayın, verilerinizi tek ekranda takip edin.</p>
+        <h1 style={s.title}>{isAgency && !selectedBrand ? 'Ajans Entegrasyonları' : 'Reklam Entegrasyonları'}</h1>
+        <p style={s.sub}>
+          {isAgency && !selectedBrand
+            ? 'Ajans hesabınıza bağlı platformları yönetin ve müşteri hesaplarını toplu aktarın.'
+            : 'Reklam platformlarınızı bağlayın, verilerinizi tek ekranda takip edin.'}
+        </p>
       </div>
 
       {/* Platform Cards */}
