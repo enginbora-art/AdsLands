@@ -34,7 +34,7 @@ function companyTypeLabel(type) {
   return type || '';
 }
 
-export default function Header({ onNav }) {
+export default function Header({ onNav, onMenuToggle }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount]     = useState(0);
@@ -91,7 +91,11 @@ export default function Header({ onNav }) {
   const displaySub   = `${user?.company_name || ''} · ${roleLabel}`;
 
   return (
-    <header style={s.header}>
+    <header className="app-header" style={s.header}>
+      {/* Hamburger — visible only on mobile */}
+      <button className="menu-toggle" onClick={onMenuToggle} aria-label="Menüyü aç">
+        <HamburgerIcon />
+      </button>
       {/* Right side — fills full width, aligns to the right */}
       <div style={{ flex: 1 }} />
       <div style={s.right}>
@@ -110,7 +114,7 @@ export default function Header({ onNav }) {
           </button>
 
           {open && (
-            <div style={s.dropdown}>
+            <div className="notif-dropdown" style={s.dropdown}>
               {/* Dropdown header */}
               <div style={s.dropHead}>
                 <span style={s.dropTitle}>Bildirimler</span>
@@ -161,12 +165,23 @@ export default function Header({ onNav }) {
           <div style={s.avatar}>{avatarLetters(user?.email)}</div>
           <div>
             <div style={s.userName}>{displayName}</div>
-            <div style={s.userSub}>{displaySub}</div>
+            <div className="header-user-sub" style={s.userSub}>{displaySub}</div>
           </div>
         </div>
 
       </div>
     </header>
+  );
+}
+
+function HamburgerIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
   );
 }
 
@@ -181,11 +196,11 @@ function BellIcon() {
 }
 
 const s = {
-  header:     { position: 'fixed', top: 0, left: 220, right: 0, height: 56, background: '#0f1117', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 24px', zIndex: 9, boxSizing: 'border-box' },
+  header:     { background: '#0f1117', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', zIndex: 9, boxSizing: 'border-box' },
   right:      { display: 'flex', alignItems: 'center', gap: 12 },
   bell:       { position: 'relative', border: 'none', cursor: 'pointer', padding: 7, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.12s, background 0.12s' },
   badge:      { position: 'absolute', top: 3, right: 3, minWidth: 15, height: 15, borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 },
-  dropdown:   { position: 'absolute', top: 44, right: 0, width: 340, background: '#111D29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.5)', zIndex: 200, overflow: 'hidden' },
+  dropdown:   { position: 'absolute', top: 44, right: 0, background: '#111D29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.5)', zIndex: 200, overflow: 'hidden' },
   dropHead:   { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' },
   dropTitle:  { fontSize: 13, fontWeight: 700 },
   markAllBtn: { fontSize: 11, color: '#00BFA6', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', padding: 0 },

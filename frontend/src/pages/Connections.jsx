@@ -188,7 +188,7 @@ export default function Connections() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
         ) : tab === 'connections' ? (
-          <div className="card">
+          <div className="card table-wrap">
             {connections.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 48, color: 'var(--text3)', fontSize: 13 }}>
                 Henüz bağlantı yok. Bağlantı isteği göndererek başlayın.
@@ -233,7 +233,7 @@ export default function Connections() {
             ))}
           </div>
         ) : (
-          <div className="card">
+          <div className="card table-wrap">
             {sent.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 48, color: 'var(--text3)', fontSize: 13 }}>Gönderilen istek yok.</div>
             ) : (

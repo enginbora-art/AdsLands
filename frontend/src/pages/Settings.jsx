@@ -121,7 +121,7 @@ export default function Settings() {
         <div className="topbar-title">Ayarlar</div>
       </div>
       <div className="content">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div className="resp-grid-2" style={{ gap: 24 }}>
 
           {/* Profile card */}
           <div className="card">

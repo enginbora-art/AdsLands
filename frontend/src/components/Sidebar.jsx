@@ -99,7 +99,7 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
-export default function Sidebar({ active, onNav, onLogout }) {
+export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
   const { user, hasPermission } = useAuth();
   const { selectedBrand, setSelectedBrand } = useSelectedBrand();
   const isAgency = user?.company_type === 'agency';
@@ -111,6 +111,12 @@ export default function Sidebar({ active, onNav, onLogout }) {
   const handleClearBrand = () => {
     setSelectedBrand(null);
     onNav('agency');
+    if (onClose) onClose();
+  };
+
+  const handleNav = (id) => {
+    onNav(id);
+    if (onClose) onClose();
   };
 
   const isVisible = (item) => {
@@ -118,89 +124,89 @@ export default function Sidebar({ active, onNav, onLogout }) {
     return hasPermission(item.perm);
   };
 
-  const roleLabel = user?.is_platform_admin
-    ? 'Platform Admin'
-    : user?.is_company_admin
-      ? 'Şirket Yöneticisi'
-      : user?.company_type === 'agency' ? 'Ajans' : 'Marka';
-
   return (
-    <aside className="sidebar">
-      {/* Logo */}
-      <div className="logo" onClick={() => onNav('dashboard')}>
-        <svg width="26" height="26" viewBox="0 0 32 32" style={{ flexShrink: 0 }}>
-          <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
-          <line x1="16" y1="2" x2="16" y2="7" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="16" y1="25" x2="16" y2="30" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="2" y1="16" x2="7" y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="25" y1="16" x2="30" y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
-          <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
-        </svg>
-        <div className="logo-text">Ads<span>Lands</span></div>
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      <div className={`sidebar-backdrop${open ? ' visible' : ''}`} onClick={onClose} />
 
-      {/* Selected brand chip */}
-      {isAgency && selectedBrand && (
-        <div style={{ margin: '4px 12px 8px', padding: '8px 12px', background: 'rgba(0,191,166,0.06)', border: '1px solid rgba(0,191,166,0.15)', borderRadius: 8 }}>
-          <button
-            onClick={handleClearBrand}
-            style={{ fontSize: 11, color: 'rgba(0,191,166,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5, fontFamily: 'var(--font)' }}>
-            ← Tüm Markalar
-          </button>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {selectedBrand.name || selectedBrand.company_name}
-          </div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>Marka</div>
+      <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
+        {/* Logo */}
+        <div className="logo" onClick={() => handleNav('dashboard')}>
+          <svg width="26" height="26" viewBox="0 0 32 32" style={{ flexShrink: 0 }}>
+            <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
+            <line x1="16" y1="2" x2="16" y2="7" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="16" y1="25" x2="16" y2="30" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="2" y1="16" x2="7" y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="25" y1="16" x2="30" y2="16" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="16" cy="16" r="3" fill="#00BFA6"/>
+          </svg>
+          <div className="logo-text">Ads<span>Lands</span></div>
         </div>
-      )}
 
-      {/* Nav */}
-      <nav className="nav">
-        {navConfig.map(section => {
-          const visibleItems = section.items.filter(isVisible);
-          if (visibleItems.length === 0) return null;
-          return (
-            <div key={section.label} className="nav-section">
-              <div className="nav-section-label">{section.label}</div>
-              {visibleItems.map(item => (
-                <button
-                  key={item.id}
-                  className={`nav-item${active === item.id ? ' active' : ''}`}
-                  onClick={() => onNav(item.id)}
-                >
-                  <Icon id={item.id} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.badge && (
-                    <span style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      padding: '2px 5px',
-                      borderRadius: 3,
-                      background: item.badgeLive ? 'rgba(255,107,90,0.18)' : 'rgba(0,191,166,0.15)',
-                      color: item.badgeLive ? 'var(--coral)' : 'var(--teal)',
-                      letterSpacing: '0.4px',
-                    }}>{item.badge}</span>
-                  )}
-                </button>
-              ))}
+        {/* Selected brand chip */}
+        {isAgency && selectedBrand && (
+          <div className="sidebar-brand-chip" style={{ margin: '4px 12px 8px', padding: '8px 12px', background: 'rgba(0,191,166,0.06)', border: '1px solid rgba(0,191,166,0.15)', borderRadius: 8 }}>
+            <button
+              onClick={handleClearBrand}
+              style={{ fontSize: 11, color: 'rgba(0,191,166,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5, fontFamily: 'var(--font)' }}>
+              ← Tüm Markalar
+            </button>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedBrand.name || selectedBrand.company_name}
             </div>
-          );
-        })}
-      </nav>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>Marka</div>
+          </div>
+        )}
 
-      {/* Footer */}
-      {onLogout && (
-        <div className="sidebar-footer">
-          <button className="nav-item nav-logout" onClick={onLogout}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            <span>Çıkış Yap</span>
-          </button>
-        </div>
-      )}
-    </aside>
+        {/* Nav */}
+        <nav className="nav">
+          {navConfig.map(section => {
+            const visibleItems = section.items.filter(isVisible);
+            if (visibleItems.length === 0) return null;
+            return (
+              <div key={section.label} className="nav-section">
+                <div className="nav-section-label">{section.label}</div>
+                {visibleItems.map(item => (
+                  <button
+                    key={item.id}
+                    className={`nav-item${active === item.id ? ' active' : ''}`}
+                    onClick={() => handleNav(item.id)}
+                    title={item.label}
+                  >
+                    <Icon id={item.id} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                    {item.badge && (
+                      <span style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: '2px 5px',
+                        borderRadius: 3,
+                        background: item.badgeLive ? 'rgba(255,107,90,0.18)' : 'rgba(0,191,166,0.15)',
+                        color: item.badgeLive ? 'var(--coral)' : 'var(--teal)',
+                        letterSpacing: '0.4px',
+                      }}>{item.badge}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        {onLogout && (
+          <div className="sidebar-footer">
+            <button className="nav-item nav-logout" onClick={onLogout} title="Çıkış Yap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Çıkış Yap</span>
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
   );
 }

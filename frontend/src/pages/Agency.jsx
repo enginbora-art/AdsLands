@@ -171,7 +171,7 @@ function BrandsTab({ clients, loading, onSelectBrand, onInvite }) {
           Arama sonucu bulunamadı.
         </div>
       ) : (
-        <div className="card">
+        <div className="card table-wrap">
           <table className="cmp-table">
             <colgroup>
               <col style={{ width: '30%' }} />
@@ -293,7 +293,7 @@ function SentTab({ items }) {
   }
 
   return (
-    <div className="card">
+    <div className="card table-wrap">
       <table className="cmp-table">
         <thead><tr><th>Alıcı</th><th>Durum</th><th>Tarih</th></tr></thead>
         <tbody>

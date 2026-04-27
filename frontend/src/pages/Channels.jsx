@@ -518,7 +518,7 @@ export default function Channels({ onNav }) {
                   <span style={{ width: 20, height: 20, background: '#E3740020', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#E37400' }}>GA</span>
                   Google Analytics — Web Verileri
                 </div>
-                <div className="metrics" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+                <div className="metrics">
                   {[
                     { label: 'Toplam Oturum',    value: fmtN(gaData.sessions) },
                     { label: 'Toplam Kullanıcı', value: fmtN(gaData.users) },

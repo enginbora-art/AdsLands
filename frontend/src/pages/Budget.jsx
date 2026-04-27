@@ -467,7 +467,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         </div>
       ) : (
         <>
-          <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <div className="metrics">
             <div className="metric-card teal">
               <div className="metric-label">Toplam Bütçe</div>
               <div className="metric-value">₺{fmt(totalBudget)}</div>

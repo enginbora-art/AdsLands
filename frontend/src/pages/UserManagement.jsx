@@ -271,7 +271,7 @@ export default function UserManagement() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
         ) : tab === 'users' ? (
-          <div className="card">
+          <div className="card table-wrap">
             <table className="cmp-table">
               <thead>
                 <tr>

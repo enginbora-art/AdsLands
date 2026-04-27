@@ -782,8 +782,8 @@ export default function Integrations() {
         })}
       </div>
 
-      {/* Agency: MCC + Meta BM Import */}
-      {isAgency && (
+      {/* Agency only, without a selected brand: MCC + Meta BM Import */}
+      {isAgency && !selectedBrand && (
         <div style={s.importSection}>
           <div style={s.importTitle}>Toplu Hesap Aktarımı</div>
           <p style={s.importSub}>Ajans hesabınızdaki tüm müşteri hesaplarını platforma aktarın, her biri için otomatik marka ve bağlantı oluşturulur.</p>

@@ -99,7 +99,7 @@ function AgencySummary() {
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">Dashboard</div></div>
       <div className="content">
-        <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
+        <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="Toplam Müşteri"      value={loading ? '—' : summary.total_clients}                       sub="Bağlı marka"  accent="#A78BFA" />
           <MetricCard label="Yönetilen Bütçe"     value={loading ? '—' : `₺${fmt(summary.total_managed_budget)}`}    sub="Bu ay toplam" accent="var(--teal)" />
           <MetricCard label="Bugünkü Harcama"     value={loading ? '—' : `₺${fmt(summary.total_today_spend)}`}       sub="Tüm markalar" accent="#60A5FA" />
@@ -150,7 +150,7 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       <div className="content">
         <BudgetIntegrationWarning budget={budget} integrations={integrations} onNav={onNav} />
-        <div className="metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
+        <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="var(--teal)" />
           <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#60A5FA" />
           <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" />

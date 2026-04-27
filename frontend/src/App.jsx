@@ -82,6 +82,7 @@ function buildUrl(page, brand) {
 function AppInner() {
   const { user, loading, logout } = useAuth();
   const { selectedBrand, setSelectedBrand } = useSelectedBrand();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [active, setActive] = useState(() => {
     const { page } = parseUrl();
@@ -158,6 +159,7 @@ function AppInner() {
       sessionStorage.removeItem('selectedBrand');
     }
     setActive(id);
+    setSidebarOpen(false);
     window.history.pushState({}, '', buildUrl(id, brand));
   };
 
@@ -165,8 +167,8 @@ function AppInner() {
 
   return (
     <div className="app">
-      <Sidebar active={active} onNav={handleNav} onLogout={logout} />
-      <Header onNav={handleNav} />
+      <Sidebar active={active} onNav={handleNav} onLogout={logout} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Header onNav={handleNav} onMenuToggle={() => setSidebarOpen(prev => !prev)} />
       <main className="main">
         {active === 'agency'
           ? <Agency key="agency" onSelectBrand={handleSelectBrand} />

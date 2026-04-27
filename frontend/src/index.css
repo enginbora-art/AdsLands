@@ -185,7 +185,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .comp-stat-lbl { font-size: 10px; color: var(--text3); }
 
 /* Detection log */
-.detection-log { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 24px; overflow: hidden; }
+.detection-log { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 24px; }
 .log-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .log-table { width: 100%; border-collapse: collapse; }
 .log-table thead tr { background: var(--bg3); }
@@ -263,3 +263,134 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .cmp-table th.col-num { text-align: right; font-family: var(--font); }
 .cmp-table .col-center { text-align: center; }
 .cmp-table th.col-center { text-align: center; }
+
+/* ── Responsive Utilities ───────────────────────────────────────────────────── */
+.resp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; }
+.resp-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Responsive Layout ──────────────────────────────────────────────────────── */
+
+/* Hamburger button — hidden on desktop, shown on mobile */
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255,255,255,0.6);
+  padding: 8px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.menu-toggle:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
+
+/* Header positional class — left overridden at each breakpoint */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 220px;
+  right: 0;
+  height: 56px;
+  padding: 0 24px;
+}
+
+/* Sidebar mobile backdrop */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9;
+  cursor: pointer;
+  transition: opacity 0.25s;
+  opacity: 0;
+  pointer-events: none;
+}
+.sidebar-backdrop.visible { opacity: 1; pointer-events: auto; }
+
+/* Notification dropdown responsive */
+.notif-dropdown { width: 340px; }
+
+/* Tablet: 769–1024px — icon-only sidebar */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar { width: 60px; overflow: visible; }
+  .sidebar .logo { justify-content: center; padding: 20px 0 16px; }
+  .sidebar .logo-text { display: none; }
+  .sidebar .nav-section-label { display: none; }
+  .sidebar .nav-item { justify-content: center; padding: 0; height: 40px; }
+  .sidebar .nav-item > span { display: none; }
+  .sidebar .nav-item svg { opacity: 0.7; }
+  .sidebar .nav-item.active svg { opacity: 1; }
+  .sidebar-brand-chip { display: none !important; }
+  .sidebar-footer .nav-item { justify-content: center; padding: 0; }
+  .sidebar-footer .nav-item > span { display: none; }
+
+  .app-header { left: 60px; }
+  .main { margin-left: 60px; }
+}
+
+/* Mobile: ≤ 768px */
+@media (max-width: 768px) {
+  /* Sidebar slides in as overlay */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 100;
+    width: 240px;
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+  .sidebar-backdrop { display: block; }
+
+  .menu-toggle { display: flex; }
+  .app-header { left: 0; padding: 0 16px; }
+  .main { margin-left: 0; }
+
+  /* Grid adjustments */
+  .metrics { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .charts-row { grid-template-columns: 1fr; }
+  .tv-metrics { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .plan-vs-actual { grid-template-columns: 1fr; }
+  .channel-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Spacing */
+  .content { padding: 16px; }
+  .topbar { padding: 0 16px; }
+  .topbar-title { font-size: 14px; }
+  .card-body { padding: 14px; overflow-x: auto; }
+  .metric-value { font-size: 22px; }
+
+  /* Tables — horizontal scroll */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .detection-log { overflow-x: auto; }
+  .log-table { min-width: 560px; }
+  .cmp-table { min-width: 480px; table-layout: auto; }
+
+  /* Responsive grids */
+  .resp-grid-2 { grid-template-columns: 1fr; }
+  .resp-grid-3 { grid-template-columns: 1fr 1fr; }
+
+  /* Notification dropdown constrained to viewport */
+  .notif-dropdown { width: calc(100vw - 32px); max-width: 340px; right: -4px !important; }
+
+  /* Hide user subtitle in header */
+  .header-user-sub { display: none; }
+
+  /* Touch targets — keep toggles their own size */
+  .nav-item { min-height: 40px; }
+  .btn-export { padding: 10px 16px; min-height: 44px; }
+  .alert-action { min-height: 44px; }
+}
+
+/* Very small: ≤ 480px */
+@media (max-width: 480px) {
+  .metrics { grid-template-columns: 1fr; }
+  .tv-metrics { grid-template-columns: 1fr; }
+  .roas-grid { grid-template-columns: 1fr 1fr; }
+  .topbar-right { gap: 8px; }
+  .resp-grid-2, .resp-grid-3 { grid-template-columns: 1fr; }
+}
