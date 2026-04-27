@@ -136,6 +136,20 @@ async function migrate() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS sector VARCHAR(100);
     `);
 
+    // reports tablosu
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        brand_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        report_type VARCHAR(50) NOT NULL,
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // Platform constraint'ini güncelle (adform + linkedin ekle)
     await client.query(`
       DO $$

@@ -83,6 +83,12 @@ export const connectAppsflyer = (data) => api.post('/integrations/appsflyer/conn
 export const connectAdjust    = (data) => api.post('/integrations/adjust/connect', data).then(r => r.data);
 export const connectAdform    = (data) => api.post('/integrations/adform/connect', data).then(r => r.data);
 
+// ── AI Raporları ──────────────────────────────────────────────────────────────
+export const getReports    = (brandId) =>
+  api.get(`/reports${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+export const saveReport    = (data) => api.post('/reports', data).then(r => r.data);
+export const deleteReport  = (id) => api.delete(`/reports/${id}`).then(r => r.data);
+
 // ── Kanallar ──────────────────────────────────────────────────────────────────
 export const getChannelData = (days, platform, brandId) =>
   api.get(`/channels?days=${days}&platform=${platform || 'all'}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
