@@ -55,6 +55,8 @@ export const getAgencyDashboard = () => api.get('/dashboard/agency').then(r => r
 export const getAgencyBrandDetail = (brandId) => api.get(`/dashboard/agency/brand/${brandId}`).then(r => r.data);
 export const getDashboardAnomalies = () => api.get('/dashboard/anomalies').then(r => r.data);
 export const resolveAnomaly = (id) => api.patch(`/dashboard/anomalies/${id}/resolve`).then(r => r.data);
+export const getAnomalySettings = () => api.get('/dashboard/anomaly-settings').then(r => r.data);
+export const saveAnomalySettings = (data) => api.post('/dashboard/anomaly-settings', data).then(r => r.data);
 
 export const benchmarkAnalyze = (metrics, sector) =>
   fetch(`${import.meta.env.VITE_API_URL}/benchmark/analyze`, {

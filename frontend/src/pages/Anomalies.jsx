@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getDashboardAnomalies, getAgencyBrandDetail, getAgencyDashboard, resolveAnomaly } from '../api';
+import { getDashboardAnomalies, getAgencyBrandDetail, getAgencyDashboard, resolveAnomaly, getAnomalySettings, saveAnomalySettings } from '../api';
 
 const ANIM_CSS = `
 @keyframes anom-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -387,36 +387,80 @@ function AnomalyListSection({ anomalies: initial, loading }) {
   );
 }
 
-// ── Notification settings ─────────────────────────────────────────────────────
-const SETTINGS_KEY = 'anomaly_settings_v1';
-const DEFAULT_SETTINGS = { budgetDelta: 50, cpaDelta: 30, roasDelta: 25, emailOn: true, platformOn: true };
+// ── Notification settings — DB-backed ────────────────────────────────────────
+const DEFAULT_SETTINGS = { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true };
+
+function Toggle({ on, onChange }) {
+  return (
+    <button onClick={() => onChange(!on)} style={{ width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: on ? 'var(--teal)' : 'rgba(255,255,255,0.12)', position:'relative', transition:'background 0.2s ease', flexShrink:0 }}>
+      <div style={{ position:'absolute', top:3, left: on ? 18 : 3, width:14, height:14, borderRadius:'50%', background:'#fff', transition:'left 0.2s ease' }} />
+    </button>
+  );
+}
 
 function NotificationSettings() {
-  const [s, setS] = useState(() => {
-    try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
-    catch { return DEFAULT_SETTINGS; }
-  });
-  const [saved, setSaved] = useState(false);
+  const { user } = useAuth();
+  const [s, setS] = useState(DEFAULT_SETTINGS);
+  const [loadState, setLoadState] = useState('loading'); // loading | idle | saving | saved | error
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    getAnomalySettings()
+      .then(data => {
+        setS({
+          budget_delta: data.budget_delta ?? 50,
+          cpa_delta:    data.cpa_delta    ?? 30,
+          roas_delta:   data.roas_delta   ?? 25,
+          email_on:     data.email_on     ?? true,
+          platform_on:  data.platform_on  ?? true,
+        });
+        setLoadState('idle');
+      })
+      .catch(() => setLoadState('idle')); // show defaults on error
+  }, []);
 
   const update = (k, v) => setS(prev => ({ ...prev, [k]: v }));
-  const save = () => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+
+  const save = async () => {
+    setLoadState('saving'); setErrorMsg('');
+    try {
+      const saved = await saveAnomalySettings(s);
+      setS({
+        budget_delta: saved.budget_delta,
+        cpa_delta:    saved.cpa_delta,
+        roas_delta:   saved.roas_delta,
+        email_on:     saved.email_on,
+        platform_on:  saved.platform_on,
+      });
+      setLoadState('saved');
+      setTimeout(() => setLoadState('idle'), 2500);
+    } catch (err) {
+      setErrorMsg(err?.response?.data?.error || 'Kayıt başarısız.');
+      setLoadState('error');
+      setTimeout(() => setLoadState('idle'), 3000);
+    }
   };
+
+  const THRESHOLDS = [
+    { key:'budget_delta', label:'Bütçe sapması eşiği', hint:'Günlük harcama bu oranda artarsa alarm verir' },
+    { key:'cpa_delta',    label:'CPA artış eşiği',     hint:'Dönüşüm maliyeti bu oranda artarsa alarm verir' },
+    { key:'roas_delta',   label:'ROAS düşüş eşiği',    hint:'ROAS bu oranda düşerse alarm verir' },
+  ];
 
   return (
     <div className="anom-in" style={{ background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:12, padding:'22px 24px', animationDelay:'0.2s' }}>
-      <div style={{ fontSize:14, fontWeight:700, marginBottom:20 }}>Bildirim Ayarları</div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700 }}>Bildirim Ayarları</div>
+          <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Ayarlar veritabanına kaydedilir ve tüm cihazlarda geçerlidir</div>
+        </div>
+        {loadState === 'loading' && <span style={{ fontSize:11, color:'var(--text3)' }}>Yükleniyor...</span>}
+      </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24, marginBottom:24 }}>
-        {[
-          { key:'budgetDelta', label:'Bütçe sapması eşiği', unit:'%' },
-          { key:'cpaDelta',    label:'CPA artış eşiği',     unit:'%' },
-          { key:'roasDelta',   label:'ROAS düşüş eşiği',    unit:'%' },
-        ].map(item => (
+        {THRESHOLDS.map(item => (
           <div key={item.key}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
               <span style={{ fontSize:12, color:'var(--text3)' }}>{item.label}</span>
               <span style={{ fontSize:13, fontWeight:700, color:'var(--teal)', fontFamily:'var(--mono)' }}>%{s[item.key]}</span>
             </div>
@@ -424,54 +468,68 @@ function NotificationSettings() {
               type="range" min={10} max={100} step={5} value={s[item.key]}
               onChange={e => update(item.key, Number(e.target.value))}
               className="settings-slider"
+              disabled={loadState === 'loading'}
             />
             <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
               <span style={{ fontSize:10, color:'var(--text3)' }}>%10</span>
+              <span style={{ fontSize:10, color:'var(--text3)', textAlign:'center', flex:1 }}>{item.hint}</span>
               <span style={{ fontSize:10, color:'var(--text3)' }}>%100</span>
             </div>
           </div>
         ))}
 
         <div>
-          <div style={{ fontSize:12, color:'var(--text3)', marginBottom:12 }}>Bildirim Kanalları</div>
-          {[
-            { key:'emailOn',    label:'E-posta bildirimleri', icon:'📧' },
-            { key:'platformOn', label:'Platform bildirimleri', icon:'🔔' },
-          ].map(ch => (
-            <div key={ch.key} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:14 }}>{ch.icon}</span>
-                <span style={{ fontSize:12, color:'var(--text2)' }}>{ch.label}</span>
+          <div style={{ fontSize:12, color:'var(--text3)', fontWeight:600, marginBottom:12 }}>Bildirim Kanalları</div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                <span style={{ fontSize:14 }}>📧</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>E-posta bildirimleri</span>
               </div>
-              <button
-                onClick={() => update(ch.key, !s[ch.key])}
-                style={{
-                  width:36, height:20, borderRadius:10, border:'none', cursor:'pointer',
-                  background: s[ch.key] ? 'var(--teal)' : 'rgba(255,255,255,0.12)',
-                  position:'relative', transition:'background 0.2s ease',
-                }}>
-                <div style={{
-                  position:'absolute', top:3, left: s[ch.key] ? 18 : 3,
-                  width:14, height:14, borderRadius:'50%', background:'#fff',
-                  transition:'left 0.2s ease',
-                }} />
-              </button>
+              <div style={{ fontSize:11, color:'var(--text3)', marginLeft:22 }}>
+                → {user?.email || 'Hesap e-postanıza'}
+                {' ve bağlı ajans/marka yöneticilerine'}
+              </div>
             </div>
-          ))}
+            <Toggle on={s.email_on} onChange={v => update('email_on', v)} />
+          </div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                <span style={{ fontSize:14 }}>🔔</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>Platform bildirimleri</span>
+              </div>
+              <div style={{ fontSize:11, color:'var(--text3)', marginLeft:22 }}>
+                → AdsLands bildirim merkezine yazar
+              </div>
+            </div>
+            <Toggle on={s.platform_on} onChange={v => update('platform_on', v)} />
+          </div>
         </div>
       </div>
 
-      <button
-        onClick={save}
-        style={{
-          padding:'9px 22px', background: saved ? 'var(--teal)' : 'transparent',
-          border:`1px solid ${saved ? 'var(--teal)' : 'var(--border2)'}`,
-          borderRadius:8, color: saved ? '#0B1219' : 'var(--text2)',
-          fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)',
-          transition:'all 0.2s ease',
-        }}>
-        {saved ? '✓ Kaydedildi' : 'Kaydet'}
-      </button>
+      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <button
+          onClick={save}
+          disabled={loadState === 'loading' || loadState === 'saving'}
+          style={{
+            padding:'9px 22px',
+            background: loadState === 'saved' ? 'var(--teal)' : loadState === 'error' ? 'rgba(255,107,90,0.15)' : 'transparent',
+            border:`1px solid ${loadState === 'saved' ? 'var(--teal)' : loadState === 'error' ? 'rgba(255,107,90,0.5)' : 'var(--border2)'}`,
+            borderRadius:8,
+            color: loadState === 'saved' ? '#0B1219' : loadState === 'error' ? 'var(--coral)' : 'var(--text2)',
+            fontSize:13, fontWeight:700, cursor: (loadState === 'loading' || loadState === 'saving') ? 'not-allowed' : 'pointer',
+            fontFamily:'var(--font)', transition:'all 0.2s ease', opacity: loadState === 'saving' ? 0.6 : 1,
+          }}>
+          {loadState === 'saving' ? 'Kaydediliyor...' : loadState === 'saved' ? '✓ Kaydedildi' : 'Kaydet'}
+        </button>
+        {loadState === 'error' && errorMsg && (
+          <span style={{ fontSize:12, color:'var(--coral)' }}>⚠ {errorMsg}</span>
+        )}
+        {loadState === 'saved' && (
+          <span style={{ fontSize:12, color:'var(--teal)' }}>Ayarlar veritabanına kaydedildi. Yeni anomaliler bu eşikleri kullanacak.</span>
+        )}
+      </div>
     </div>
   );
 }

@@ -276,6 +276,21 @@ async function migrate() {
       );
     `);
 
+    // ── Anomali Ayarları ──────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS anomaly_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        budget_delta INTEGER NOT NULL DEFAULT 50,
+        cpa_delta INTEGER NOT NULL DEFAULT 30,
+        roas_delta INTEGER NOT NULL DEFAULT 25,
+        email_on BOOLEAN NOT NULL DEFAULT true,
+        platform_on BOOLEAN NOT NULL DEFAULT true,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id)
+      );
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

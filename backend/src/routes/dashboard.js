@@ -202,6 +202,51 @@ router.get('/anomalies', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/dashboard/anomaly-settings
+router.get('/anomaly-settings', authMiddleware, async (req, res) => {
+  try {
+    const { rows: [s] } = await pool.query(
+      'SELECT * FROM anomaly_settings WHERE company_id = $1',
+      [req.user.company_id]
+    );
+    res.json(s || { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// POST /api/dashboard/anomaly-settings
+router.post('/anomaly-settings', authMiddleware, async (req, res) => {
+  const { budget_delta, cpa_delta, roas_delta, email_on, platform_on } = req.body;
+  const clamp = (v) => { const n = parseInt(v); return (!isNaN(n) && n >= 10 && n <= 200) ? n : null; };
+  const bd = clamp(budget_delta);
+  const cd = clamp(cpa_delta);
+  const rd = clamp(roas_delta);
+  if (bd === null || cd === null || rd === null) {
+    return res.status(400).json({ error: 'Eşik değerleri 10-200 arasında olmalıdır.' });
+  }
+  try {
+    const { rows: [s] } = await pool.query(
+      `INSERT INTO anomaly_settings (company_id, budget_delta, cpa_delta, roas_delta, email_on, platform_on, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (company_id) DO UPDATE SET
+         budget_delta = EXCLUDED.budget_delta,
+         cpa_delta    = EXCLUDED.cpa_delta,
+         roas_delta   = EXCLUDED.roas_delta,
+         email_on     = EXCLUDED.email_on,
+         platform_on  = EXCLUDED.platform_on,
+         updated_at   = NOW()
+       RETURNING *`,
+      [req.user.company_id, bd, cd, rd, !!email_on, !!platform_on]
+    );
+    res.json(s);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 // PATCH /api/dashboard/anomalies/:id/resolve
 router.patch('/anomalies/:id/resolve', authMiddleware, async (req, res) => {
   try {

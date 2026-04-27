@@ -2,48 +2,59 @@ const { Resend } = require('resend');
 const pool = require('../db');
 const getPlatformService = require('./platforms');
 
-const ANOMALY_THRESHOLD = 1.5;
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads',
   meta: 'Meta Ads',
   tiktok: 'TikTok Ads',
   google_analytics: 'Google Analytics',
+  linkedin: 'LinkedIn',
+  adform: 'Adform',
 };
 
-async function detectAndHandle(integration) {
-  const { rows: metrics } = await pool.query(
-    `SELECT spend, date FROM ad_metrics
-     WHERE integration_id = $1
-     ORDER BY date DESC LIMIT 31`,
-    [integration.id]
-  );
-
-  if (metrics.length < 8) return;
-
-  const [latest, ...history] = metrics;
-  const avgSpend = history.reduce((s, r) => s + parseFloat(r.spend), 0) / history.length;
-
-  if (avgSpend === 0 || parseFloat(latest.spend) <= avgSpend * ANOMALY_THRESHOLD) return;
-
-  const platformLabel = PLATFORM_LABELS[integration.platform] || integration.platform;
-  console.log(`⚠️  Anomali: ${platformLabel} — ₺${latest.spend} (ort: ₺${avgSpend.toFixed(0)})`);
-
-  const platformService = getPlatformService(integration.platform);
-  await platformService.pauseCampaign(integration);
-
-  await pool.query(
-    `INSERT INTO anomalies (integration_id, company_id, metric, expected_value, actual_value, status)
-     VALUES ($1, $2, 'spend', $3, $4, 'open')`,
-    [integration.id, integration.company_id, avgSpend.toFixed(2), latest.spend]
-  );
-
-  await notifyAnomaly(integration, latest.spend, avgSpend, platformLabel);
+// Read company-specific settings; fall back to safe defaults if table doesn't exist yet
+async function getSettings(companyId) {
+  try {
+    const { rows: [s] } = await pool.query(
+      'SELECT * FROM anomaly_settings WHERE company_id = $1',
+      [companyId]
+    );
+    return s || { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true };
+  } catch {
+    return { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true };
+  }
 }
 
-async function notifyAnomaly(integration, actualSpend, expectedSpend, platformLabel) {
-  const resend = new Resend(process.env.RESEND_API_KEY);
+// Insert a notification row for every active user of the company
+async function createPlatformNotifications(companyId, anomalyId, platformLabel, actualSpend, expectedSpend) {
+  const pct = Math.round((actualSpend / expectedSpend - 1) * 100);
+  const title   = `⚠️ Anomali: ${platformLabel}`;
+  const message = `Günlük harcama %${pct} artış gösterdi. Gerçek: ₺${Number(actualSpend).toLocaleString('tr-TR')}, Beklenen: ₺${Number(expectedSpend).toLocaleString('tr-TR')}`;
+  const meta    = JSON.stringify({ anomaly_id: anomalyId, actual_value: actualSpend, expected_value: expectedSpend });
 
-  // Şirketin aktif kullanıcılarını bul
+  const { rows: users } = await pool.query(
+    'SELECT id FROM users WHERE company_id = $1 AND is_active = true',
+    [companyId]
+  );
+
+  for (const u of users) {
+    await pool.query(
+      `INSERT INTO notifications (user_id, company_id, type, title, message, meta)
+       VALUES ($1, $2, 'anomaly_detected', $3, $4, $5)`,
+      [u.id, companyId, title, message, meta]
+    ).catch(err => console.error('Platform bildirimi oluşturulamadı:', err.message));
+  }
+}
+
+async function sendAnomalyEmail(integration, actualSpend, expectedSpend, platformLabel) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('RESEND_API_KEY eksik — e-posta gönderilmedi.');
+    return;
+  }
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const pct = Math.round((actualSpend / expectedSpend - 1) * 100);
+
+  // Brand company users
   const { rows: users } = await pool.query(
     `SELECT u.email, c.name AS company_name
      FROM users u JOIN companies c ON c.id = u.company_id
@@ -51,7 +62,7 @@ async function notifyAnomaly(integration, actualSpend, expectedSpend, platformLa
     [integration.company_id]
   );
 
-  // Bağlı şirketleri de dahil et
+  // Connected agency/brand admin users
   const { rows: partners } = await pool.query(
     `SELECT u.email FROM users u
      JOIN connections conn ON (
@@ -75,30 +86,83 @@ async function notifyAnomaly(integration, actualSpend, expectedSpend, platformLa
       </div>
       <p style="color:#94A8B3;line-height:1.7;margin:0 0 20px;">
         Günlük harcama 30 günlük ortalamanın
-        <strong style="color:#FF6B5A;">%${Math.round((actualSpend / expectedSpend - 1) * 100)} üzerinde</strong>.
+        <strong style="color:#FF6B5A;">%${pct} üzerinde</strong>.
       </p>
-      <div style="background:#162533;border-radius:8px;padding:16px 20px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <div style="font-size:11px;color:#5A7080;margin-bottom:4px;">GERÇEK HARCAMA</div>
-          <div style="font-size:20px;font-weight:700;color:#FF6B5A;">₺${Number(actualSpend).toLocaleString('tr-TR')}</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:#5A7080;margin-bottom:4px;">30 GÜNLÜK ORT.</div>
-          <div style="font-size:20px;font-weight:700;">₺${Number(expectedSpend).toLocaleString('tr-TR')}</div>
-        </div>
+      <div style="background:#162533;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:4px 0;font-size:11px;color:#5A7080;">GERÇEK HARCAMA</td>
+            <td style="padding:4px 0;font-size:11px;color:#5A7080;">30 GÜNLÜK ORT.</td>
+          </tr>
+          <tr>
+            <td style="font-size:20px;font-weight:700;color:#FF6B5A;">₺${Number(actualSpend).toLocaleString('tr-TR')}</td>
+            <td style="font-size:20px;font-weight:700;">₺${Number(expectedSpend).toLocaleString('tr-TR')}</td>
+          </tr>
+        </table>
       </div>
       <p style="color:#94A8B3;font-size:13px;">Kampanya otomatik olarak <strong>durdurulmuştur</strong>.</p>
+      <p style="color:#5A7080;font-size:11px;margin-top:24px;">
+        Bu bildirimi kapatmak için AdsLands &rsaquo; Anomaliler &rsaquo; Bildirim Ayarları'ndan e-posta bildirimlerini devre dışı bırakabilirsiniz.
+      </p>
     </div>
   `;
 
   const recipients = [...users, ...partners];
+  const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
   for (const r of recipients) {
     await resend.emails.send({
-      from: 'AdsLands <onboarding@resend.dev>',
+      from: `AdsLands <${fromEmail}>`,
       to: r.email,
-      subject: `⚠️ Anomali: ${companyName} — ${platformLabel}`,
+      subject: `⚠️ Anomali: ${companyName} — ${platformLabel} (+%${pct})`,
       html,
-    }).catch(err => console.error('Anomali maili gönderilemedi:', err.message));
+    }).catch(err => console.error('Anomali maili gönderilemedi:', r.email, err.message));
+  }
+}
+
+async function detectAndHandle(integration) {
+  const { rows: metrics } = await pool.query(
+    `SELECT spend, date FROM ad_metrics
+     WHERE integration_id = $1
+     ORDER BY date DESC LIMIT 31`,
+    [integration.id]
+  );
+
+  if (metrics.length < 8) return;
+
+  const [latest, ...history] = metrics;
+  const avgSpend = history.reduce((s, r) => s + parseFloat(r.spend), 0) / history.length;
+
+  // Read company settings to get the configured threshold
+  const settings = await getSettings(integration.company_id);
+  const threshold = 1 + (settings.budget_delta / 100);
+
+  if (avgSpend === 0 || parseFloat(latest.spend) <= avgSpend * threshold) return;
+
+  const actualSpend   = parseFloat(latest.spend);
+  const platformLabel = PLATFORM_LABELS[integration.platform] || integration.platform;
+  console.log(`⚠️  Anomali (eşik %${settings.budget_delta}): ${platformLabel} — ₺${actualSpend} (ort: ₺${avgSpend.toFixed(0)})`);
+
+  // Pause campaign
+  const platformService = getPlatformService(integration.platform);
+  await platformService.pauseCampaign(integration);
+
+  // Insert anomaly record
+  const { rows: [anomaly] } = await pool.query(
+    `INSERT INTO anomalies (integration_id, company_id, metric, expected_value, actual_value, status)
+     VALUES ($1, $2, 'spend', $3, $4, 'open')
+     RETURNING id`,
+    [integration.id, integration.company_id, avgSpend.toFixed(2), actualSpend]
+  );
+
+  // Platform notification (notifications table)
+  if (settings.platform_on) {
+    await createPlatformNotifications(integration.company_id, anomaly.id, platformLabel, actualSpend, avgSpend);
+  }
+
+  // E-posta bildirimi
+  if (settings.email_on) {
+    await sendAnomalyEmail(integration, actualSpend, avgSpend, platformLabel);
   }
 }
 
