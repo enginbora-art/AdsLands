@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { updateProfile, getSettings, updateCompanySector } from '../api';
+import { updateProfile, getSettings, updateCompanySector, getNotificationPrefs, saveNotificationPrefs } from '../api';
 import { parseJwt } from '../utils';
 
 const NOTIF_DEFAULTS = {
@@ -24,6 +24,8 @@ export default function Settings() {
   const { user, saveAuth } = useAuth();
   const { selectedBrand } = useSelectedBrand();
   const [notifications, setNotifications] = useState(NOTIF_DEFAULTS);
+  const [notifState, setNotifState]       = useState('idle'); // idle | saving | saved | error
+  const notifTimerRef                     = useRef(null);
   const [fullName, setFullName]           = useState(user?.full_name || '');
   const [profileState, setProfileState]   = useState('idle');
   const [profileError, setProfileError]   = useState('');
@@ -48,7 +50,34 @@ export default function Settings() {
       .catch(() => {});
   }, [showBrandProfile, isAgency, selectedBrand?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleNotif = (key) => setNotifications(n => ({ ...n, [key]: !n[key] }));
+  // Load notification prefs from DB on mount
+  useEffect(() => {
+    getNotificationPrefs()
+      .then(prefs => {
+        if (prefs && typeof prefs === 'object' && Object.keys(prefs).length > 0) {
+          setNotifications(prev => ({ ...prev, ...prefs }));
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Toggle + debounced auto-save (600ms)
+  const toggleNotif = (key) => {
+    const next = { ...notifications, [key]: !notifications[key] };
+    setNotifications(next);
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    setNotifState('saving');
+    notifTimerRef.current = setTimeout(async () => {
+      try {
+        await saveNotificationPrefs(next);
+        setNotifState('saved');
+        setTimeout(() => setNotifState('idle'), 2500);
+      } catch {
+        setNotifState('error');
+        setTimeout(() => setNotifState('idle'), 3000);
+      }
+    }, 600);
+  };
 
   const handleProfileSave = async () => {
     if (!fullName.trim()) { setProfileError('Ad Soyad boş bırakılamaz.'); return; }
@@ -134,7 +163,13 @@ export default function Settings() {
 
           {/* Notifications card */}
           <div className="card">
-            <div className="card-header"><div className="card-title">Bildirimler</div></div>
+            <div className="card-header">
+              <div className="card-title">Bildirimler</div>
+              <div style={{ fontSize: 11, fontWeight: 600, transition: 'all 0.2s',
+                color: notifState === 'saved' ? 'var(--teal)' : notifState === 'error' ? 'var(--coral)' : notifState === 'saving' ? 'var(--text3)' : 'transparent' }}>
+                {notifState === 'saving' ? 'Kaydediliyor...' : notifState === 'saved' ? '✓ Kaydedildi' : notifState === 'error' ? '⚠ Hata' : '·'}
+              </div>
+            </div>
             <div className="card-body">
               {[
                 { key: 'anomalyAlerts', label: 'Anomali uyarıları',   desc: 'Anormal metrik değişimlerinde bildir' },

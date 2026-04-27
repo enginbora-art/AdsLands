@@ -131,3 +131,5 @@ export const getSettings = (brandId) =>
 export const updateSettings = (data) => api.put('/company/settings', data).then(r => r.data);
 export const updateCompanySector = (id, sector) => api.patch(`/companies/${id}`, { sector }).then(r => r.data);
 export const updateProfile = (data) => api.patch('/users/me', data).then(r => r.data);
+export const getNotificationPrefs = () => api.get('/users/me/notification-prefs').then(r => r.data);
+export const saveNotificationPrefs = (prefs) => api.patch('/users/me/notification-prefs', prefs).then(r => r.data);

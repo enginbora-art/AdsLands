@@ -276,6 +276,11 @@ async function migrate() {
       );
     `);
 
+    // notification_prefs kolonu ekle (varsa sessizce geç)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB DEFAULT '{}';
+    `);
+
     // ── Anomali Ayarları ──────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS anomaly_settings (

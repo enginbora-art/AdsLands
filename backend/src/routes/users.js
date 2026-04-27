@@ -47,6 +47,38 @@ router.patch('/users/me', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/users/me/notification-prefs
+router.get('/users/me/notification-prefs', authMiddleware, async (req, res) => {
+  try {
+    const { rows: [row] } = await pool.query(
+      'SELECT notification_prefs FROM users WHERE id = $1',
+      [req.user.user_id]
+    );
+    res.json(row?.notification_prefs || {});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// PATCH /api/users/me/notification-prefs
+router.patch('/users/me/notification-prefs', authMiddleware, async (req, res) => {
+  const prefs = req.body;
+  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+    return res.status(400).json({ error: 'Geçersiz tercihler.' });
+  }
+  try {
+    await pool.query(
+      'UPDATE users SET notification_prefs = $1 WHERE id = $2',
+      [JSON.stringify(prefs), req.user.user_id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 // PATCH /api/companies/:id — update sector (own company or agency's connected brand)
 router.patch('/companies/:id', authMiddleware, async (req, res) => {
   const { sector } = req.body;
