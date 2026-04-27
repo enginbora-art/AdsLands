@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { updateProfile } from '../api';
+import { useSelectedBrand } from '../context/BrandContext';
+import { updateProfile, getSettings, updateCompanySector } from '../api';
 import { parseJwt } from '../utils';
 
 const NOTIF_DEFAULTS = {
@@ -11,14 +12,41 @@ const NOTIF_DEFAULTS = {
   emailDigest: false,
 };
 
+const SECTORS = [
+  'E-ticaret', 'Perakende', 'Finans & Sigorta', 'Otomotiv',
+  'Gıda & İçecek', 'Turizm & Seyahat', 'Teknoloji & SaaS',
+  'Sağlık & Güzellik', 'Eğitim', 'Gayrimenkul', 'Medya & Eğlence', 'Diğer',
+];
+
 const ROLE_LABELS = { agency: 'Ajans', brand: 'Marka' };
 
 export default function Settings() {
   const { user, saveAuth } = useAuth();
+  const { selectedBrand } = useSelectedBrand();
   const [notifications, setNotifications] = useState(NOTIF_DEFAULTS);
   const [fullName, setFullName]           = useState(user?.full_name || '');
-  const [profileState, setProfileState]   = useState('idle'); // idle | saving | saved | error
+  const [profileState, setProfileState]   = useState('idle');
   const [profileError, setProfileError]   = useState('');
+
+  const [sector, setSector]           = useState('');
+  const [sectorState, setSectorState] = useState('idle');
+  const [sectorError, setSectorError] = useState('');
+
+  const isAgency = user?.company_type === 'agency';
+  const isBrand  = user?.company_type === 'brand';
+
+  // Show brand profile card for brand users or agency users with a selected brand
+  const showBrandProfile = isBrand || (isAgency && selectedBrand);
+  const brandProfileName = isAgency ? (selectedBrand?.name || selectedBrand?.company_name) : user?.company_name;
+  const brandProfileId   = isAgency ? selectedBrand?.id : user?.company_id;
+
+  useEffect(() => {
+    if (!showBrandProfile) return;
+    const brandId = isAgency ? selectedBrand?.id : null;
+    getSettings(brandId)
+      .then(data => setSector(data.sector || ''))
+      .catch(() => {});
+  }, [showBrandProfile, isAgency, selectedBrand?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleNotif = (key) => setNotifications(n => ({ ...n, [key]: !n[key] }));
 
@@ -29,15 +57,26 @@ export default function Settings() {
     try {
       const { token: newJwt } = await updateProfile({ full_name: fullName.trim() });
       const payload = parseJwt(newJwt);
-      saveAuth(newJwt, {
-        ...user,
-        full_name: payload.full_name,
-      });
+      saveAuth(newJwt, { ...user, full_name: payload.full_name });
       setProfileState('saved');
       setTimeout(() => setProfileState('idle'), 2500);
     } catch (err) {
       setProfileError(err?.response?.data?.error || 'Kaydetme başarısız.');
       setProfileState('error');
+    }
+  };
+
+  const handleSectorSave = async () => {
+    if (!brandProfileId) return;
+    setSectorState('saving');
+    setSectorError('');
+    try {
+      await updateCompanySector(brandProfileId, sector);
+      setSectorState('saved');
+      setTimeout(() => setSectorState('idle'), 2500);
+    } catch (err) {
+      setSectorError(err?.response?.data?.error || 'Kaydetme başarısız.');
+      setSectorState('error');
     }
   };
 
@@ -87,7 +126,7 @@ export default function Settings() {
               <button
                 onClick={handleProfileSave}
                 disabled={profileState === 'saving'}
-                style={{ padding: '9px 20px', background: profileState === 'saved' ? 'rgba(52,211,153,0.15)' : 'var(--teal)', border: profileState === 'saved' ? '1px solid rgba(52,211,153,0.4)' : 'none', borderRadius: 8, color: profileState === 'saved' ? 'var(--success)' : 'var(--bg)', fontSize: 13, fontWeight: 700, cursor: profileState === 'saving' ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', transition: 'all 0.2s' }}>
+                style={saveBtnStyle(profileState)}>
                 {profileState === 'saving' ? 'Kaydediliyor...' : profileState === 'saved' ? '✓ Kaydedildi' : 'Kaydet'}
               </button>
             </div>
@@ -98,11 +137,11 @@ export default function Settings() {
             <div className="card-header"><div className="card-title">Bildirimler</div></div>
             <div className="card-body">
               {[
-                { key: 'anomalyAlerts', label: 'Anomali uyarıları',  desc: 'Anormal metrik değişimlerinde bildir' },
-                { key: 'weeklyReport',  label: 'Haftalık rapor',     desc: 'Her pazartesi otomatik rapor gönder' },
-                { key: 'tvDetection',   label: 'TV tespit uyarıları',desc: 'Yeni yayın tespitinde bildir' },
-                { key: 'budgetWarnings',label: 'Bütçe uyarıları',    desc: "Bütçe %80'i aşınca uyar" },
-                { key: 'emailDigest',   label: 'E-posta özeti',      desc: 'Günlük e-posta özeti gönder' },
+                { key: 'anomalyAlerts', label: 'Anomali uyarıları',   desc: 'Anormal metrik değişimlerinde bildir' },
+                { key: 'weeklyReport',  label: 'Haftalık rapor',      desc: 'Her pazartesi otomatik rapor gönder' },
+                { key: 'tvDetection',   label: 'TV tespit uyarıları', desc: 'Yeni yayın tespitinde bildir' },
+                { key: 'budgetWarnings',label: 'Bütçe uyarıları',     desc: "Bütçe %80'i aşınca uyar" },
+                { key: 'emailDigest',   label: 'E-posta özeti',       desc: 'Günlük e-posta özeti gönder' },
               ].map(({ key, label, desc }) => (
                 <div className="settings-row" key={key}>
                   <div>
@@ -115,10 +154,68 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Marka Profili card — brand users + agency with selected brand */}
+          {showBrandProfile && (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title">Marka Profili</div>
+                {brandProfileName && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>{brandProfileName}</div>
+                )}
+              </div>
+              <div className="card-body">
+                {isAgency && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={labelStyle}>Marka</div>
+                    <input className="sinput" value={brandProfileName || ''} readOnly style={{ opacity: 0.55, cursor: 'default' }} />
+                  </div>
+                )}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={labelStyle}>Sektör</div>
+                  <select
+                    className="sinput"
+                    value={sector}
+                    onChange={e => { setSector(e.target.value); setSectorState('idle'); setSectorError(''); }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <option value="">— Seçiniz —</option>
+                    {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {sectorError && (
+                  <div style={{ background: 'var(--coral-dim)', color: 'var(--coral)', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>
+                    {sectorError}
+                  </div>
+                )}
+                <button
+                  onClick={handleSectorSave}
+                  disabled={sectorState === 'saving'}
+                  style={saveBtnStyle(sectorState)}>
+                  {sectorState === 'saving' ? 'Kaydediliyor...' : sectorState === 'saved' ? '✓ Kaydedildi' : 'Kaydet'}
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </div>
   );
 }
 
-const labelStyle = { fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' };
+const labelStyle = {
+  fontSize: 11, color: 'var(--text3)', marginBottom: 6,
+  textTransform: 'uppercase', letterSpacing: '0.5px',
+};
+
+const saveBtnStyle = (state) => ({
+  padding: '9px 20px',
+  background: state === 'saved' ? 'rgba(52,211,153,0.15)' : 'var(--teal)',
+  border: state === 'saved' ? '1px solid rgba(52,211,153,0.4)' : 'none',
+  borderRadius: 8,
+  color: state === 'saved' ? 'var(--success)' : 'var(--bg)',
+  fontSize: 13, fontWeight: 700,
+  cursor: state === 'saving' ? 'not-allowed' : 'pointer',
+  fontFamily: 'var(--font)', transition: 'all 0.2s',
+  opacity: state === 'saving' ? 0.7 : 1,
+});

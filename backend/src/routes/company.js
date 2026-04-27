@@ -193,4 +193,32 @@ router.get('/permissions', authMiddleware, (req, res) => {
   res.json(ALL_PERMISSIONS);
 });
 
+// GET /api/company/settings — returns company info including sector
+// ?brand_id=xxx supported for agency context
+router.get('/settings', authMiddleware, async (req, res) => {
+  try {
+    const { brand_id } = req.query;
+    let companyId = req.user.company_id;
+
+    if (brand_id && req.user.company_type === 'agency') {
+      const { rows: [conn] } = await pool.query(
+        'SELECT 1 FROM connections WHERE agency_company_id = $1 AND brand_company_id = $2',
+        [req.user.company_id, brand_id]
+      );
+      if (!conn) return res.status(403).json({ error: 'Bu markaya erişim izniniz yok.' });
+      companyId = brand_id;
+    }
+
+    const { rows: [company] } = await pool.query(
+      'SELECT id, name, type, sector FROM companies WHERE id = $1',
+      [companyId]
+    );
+    if (!company) return res.status(404).json({ error: 'Şirket bulunamadı.' });
+    res.json(company);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 module.exports = router;

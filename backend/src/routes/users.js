@@ -47,4 +47,37 @@ router.patch('/users/me', authMiddleware, async (req, res) => {
   }
 });
 
+// PATCH /api/companies/:id — update sector (own company or agency's connected brand)
+router.patch('/companies/:id', authMiddleware, async (req, res) => {
+  const { sector } = req.body;
+  const targetId = req.params.id;
+
+  try {
+    if (targetId === req.user.company_id) {
+      if (!req.user.is_company_admin && !req.user.is_platform_admin) {
+        return res.status(403).json({ error: 'Şirket yöneticisi yetkisi gerekiyor.' });
+      }
+    } else {
+      if (!req.user.is_company_admin) {
+        return res.status(403).json({ error: 'Şirket yöneticisi yetkisi gerekiyor.' });
+      }
+      const { rows: [conn] } = await pool.query(
+        'SELECT 1 FROM connections WHERE agency_company_id = $1 AND brand_company_id = $2',
+        [req.user.company_id, targetId]
+      );
+      if (!conn) return res.status(403).json({ error: 'Bu şirkete erişim izniniz yok.' });
+    }
+
+    const { rows: [company] } = await pool.query(
+      `UPDATE companies SET sector = $1 WHERE id = $2 AND type != 'admin' RETURNING id, name, sector`,
+      [sector || null, targetId]
+    );
+    if (!company) return res.status(404).json({ error: 'Şirket bulunamadı.' });
+    res.json(company);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 module.exports = router;
