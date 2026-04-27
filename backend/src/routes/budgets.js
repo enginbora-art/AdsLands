@@ -37,21 +37,25 @@ router.get('/logs', authMiddleware, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   try {
     let query, params;
+    const baseSelect = `
+      SELECT bl.*,
+             b.month, b.year,
+             brand_c.name AS brand_name,
+             actor_c.name AS actor_company_name,
+             COALESCE(u.full_name, u.email) AS user_name
+      FROM budget_logs bl
+      JOIN budgets b ON b.id = bl.budget_id
+      JOIN companies brand_c ON brand_c.id = b.company_id
+      JOIN companies actor_c ON actor_c.id = bl.company_id
+      JOIN users u ON u.id = bl.user_id`;
+
     if (req.user.company_type === 'brand') {
-      query = `
-        SELECT bl.*, b.month, b.year, c.name AS brand_name
-        FROM budget_logs bl
-        JOIN budgets b ON b.id = bl.budget_id
-        JOIN companies c ON c.id = b.company_id
+      query = `${baseSelect}
         WHERE b.company_id = $1
         ORDER BY bl.created_at DESC LIMIT $2`;
       params = [req.user.company_id, limit];
     } else {
-      query = `
-        SELECT bl.*, b.month, b.year, c.name AS brand_name
-        FROM budget_logs bl
-        JOIN budgets b ON b.id = bl.budget_id
-        JOIN companies c ON c.id = b.company_id
+      query = `${baseSelect}
         WHERE b.company_id IN (
           SELECT brand_company_id FROM connections WHERE agency_company_id = $1
         ) OR bl.company_id = $1

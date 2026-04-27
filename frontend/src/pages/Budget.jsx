@@ -18,17 +18,20 @@ const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
 function alertLevel(r) { return r >= 100 ? 'red' : r >= 90 ? 'yellow' : 'green'; }
 
 function timeAgo(ts) {
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (!ts) return 'Bilinmiyor';
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return 'Bilinmiyor';
+  const diff = Math.floor((Date.now() - date) / 1000);
   if (diff < 60) return 'az önce';
   if (diff < 3600) return `${Math.floor(diff / 60)} dk önce`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} saat önce`;
-  return new Date(ts).toLocaleDateString('tr-TR');
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function logMessage(log) {
-  const actor = log.company_name;
+  const actor = log.user_name || log.actor_company_name || '—';
   const brand = log.brand_name;
-  const isSelf = actor === brand;
+  const isSelf = log.actor_company_name === brand;
   const who = isSelf ? actor : `${actor} (${brand} adına)`;
   const mon = `${MONTHS[(log.month || 1) - 1]} ${log.year}`;
 
@@ -88,7 +91,7 @@ function LogPanel() {
           ) : logs.map(log => (
             <div key={log.id} style={lp.row}>
               <div style={lp.msg}>{logMessage(log)}</div>
-              <div style={lp.time}>{timeAgo(log.changed_at)}</div>
+              <div style={lp.time}>{timeAgo(log.created_at)}</div>
             </div>
           ))}
         </div>
