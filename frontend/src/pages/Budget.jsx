@@ -147,8 +147,9 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
       .map(lc => ({ platform: lc.platform, amount: String(Math.round(Number(existing[lc.key]))) }));
   });
 
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -159,21 +160,21 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
   const removeChannel = (i) => setChannels(p => p.filter((_, idx) => idx !== i));
   const updateChannel = (i, key, val) => setChannels(p => p.map((ch, idx) => idx === i ? { ...ch, [key]: val } : ch));
 
-  const channelSum = channels.reduce((s, ch) => s + (parseInt(ch.amount) || 0), 0);
-  const total      = parseInt(form.total_budget) || 0;
-  const remaining  = total - channelSum;
-  const overBudget = remaining < 0;
+  const channelSum   = channels.reduce((s, ch) => s + (parseInt(ch.amount) || 0), 0);
+  const total        = parseInt(form.total_budget) || 0;
+  const remaining    = total - channelSum;
+  const overBudget   = remaining < 0;
   const allAllocated = total > 0 && remaining === 0;
-  const canSave    = !!form.total_budget && !saving;
+  const canSave      = !!form.total_budget && !saving;
 
-  const handleSave = async () => {
-    if (!form.total_budget) return;
-    setSaving(true); setError('');
+  // Performs the actual API call with the given total_budget value
+  const doSave = async (totalBudgetOverride) => {
+    setSaving(true); setError(''); setShowConfirm(false);
     try {
       const payload = {
         month: parseInt(form.month),
         year:  parseInt(form.year),
-        total_budget: parseInt(form.total_budget) || 0,
+        total_budget: totalBudgetOverride ?? (parseInt(form.total_budget) || 0),
         channels: channels
           .filter(ch => ch.platform && parseInt(ch.amount) > 0)
           .map(ch => ({ platform: ch.platform, amount: parseInt(ch.amount) })),
@@ -185,6 +186,14 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
     } finally {
       setSaving(false);
     }
+  };
+
+  // Entry point for the Kaydet button
+  const handleSave = () => {
+    if (!form.total_budget) return;
+    // If channel sum exceeds stated total and channels are configured → show confirm
+    if (overBudget && channelSum > 0) { setShowConfirm(true); return; }
+    doSave();
   };
 
   return (
@@ -316,6 +325,27 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
           </button>
         </div>
       </div>
+      {showConfirm && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: '#1a1f2e', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 14, padding: 28, width: 380, maxWidth: '90vw' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>⚠️ Bütçe Aşımı</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 24 }}>
+              Kanallara dağıtılan toplam (<strong>₺{fmt(channelSum)}</strong>), belirlenen bütçenizi (<strong>₺{fmt(total)}</strong>) <strong style={{ color: 'var(--coral)' }}>₺{fmt(channelSum - total)}</strong> aşıyor.<br /><br />Ne yapmak istersiniz?
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <button onClick={() => doSave(channelSum)} style={{ padding: '10px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                Bütçeyi ₺{fmt(channelSum)} Olarak Güncelle
+              </button>
+              <button onClick={() => setShowConfirm(false)} style={{ padding: '10px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                Kanalları Düzenle
+              </button>
+              <button onClick={onClose} style={{ padding: '10px', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                İptal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -372,7 +402,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
 
   useEffect(() => { loadPlan(); }, [loadPlan]);
 
-  const handleSave = (saved) => { setBudgetPlan(saved); setShowModal(false); loadPlan(); };
+  const handleSave = (saved) => { setBudgetPlan(saved); setShowModal(false); };
 
   if (budgetPlan === undefined && user?.company_type !== 'admin') return <div className="loading">Yükleniyor...</div>;
 
