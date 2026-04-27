@@ -656,6 +656,70 @@ export default function Integrations() {
 
   const getConnected = (platformId) => integrations.find(i => i.platform === platformId);
 
+  // ── Ajans ana görünümü (marka seçilmemiş) ────────────────────────────────────
+  if (isAgency && !selectedBrand) {
+    return (
+      <div style={s.page}>
+        {importModal && (
+          <ImportAccountsModal
+            type={importModal.type}
+            sessionId={importModal.sessionId}
+            onClose={() => setImportModal(null)}
+            onDone={handleImportDone}
+          />
+        )}
+        {msgBanner && <MsgBanner msg={msgBanner.msg} type={msgBanner.type} onDismiss={() => setMsgBanner(null)} />}
+
+        <div style={s.header}>
+          <h1 style={s.title}>Ajans Entegrasyonları</h1>
+          <p style={s.sub}>Müşteri hesaplarınızı toplu olarak platforma aktarın.</p>
+        </div>
+
+        <div style={s.importSection}>
+          <div style={s.importTitle}>Toplu Hesap Aktarımı</div>
+          <p style={s.importSub}>
+            Ajans hesabınızdaki tüm müşteri hesaplarını platforma aktarın;
+            her biri için otomatik marka ve bağlantı oluşturulur.
+          </p>
+          <div style={s.importGrid}>
+            <div style={s.importCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: 'rgba(66,133,244,0.12)', color: '#4285F4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>MCC</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Google Ads MCC</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Manager Account</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
+                MCC (Manager) hesabınızla bağlanın. Altındaki tüm müşteri hesaplarını listeler, seçtiklerinizi platforma marka olarak ekler.
+              </p>
+              <button onClick={handleMccConnect} style={{ ...s.connectBtn, width: '100%' }}>
+                Google Ads MCC Bağla
+              </button>
+            </div>
+
+            <div style={s.importCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: 'rgba(24,119,242,0.12)', color: '#1877F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10 }}>BM</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Meta Business Manager</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Business Suite</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
+                Meta Business Manager hesabınızla bağlanın. Ad account'larınızı listeler, seçtiklerinizi platforma marka olarak ekler.
+              </p>
+              <button onClick={handleMetaBmConnect} style={{ ...s.connectBtn, width: '100%' }}>
+                Meta Business Manager Bağla
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Marka entegrasyonları (marka kullanıcısı veya ajans+seçili marka) ─────────
   return (
     <div style={s.page}>
       {/* Modals */}
@@ -706,20 +770,14 @@ export default function Integrations() {
         />
       )}
 
-      {/* Banners */}
-      {banner   && <StatusBanner params={banner} onDismiss={() => setBanner(null)} />}
+      {banner    && <StatusBanner params={banner} onDismiss={() => setBanner(null)} />}
       {msgBanner && <MsgBanner msg={msgBanner.msg} type={msgBanner.type} onDismiss={() => setMsgBanner(null)} />}
 
       <div style={s.header}>
-        <h1 style={s.title}>{isAgency && !selectedBrand ? 'Ajans Entegrasyonları' : 'Reklam Entegrasyonları'}</h1>
-        <p style={s.sub}>
-          {isAgency && !selectedBrand
-            ? 'Ajans hesabınıza bağlı platformları yönetin ve müşteri hesaplarını toplu aktarın.'
-            : 'Reklam platformlarınızı bağlayın, verilerinizi tek ekranda takip edin.'}
-        </p>
+        <h1 style={s.title}>Reklam Entegrasyonları</h1>
+        <p style={s.sub}>Reklam platformlarınızı bağlayın, verilerinizi tek ekranda takip edin.</p>
       </div>
 
-      {/* Platform Cards */}
       <div style={s.grid}>
         {PLATFORMS.map(platform => {
           const connected = getConnected(platform.id);
@@ -760,9 +818,7 @@ export default function Integrations() {
               <div style={s.cardActions}>
                 {connected ? (
                   <>
-                    <button style={s.detailBtn} onClick={() => handleSelect(connected)}>
-                      Detay
-                    </button>
+                    <button style={s.detailBtn} onClick={() => handleSelect(connected)}>Detay</button>
                     <button style={s.disconnectBtn} onClick={() => handleDisconnect(connected)} disabled={isDisconnecting}>
                       {isDisconnecting ? '...' : 'Bağlantıyı Kes'}
                     </button>
@@ -785,47 +841,6 @@ export default function Integrations() {
           );
         })}
       </div>
-
-      {/* Agency only, without a selected brand: MCC + Meta BM Import */}
-      {isAgency && !selectedBrand && (
-        <div style={s.importSection}>
-          <div style={s.importTitle}>Toplu Hesap Aktarımı</div>
-          <p style={s.importSub}>Ajans hesabınızdaki tüm müşteri hesaplarını platforma aktarın, her biri için otomatik marka ve bağlantı oluşturulur.</p>
-          <div style={s.importGrid}>
-            <div style={s.importCard}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: 'rgba(66,133,244,0.12)', color: '#4285F4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>MCC</div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Google Ads MCC</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Manager Account</div>
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
-                MCC (Manager) hesabınızla bağlanın. Altındaki tüm müşteri hesaplarını listeler, seçtiklerinizi platforma marka olarak ekler.
-              </p>
-              <button onClick={handleMccConnect} style={{ ...s.connectBtn, width: '100%' }}>
-                Google Ads MCC Bağla
-              </button>
-            </div>
-
-            <div style={s.importCard}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: 'rgba(24,119,242,0.12)', color: '#1877F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10 }}>BM</div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Meta Business Manager</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Business Suite</div>
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
-                Meta Business Manager hesabınızla bağlanın. Ad account'larınızı listeler, seçtiklerinizi platforma marka olarak ekler.
-              </p>
-              <button onClick={handleMetaBmConnect} style={{ ...s.connectBtn, width: '100%' }}>
-                Meta Business Manager Bağla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {loading && <div style={{ color: 'var(--text3)', padding: 32 }}>Yükleniyor...</div>}
     </div>
