@@ -21,7 +21,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user, req.query.brand_id);
     const { rows } = await pool.query(
-      `SELECT id, title, report_type, content, created_at
+      `SELECT id, title, report_type, content, format, file_url, created_at
        FROM reports WHERE company_id = $1 ORDER BY created_at DESC LIMIT 50`,
       [companyId]
     );
@@ -353,6 +353,132 @@ Ortalama CTR: %${avgCtr.toFixed(2)}`,
     });
   } catch (err) {
     console.error('generate-pptx error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Rapor oluşturulamadı.' });
+  }
+});
+
+// POST /api/reports/build — Template-based PPT/PDF builder that saves to DB
+router.post('/build', authMiddleware, async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
+  }
+
+  const { days = 30, report_type = 'brand', slides, format = 'pptx', brand_id } = req.body;
+
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+
+    const { rows: integrations } = await pool.query(`
+      SELECT i.platform, i.account_id,
+        COALESCE(SUM(m.spend), 0)::float           AS total_spend,
+        COALESCE(AVG(NULLIF(m.roas, 0)), 0)::float AS avg_roas,
+        COALESCE(SUM(m.conversions), 0)::int       AS total_conversions,
+        COALESCE(SUM(m.clicks), 0)::int            AS total_clicks,
+        COALESCE(SUM(m.impressions), 0)::int       AS total_impressions
+      FROM integrations i
+      LEFT JOIN ad_metrics m ON m.integration_id = i.id
+        AND m.date >= CURRENT_DATE - ($1 || ' days')::interval
+      WHERE i.company_id = $2 AND i.is_active = true
+      GROUP BY i.platform, i.account_id
+    `, [days, companyId]);
+
+    const { rows: dailyData } = await pool.query(`
+      SELECT m.date,
+        COALESCE(SUM(m.spend), 0)::float           AS daily_spend,
+        COALESCE(AVG(NULLIF(m.roas, 0)), 0)::float AS daily_roas
+      FROM ad_metrics m
+      JOIN integrations i ON i.id = m.integration_id
+      WHERE i.company_id = $2 AND i.is_active = true
+        AND m.date >= CURRENT_DATE - ($1 || ' days')::interval
+      GROUP BY m.date ORDER BY m.date
+    `, [days, companyId]);
+
+    const { rows: [company] } = await pool.query(
+      'SELECT name, sector FROM companies WHERE id = $1', [companyId]
+    );
+
+    const totalSpend    = integrations.reduce((s, r) => s + r.total_spend, 0);
+    const validRoas     = integrations.filter(r => r.avg_roas > 0);
+    const avgRoas       = validRoas.length ? validRoas.reduce((s, r) => s + r.avg_roas, 0) / validRoas.length : 0;
+    const totalConv     = integrations.reduce((s, r) => s + r.total_conversions, 0);
+    const totalClicks   = integrations.reduce((s, r) => s + r.total_clicks, 0);
+    const totalImpressions = integrations.reduce((s, r) => s + r.total_impressions, 0);
+    const avgCpa        = totalConv > 0 ? totalSpend / totalConv : 0;
+    const avgCtr        = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+
+    const metricsText = integrations.length > 0
+      ? integrations.map(m => {
+          const ctr = m.total_impressions > 0 ? (m.total_clicks / m.total_impressions * 100).toFixed(2) : '0';
+          const cpa = m.total_conversions > 0 ? (m.total_spend / m.total_conversions).toFixed(0) : '0';
+          return `• ${m.platform}: Harcama ₺${Number(m.total_spend).toLocaleString('tr-TR')}, ROAS ${Number(m.avg_roas).toFixed(2)}x, CPA ₺${cpa}, CTR %${ctr}`;
+        }).join('\n')
+      : 'Henüz veri yok.';
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const aiResponse = await client.messages.create({
+      model: 'claude-opus-4-7',
+      max_tokens: 1200,
+      system: `Sen bir dijital pazarlama uzmanısın. Verilen reklam metriklerini analiz et ve SADECE aşağıdaki JSON formatında yanıt ver:
+{"summary":["Özet 1","Özet 2","Özet 3"],"recommendations":[{"title":"Başlık","description":"Açıklama","priority":"high"},{"title":"...","description":"...","priority":"medium"},{"title":"...","description":"...","priority":"low"}],"strengths":["Güçlü 1","Güçlü 2","Güçlü 3"],"improvements":["Gelişim 1","Gelişim 2","Gelişim 3"]}
+priority değerleri: "high","medium","low". Türkçe yaz.`,
+      messages: [{
+        role: 'user',
+        content: `Şirket: ${company?.name || 'Bilinmiyor'} | Sektör: ${company?.sector || 'Belirtilmemiş'}
+Analiz dönemi: Son ${days} gün | Rapor tipi: ${report_type === 'agency' ? 'Ajans teknik raporu' : 'Marka sunumu'}
+Kanal metrikleri:\n${metricsText}
+Toplam harcama: ₺${Number(totalSpend).toLocaleString('tr-TR')} | Ort. ROAS: ${Number(avgRoas).toFixed(2)}x | Toplam dönüşüm: ${totalConv} | Ort. CPA: ₺${Math.round(avgCpa)} | CTR: %${avgCtr.toFixed(2)}`,
+      }],
+    });
+
+    let aiData = { summary: [], recommendations: [], strengths: [], improvements: [] };
+    try {
+      const rawText = aiResponse.content[0]?.text || '{}';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      aiData = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+    } catch { /* use defaults */ }
+
+    const metrics = {
+      roas:    `${Number(avgRoas).toFixed(2)}x`,
+      spend:   `₺${Number(totalSpend).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`,
+      conv:    totalConv.toLocaleString('tr-TR'),
+      cpa:     avgCpa > 0 ? `₺${Math.round(avgCpa)}` : '—',
+      roasNum: avgRoas,
+      cpaNum:  avgCpa,
+      ctrNum:  avgCtr,
+    };
+
+    const period    = `Son ${days} gün`;
+    const brandName = company?.name || 'Marka';
+    const agencyName = req.user.company_type === 'agency' ? req.user.company_name : null;
+
+    const { fileId } = await pptxService.generatePptx({
+      brandName, agencyName, period,
+      reportType: report_type,
+      slides,
+      metrics,
+      summaryBullets:  aiData.summary || [],
+      channelData:     integrations,
+      dailyData,
+      recommendations: aiData.recommendations || [],
+      strengths:       aiData.strengths || [],
+      improvements:    aiData.improvements || [],
+    });
+
+    const downloadUrl  = `/api/reports/download/${fileId}`;
+    const reportTitle  = `${brandName} — ${period}`;
+    const contentJson  = JSON.stringify({ period, format, channels: integrations.length, totalSpend: Math.round(totalSpend), avgRoas: Number(avgRoas).toFixed(2) });
+
+    const { rows: [saved] } = await pool.query(
+      `INSERT INTO reports (company_id, brand_id, title, content, report_type, format, file_url, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [companyId, brand_id || null, reportTitle, contentJson, report_type, format, downloadUrl, req.user.user_id]
+    );
+
+    res.json({ fileId, downloadUrl, brandName, period, metrics, reportId: saved.id });
+  } catch (err) {
+    console.error('reports/build error:', err);
     res.status(err.status || 500).json({ error: err.message || 'Rapor oluşturulamadı.' });
   }
 });

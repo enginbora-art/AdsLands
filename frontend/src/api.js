@@ -98,6 +98,7 @@ export const getReports    = (brandId) =>
   api.get(`/reports${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
 export const saveReport    = (data) => api.post('/reports', data).then(r => r.data);
 export const deleteReport  = (id) => api.delete(`/reports/${id}`).then(r => r.data);
+export const buildReport   = (data) => api.post('/reports/build', data).then(r => r.data);
 
 // ── Kanallar ──────────────────────────────────────────────────────────────────
 export const getChannelData = (days, platform, brandId) =>

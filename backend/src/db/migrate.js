@@ -149,6 +149,8 @@ async function migrate() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    await client.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS format VARCHAR(10);`);
+    await client.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS file_url TEXT;`);
 
     // budget_channels tablosu (dinamik kanal dağılımı)
     await client.query(`
