@@ -296,6 +296,87 @@ async function migrate() {
       );
     `);
 
+    // ── TV Kampanyaları ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tv_campaigns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        brand_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+        name VARCHAR(255) NOT NULL,
+        video_filename VARCHAR(255),
+        audio_fingerprint_hash VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'active'
+          CHECK (status IN ('active', 'inactive', 'pending')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── TV Medya Planları ─────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tv_media_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id UUID REFERENCES tv_campaigns(id) ON DELETE SET NULL,
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        brand_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+        plan_name VARCHAR(255) NOT NULL,
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        year INTEGER NOT NULL,
+        total_budget NUMERIC(12,2) DEFAULT 0,
+        total_grp NUMERIC(8,2) DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'active', 'completed')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── TV Plan Kalemleri ─────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tv_plan_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        plan_id UUID NOT NULL REFERENCES tv_media_plans(id) ON DELETE CASCADE,
+        channel_name VARCHAR(100) NOT NULL,
+        channel_code VARCHAR(50) NOT NULL,
+        broadcast_date DATE,
+        daypart VARCHAR(20),
+        broadcast_time_start TIME,
+        broadcast_time_end TIME,
+        spot_duration INTEGER DEFAULT 30,
+        grp NUMERIC(8,2) DEFAULT 0,
+        spot_price NUMERIC(12,2) DEFAULT 0,
+        total_cost NUMERIC(12,2) DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'planned'
+          CHECK (status IN ('planned', 'detected', 'missed', 'pending')),
+        detected_at TIMESTAMPTZ,
+        screenshot_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── TV Tespitler ──────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tv_detections (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id UUID NOT NULL REFERENCES tv_campaigns(id) ON DELETE CASCADE,
+        plan_item_id UUID REFERENCES tv_plan_items(id) ON DELETE SET NULL,
+        channel_name VARCHAR(100) NOT NULL,
+        detected_at TIMESTAMPTZ NOT NULL,
+        confidence_score NUMERIC(5,4),
+        screenshot_url TEXT,
+        screenshot_expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── TV Erken Erişim ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tv_early_access (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

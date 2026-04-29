@@ -133,3 +133,17 @@ export const updateCompanySector = (id, sector) => api.patch(`/companies/${id}`,
 export const updateProfile = (data) => api.patch('/users/me', data).then(r => r.data);
 export const getNotificationPrefs = () => api.get('/users/me/notification-prefs').then(r => r.data);
 export const saveNotificationPrefs = (prefs) => api.patch('/users/me/notification-prefs', prefs).then(r => r.data);
+
+// ── TV Medya Planı ────────────────────────────────────────────────────────────
+export const getTvCampaigns    = (brandId) => api.get(`/tv/campaigns${brandId ? `?brandId=${brandId}` : ''}`).then(r => r.data);
+export const createTvCampaign  = (data) => api.post('/tv/campaigns', data).then(r => r.data);
+export const getTvPlans        = (brandId) => api.get(`/tv/plans${brandId ? `?brandId=${brandId}` : ''}`).then(r => r.data);
+export const createTvPlan      = (data) => api.post('/tv/plans', data).then(r => r.data);
+export const updateTvPlan      = (id, data) => api.patch(`/tv/plans/${id}`, data).then(r => r.data);
+export const deleteTvPlan      = (id) => api.delete(`/tv/plans/${id}`).then(r => r.data);
+export const getTvPlanItems    = (planId) => api.get(`/tv/plans/${planId}/items`).then(r => r.data);
+export const addTvPlanItem     = (planId, data) => api.post(`/tv/plans/${planId}/items`, data).then(r => r.data);
+export const updateTvPlanItem  = (planId, itemId, data) => api.patch(`/tv/plans/${planId}/items/${itemId}`, data).then(r => r.data);
+export const deleteTvPlanItem  = (planId, itemId) => api.delete(`/tv/plans/${planId}/items/${itemId}`).then(r => r.data);
+export const getTvPlanSummary  = (planId) => api.get(`/tv/plans/${planId}/summary`).then(r => r.data);
+export const tvEarlyAccess     = (data) => api.post('/tv/early-access', data).then(r => r.data);
