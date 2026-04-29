@@ -48,9 +48,6 @@ const AGENCY_BRAND_NAV = [
     { id: 'anomalies', label: 'Anomaliler', perm: 'anomalier' },
     { id: 'benchmark', label: 'Benchmark',  perm: 'benchmark' },
   ]},
-  { label: 'Raporlar', items: [
-    { id: 'reports', label: 'Rapor Oluştur', perm: 'raporlar' },
-  ]},
   { label: 'Yönetim', items: [
     { id: 'integrations', label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
     { id: 'users',        label: 'Kullanıcılar',   perm: 'kullanici_yonetimi' },
@@ -72,9 +69,6 @@ const BRAND_NAV = [
   { label: 'İzleme', items: [
     { id: 'anomalies', label: 'Anomaliler', perm: 'anomalier' },
     { id: 'benchmark', label: 'Benchmark',  perm: 'benchmark' },
-  ]},
-  { label: 'Raporlar', items: [
-    { id: 'reports', label: 'Raporlar', perm: 'raporlar' },
   ]},
   { label: 'Bağlantılar', items: [
     { id: 'connections', label: 'Bağlantılar', perm: null },

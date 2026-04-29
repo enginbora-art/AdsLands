@@ -12,7 +12,6 @@ import TvBroadcast from './pages/TvBroadcast';
 import TvPlan from './pages/TvPlan';
 import Anomalies from './pages/Anomalies';
 import Benchmark from './pages/Benchmark';
-import Reports from './pages/Reports';
 import Agency from './pages/Agency';
 import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
@@ -31,7 +30,6 @@ const PAGES = {
   tvplan:       TvPlan,
   anomalies:    Anomalies,
   benchmark:    Benchmark,
-  reports:      Reports,
   agency:       Agency,
   integrations: Integrations,
   settings:     Settings,
@@ -53,7 +51,6 @@ const PAGE_URL = {
   tv:           'tv',
   tvplan:       'tvplan',
   benchmark:    'benchmark',
-  reports:      'reports',
   connections:  'connections',
 };
 
