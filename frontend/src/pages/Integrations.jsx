@@ -21,51 +21,188 @@ import {
 } from '../api';
 
 const PLATFORMS = [
-  { id: 'google_analytics', name: 'Google Analytics', color: '#E37400', bg: 'rgba(227,116,0,0.1)',  icon: 'GA', isGoogle: true },
-  { id: 'google_ads',       name: 'Google Ads',        color: '#4285F4', bg: 'rgba(66,133,244,0.1)', icon: 'G',  isGoogle: true },
-  { id: 'meta',             name: 'Meta Ads',           color: '#1877F2', bg: 'rgba(24,119,242,0.1)', icon: 'M',  isGoogle: false },
-  { id: 'tiktok',           name: 'TikTok Ads',         color: '#00BFA6', bg: 'rgba(0,191,166,0.1)',  icon: 'T',  isGoogle: false },
-  { id: 'appsflyer',        name: 'AppsFlyer',          color: '#00B4D8', bg: 'rgba(0,180,216,0.1)', icon: 'AF', isApiToken: true,
+  { id: 'google_analytics', name: 'Google Analytics', color: '#E37400', bg: 'rgba(227,116,0,0.15)',  icon: 'GA',  isGoogle: true },
+  { id: 'google_ads',       name: 'Google Ads',        color: '#4285F4', bg: 'rgba(66,133,244,0.15)', icon: 'G',   isGoogle: true },
+  { id: 'meta',             name: 'Meta Ads',           color: '#1877F2', bg: 'rgba(24,119,242,0.15)', icon: 'M',   isGoogle: false },
+  { id: 'tiktok',           name: 'TikTok Ads',         color: '#00BFA6', bg: 'rgba(0,191,166,0.15)',  icon: 'TT',  isGoogle: false },
+  { id: 'linkedin',         name: 'LinkedIn Ads',       color: '#0A66C2', bg: 'rgba(10,102,194,0.15)', icon: 'in',  isGoogle: false },
+  { id: 'appsflyer',        name: 'AppsFlyer',          color: '#00B4D8', bg: 'rgba(0,180,216,0.15)', icon: 'AF',  isApiToken: true,
     fields: [
       { key: 'api_token', label: 'API Token', placeholder: 'AppsFlyer hesabınızdan alın', required: true },
       { key: 'app_id',    label: 'App ID (Opsiyonel)', placeholder: 'com.example.app', required: false },
     ]
   },
-  { id: 'adjust',           name: 'Adjust',             color: '#EC407A', bg: 'rgba(236,64,122,0.1)', icon: 'ADJ', isApiToken: true,
+  { id: 'adjust',           name: 'Adjust',             color: '#EC407A', bg: 'rgba(236,64,122,0.15)', icon: 'ADJ', isApiToken: true,
     fields: [
       { key: 'api_token', label: 'API Token', placeholder: 'Adjust Dashboard → Account Settings', required: true },
       { key: 'app_token', label: 'App Token', placeholder: 'Adjust app token', required: true },
     ]
   },
-  { id: 'adform',           name: 'Adform',             color: '#E84B37', bg: 'rgba(232,75,55,0.1)',  icon: 'AF', isApiToken: true,
+  { id: 'adform',           name: 'Adform',             color: '#E84B37', bg: 'rgba(232,75,55,0.15)',  icon: 'ADF', isApiToken: true,
     fields: [
-      { key: 'tracking_id', label: 'Client Tracking ID', placeholder: 'Adform Tracking Setup ID',     required: false },
-      { key: 'username',    label: 'API Username',        placeholder: 'Adform API kullanıcı adı',    required: true },
-      { key: 'password',    label: 'API Password',        placeholder: 'Adform API şifresi',          required: true, type: 'password' },
+      { key: 'tracking_id', label: 'Client Tracking ID', placeholder: 'Adform Tracking Setup ID',  required: false },
+      { key: 'username',    label: 'API Username',        placeholder: 'Adform API kullanıcı adı', required: true },
+      { key: 'password',    label: 'API Password',        placeholder: 'Adform API şifresi',       required: true, type: 'password' },
     ]
   },
-  { id: 'linkedin',         name: 'LinkedIn Ads',       color: '#0A66C2', bg: 'rgba(10,102,194,0.1)', icon: 'in', isGoogle: false },
+];
+
+const GROUPS = [
+  { label: 'Google Ekosistemi', ids: ['google_analytics', 'google_ads'] },
+  { label: 'Sosyal Medya',      ids: ['meta', 'tiktok', 'linkedin'] },
+  { label: 'Attribution & MMP', ids: ['appsflyer', 'adjust'] },
+  { label: 'Programatik / DSP', ids: ['adform'] },
 ];
 
 const PLATFORM_LABELS = {
-  google_ads:        'Google Ads',
-  google_analytics:  'Google Analytics',
-  meta:              'Meta Ads',
-  tiktok:            'TikTok Ads',
-  appsflyer:         'AppsFlyer',
-  adjust:            'Adjust',
-  adform:            'Adform',
-  linkedin:          'LinkedIn Ads',
-  mcc:               'Google Ads MCC',
-  metabm:            'Meta Business Manager',
+  google_ads:       'Google Ads',
+  google_analytics: 'Google Analytics',
+  meta:             'Meta Ads',
+  tiktok:           'TikTok Ads',
+  appsflyer:        'AppsFlyer',
+  adjust:           'Adjust',
+  adform:           'Adform',
+  linkedin:         'LinkedIn Ads',
+  mcc:              'Google Ads MCC',
+  metabm:           'Meta Business Manager',
 };
 
-const fmt = (n) => Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0 });
+const fmt     = (n) => Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0 });
 const fmtDate = (str) => {
   if (!str) return '';
   if (str.length === 8) return `${str.slice(6, 8)}.${str.slice(4, 6)}.${str.slice(0, 4)}`;
   return new Date(str).toLocaleDateString('tr-TR');
 };
+
+// ── Platform Card ─────────────────────────────────────────────────────────────
+
+function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onConnect, onDisconnect, onDetail }) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <div style={{
+      background: '#161b27',
+      border: connected ? '1px solid rgba(16,185,129,0.3)' : '1px solid #1e2535',
+      borderRadius: 10,
+      padding: '14px 14px 12px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
+      {/* Icon + name + badge */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 7, flexShrink: 0,
+          background: platform.bg, color: platform.color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 800,
+        }}>
+          {platform.icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', lineHeight: 1.25 }}>
+            {platform.name}
+          </div>
+          <div style={{ fontSize: 11, marginTop: 3, color: connected ? '#10b981' : '#6b7280' }}>
+            {connected ? '● Bağlı' : '○ Bağlı değil'}
+          </div>
+        </div>
+        <div style={{
+          flexShrink: 0, fontSize: 10, fontWeight: 700,
+          padding: '2px 7px', borderRadius: 5,
+          ...(platform.isApiToken
+            ? { background: 'rgba(139,92,246,0.15)', color: '#a78bfa' }
+            : { background: 'rgba(59,130,246,0.15)',  color: '#60a5fa' }
+          ),
+        }}>
+          {platform.isApiToken ? 'API Token' : 'OAuth'}
+        </div>
+      </div>
+
+      {/* Connected stats */}
+      {connected && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
+          background: 'rgba(255,255,255,0.03)', borderRadius: 7, padding: '8px 6px',
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Harcama</div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>₺{fmt(connected.total_spend)}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>ROAS</div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>{Number(connected.avg_roas || 0).toFixed(2)}x</div>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      {connected ? (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={onDetail}
+            style={{ flex: 1, padding: '7px 0', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 7, color: '#10b981', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Detay
+          </button>
+          <button
+            onClick={onDisconnect}
+            disabled={isDisconnecting}
+            style={{ flex: 1, padding: '7px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 7, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: isDisconnecting ? 'not-allowed' : 'pointer' }}
+          >
+            {isDisconnecting ? '...' : 'Kes'}
+          </button>
+        </div>
+      ) : (
+        <div
+          onClick={!isConnecting ? onConnect : undefined}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          style={{
+            background: isConnecting ? '#3d4858' : hover ? '#0891b2' : '#06b6d4',
+            color: '#ffffff',
+            fontWeight: 700,
+            borderRadius: 7,
+            padding: '8px 0',
+            textAlign: 'center',
+            cursor: isConnecting ? 'not-allowed' : 'pointer',
+            fontSize: 12,
+            transition: 'background .15s',
+            userSelect: 'none',
+          }}
+        >
+          {isConnecting ? 'Yönlendiriliyor...' : 'Bağla'}
+        </div>
+      )}
+
+      {/* Account ID */}
+      {connected?.account_id && (
+        <div style={{
+          fontSize: 10, color: '#6b7280', fontFamily: 'monospace',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {connected.account_id}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Group Header ──────────────────────────────────────────────────────────────
+
+function GroupHeader({ label }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+      <span style={{
+        color: '#9ca3af', fontSize: 11, fontWeight: 600,
+        letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: '#1f2937' }} />
+    </div>
+  );
+}
 
 // ── Banners ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +277,7 @@ function VerifyModal({ accountName, brandName, similarity, onConfirm, onCancel }
   );
 }
 
-// ── Token Connect Modal (AppsFlyer / Adjust) ──────────────────────────────────
+// ── Token Connect Modal ───────────────────────────────────────────────────────
 
 function TokenConnectModal({ platform, onClose, onSuccess, onVerify }) {
   const [form, setForm] = useState({});
@@ -211,11 +348,11 @@ function TokenConnectModal({ platform, onClose, onSuccess, onVerify }) {
 // ── Import Accounts Modal (MCC / Meta BM) ─────────────────────────────────────
 
 function ImportAccountsModal({ type, sessionId, onClose, onDone }) {
-  const [accounts, setAccounts] = useState([]);
-  const [selected, setSelected] = useState(new Set());
+  const [accounts, setAccounts]       = useState([]);
+  const [selected, setSelected]       = useState(new Set());
   const [loadingAccts, setLoadingAccts] = useState(true);
-  const [importing, setImporting] = useState(false);
-  const [error, setError] = useState('');
+  const [importing, setImporting]     = useState(false);
+  const [error, setError]             = useState('');
 
   useEffect(() => {
     const fn = type === 'mcc' ? getMccAccounts : getMetaBmAccounts;
@@ -347,19 +484,18 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
   const isGA      = integration.platform === 'google_analytics';
   const isGoogAds = integration.platform === 'google_ads';
 
-  const rows = liveData ? liveData.data : metrics;
+  const rows             = liveData ? liveData.data : metrics;
   const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
   const totalImpressions = metrics.reduce((a, m) => a + Number(m.impressions || 0), 0);
   const totalClicks      = metrics.reduce((a, m) => a + Number(m.clicks      || 0), 0);
   const totalConversions = metrics.reduce((a, m) => a + Number(m.conversions || 0), 0);
-  const roasRows = metrics.filter(m => Number(m.roas) > 0);
-  const avgRoas  = roasRows.length ? roasRows.reduce((a, m) => a + Number(m.roas), 0) / roasRows.length : 0;
+  const roasRows         = metrics.filter(m => Number(m.roas) > 0);
+  const avgRoas          = roasRows.length ? roasRows.reduce((a, m) => a + Number(m.roas), 0) / roasRows.length : 0;
 
   return (
     <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ ...s.modal, maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 28 }}>
 
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
           <div style={{ width: 44, height: 44, borderRadius: 10, background: platform.bg, color: platform.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
             {platform.icon}
@@ -381,7 +517,6 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 24, cursor: 'pointer', lineHeight: 1, padding: '0 0 0 12px', flexShrink: 0 }}>×</button>
         </div>
 
-        {/* Summary stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 18 }}>
           {[
             { label: 'Harcama',   val: `₺${fmt(totalSpend)}` },
@@ -397,7 +532,6 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
           ))}
         </div>
 
-        {/* Actions */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           <button onClick={onRefresh} disabled={metricsLoading}
             style={{ padding: '7px 16px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, fontWeight: 600, cursor: metricsLoading ? 'not-allowed' : 'pointer' }}>
@@ -421,7 +555,6 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
           </div>
         )}
 
-        {/* Table */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {metricsLoading ? (
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
@@ -468,7 +601,6 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
@@ -477,27 +609,27 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Integrations() {
-  const { user } = useAuth();
+  const { user }          = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const isAgency = user?.company_type === 'agency';
-  const brandId = isAgency && selectedBrand ? selectedBrand.id : null;
+  const isAgency          = user?.company_type === 'agency';
+  const brandId           = isAgency && selectedBrand ? selectedBrand.id : null;
 
-  const [integrations, setIntegrations]   = useState([]);
-  const [selected, setSelected]           = useState(null);
-  const [metrics, setMetrics]             = useState([]);
-  const [liveData, setLiveData]           = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [connecting, setConnecting]       = useState(null);
-  const [disconnecting, setDisconnecting] = useState(null);
-  const [liveLoading, setLiveLoading]     = useState(false);
+  const [integrations, setIntegrations]     = useState([]);
+  const [selected, setSelected]             = useState(null);
+  const [metrics, setMetrics]               = useState([]);
+  const [liveData, setLiveData]             = useState(null);
+  const [loading, setLoading]               = useState(true);
+  const [connecting, setConnecting]         = useState(null);
+  const [disconnecting, setDisconnecting]   = useState(null);
+  const [liveLoading, setLiveLoading]       = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [liveError, setLiveError]           = useState(null);
-  const [banner, setBanner]               = useState(null);
-  const [msgBanner, setMsgBanner]         = useState(null);
-  const [verifyParams, setVerifyParams]   = useState(null);
-  const [tokenModal, setTokenModal]       = useState(null); // platform object
-  const [importModal, setImportModal]     = useState(null); // { type: 'mcc'|'metabm', sessionId }
-  const [disconnectConfirm, setDisconnectConfirm] = useState(null); // integration object
+  const [banner, setBanner]                 = useState(null);
+  const [msgBanner, setMsgBanner]           = useState(null);
+  const [verifyParams, setVerifyParams]     = useState(null);
+  const [tokenModal, setTokenModal]         = useState(null);
+  const [importModal, setImportModal]       = useState(null);
+  const [disconnectConfirm, setDisconnectConfirm] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -533,8 +665,6 @@ export default function Integrations() {
     setTimeout(() => setMsgBanner(null), 4000);
   };
 
-  // ── Verify handlers ───────────────────────────────────────────────────────
-
   const handleVerifyConfirm = async () => {
     if (!verifyParams) return;
     try { await logVerify(verifyParams.integrationId, 'confirmed'); } catch {}
@@ -551,15 +681,12 @@ export default function Integrations() {
       if (p === 'google_ads' || p === 'google_analytics') {
         await disconnectGoogleIntegration(p, brandId);
       } else {
-        // appsflyer / adjust — integration_id ile sil
         await disconnectIntegration(verifyParams.integrationId);
       }
     } catch {}
     setVerifyParams(null);
     load();
   };
-
-  // ── Connect handlers ──────────────────────────────────────────────────────
 
   const handleConnect = async (platform) => {
     if (platform.isApiToken) { setTokenModal(platform); return; }
@@ -585,9 +712,7 @@ export default function Integrations() {
     });
   };
 
-  const handleDisconnect = (integration) => {
-    setDisconnectConfirm(integration);
-  };
+  const handleDisconnect = (integration) => setDisconnectConfirm(integration);
 
   const handleDisconnectConfirmed = async () => {
     const integration = disconnectConfirm;
@@ -627,8 +752,6 @@ export default function Integrations() {
     finally { setLiveLoading(false); }
   };
 
-  // ── MCC / Meta BM handlers ────────────────────────────────────────────────
-
   const handleMccConnect = async () => {
     try {
       const { authUrl } = await getMccAuthUrl();
@@ -656,7 +779,7 @@ export default function Integrations() {
 
   const getConnected = (platformId) => integrations.find(i => i.platform === platformId);
 
-  // ── Ajans ana görünümü (marka seçilmemiş) ────────────────────────────────────
+  // ── Ajans ana görünümü (marka seçilmemiş) ────────────────────────────────
   if (isAgency && !selectedBrand) {
     return (
       <div style={s.page}>
@@ -719,10 +842,9 @@ export default function Integrations() {
     );
   }
 
-  // ── Marka entegrasyonları (marka kullanıcısı veya ajans+seçili marka) ─────────
+  // ── Marka entegrasyonları ─────────────────────────────────────────────────
   return (
     <div style={s.page}>
-      {/* Modals */}
       {verifyParams && (
         <VerifyModal
           accountName={verifyParams.accountName}
@@ -778,71 +900,38 @@ export default function Integrations() {
         <p style={s.sub}>Reklam platformlarınızı bağlayın, verilerinizi tek ekranda takip edin.</p>
       </div>
 
-      <div style={s.grid}>
-        {PLATFORMS.map(platform => {
-          const connected = getConnected(platform.id);
-          const isConnecting = connecting === platform.id;
-          const isDisconnecting = disconnecting === connected?.id;
-
-          return (
-            <div key={platform.id} style={{ ...s.card, border: connected ? '1px solid rgba(16,185,129,0.3)' : s.card.border }}>
-              <div style={s.cardTop}>
-                <div style={{ ...s.icon, background: platform.bg, color: platform.color }}>{platform.icon}</div>
-                <div>
-                  <div style={s.platformName}>{platform.name}</div>
-                  <div style={{ ...s.status, color: connected ? '#10B981' : 'var(--text3)' }}>
-                    {connected ? '● Bağlı' : '○ Bağlı değil'}
-                  </div>
-                </div>
-                {platform.isGoogle && <div style={s.googleBadge}>Google OAuth</div>}
-                {platform.isApiToken && <div style={s.googleBadge}>API Token</div>}
+      {loading ? (
+        <div style={{ color: 'var(--text3)', padding: 32, fontSize: 13 }}>Yükleniyor...</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+          {GROUPS.map(group => (
+            <div key={group.label}>
+              <GroupHeader label={group.label} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12 }}>
+                {group.ids.map(platformId => {
+                  const platform = PLATFORMS.find(p => p.id === platformId);
+                  if (!platform) return null;
+                  const connected      = getConnected(platformId);
+                  const isConnecting   = connecting === platformId;
+                  const isDisconnecting = disconnecting === connected?.id;
+                  return (
+                    <PlatformCard
+                      key={platformId}
+                      platform={platform}
+                      connected={connected}
+                      isConnecting={isConnecting}
+                      isDisconnecting={isDisconnecting}
+                      onConnect={() => handleConnect(platform)}
+                      onDisconnect={() => handleDisconnect(connected)}
+                      onDetail={() => handleSelect(connected)}
+                    />
+                  );
+                })}
               </div>
-
-              {connected && (
-                <div style={s.statsRow}>
-                  <div style={s.stat}>
-                    <div style={s.statLabel}>30G Harcama</div>
-                    <div style={s.statVal}>₺{fmt(connected.total_spend)}</div>
-                  </div>
-                  <div style={s.stat}>
-                    <div style={s.statLabel}>Ort. ROAS</div>
-                    <div style={s.statVal}>{Number(connected.avg_roas || 0).toFixed(2)}x</div>
-                  </div>
-                  <div style={s.stat}>
-                    <div style={s.statLabel}>Dönüşüm</div>
-                    <div style={s.statVal}>{fmt(connected.total_conversions)}</div>
-                  </div>
-                </div>
-              )}
-
-              <div style={s.cardActions}>
-                {connected ? (
-                  <>
-                    <button style={s.detailBtn} onClick={() => handleSelect(connected)}>Detay</button>
-                    <button style={s.disconnectBtn} onClick={() => handleDisconnect(connected)} disabled={isDisconnecting}>
-                      {isDisconnecting ? '...' : 'Bağlantıyı Kes'}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    style={{ ...s.connectBtn, background: isConnecting ? '#555' : '#0EA5E9', opacity: 1 }}
-                    onClick={() => handleConnect(platform)}
-                    disabled={isConnecting}
-                  >
-                    {isConnecting ? 'Yönlendiriliyor...' : `${platform.name} Bağla`}
-                  </button>
-                )}
-              </div>
-
-              {connected?.account_id && (
-                <div style={s.accountId}>Hesap: {connected.account_id}</div>
-              )}
             </div>
-          );
-        })}
-      </div>
-
-      {loading && <div style={{ color: 'var(--text3)', padding: 32 }}>Yükleniyor...</div>}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -852,24 +941,7 @@ const s = {
   header:       { marginBottom: 28 },
   title:        { fontSize: 22, fontWeight: 700, marginBottom: 6 },
   sub:          { fontSize: 13, color: 'var(--text3)' },
-  grid:         { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 },
-  card:         { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: 20 },
-  cardTop:      { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, flexWrap: 'wrap' },
-  icon:         { width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 },
-  platformName: { fontSize: 15, fontWeight: 700 },
-  status:       { fontSize: 12, marginTop: 2 },
-  googleBadge:  { marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#818CF8', background: 'rgba(99,102,241,0.15)', padding: '2px 8px', borderRadius: 6 },
-  statsRow:     { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16, background: 'var(--bg3)', borderRadius: 8, padding: '10px 8px' },
-  stat:         { textAlign: 'center' },
-  statLabel:    { fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 },
-  statVal:      { fontSize: 13, fontWeight: 700 },
-  cardActions:  { display: 'flex', gap: 8 },
   connectBtn:   { flex: 1, padding: '8px 0', border: 'none', borderRadius: 8, background: '#0EA5E9', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  detailBtn:    { flex: 1, padding: '8px 0', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, color: '#10B981', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  disconnectBtn:{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  accountId:    { marginTop: 10, fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' },
-  metricsPanel: { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: 24 },
-  metricsTitle: { fontSize: 15, fontWeight: 700 },
   tableWrap:    { overflowX: 'auto' },
   table:        { width: '100%', borderCollapse: 'collapse' },
   th:           { padding: '10px 14px', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left', borderBottom: '1px solid var(--border2)', whiteSpace: 'nowrap' },
