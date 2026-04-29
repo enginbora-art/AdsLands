@@ -17,6 +17,9 @@ import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import Connections from './pages/Connections';
+import Pricing from './pages/Pricing';
+import Subscription from './pages/Subscription';
+import PaymentResult from './pages/PaymentResult';
 import Login from './pages/Login';
 import SetupPassword from './pages/SetupPassword';
 import './index.css';
@@ -34,7 +37,10 @@ const PAGES = {
   integrations: Integrations,
   settings:     Settings,
   users:        UserManagement,
-  connections:  Connections,
+  connections:   Connections,
+  pricing:       Pricing,
+  subscription:  Subscription,
+  'payment-result': PaymentResult,
 };
 
 // page-id ↔ URL segment mapping
@@ -51,13 +57,20 @@ const PAGE_URL = {
   tv:           'tv',
   tvplan:       'tvplan',
   benchmark:    'benchmark',
-  connections:  'connections',
+  connections:      'connections',
+  pricing:          'pricing',
+  subscription:     'subscription',
+  'payment-result': 'payment/result',
 };
 
 const URL_PAGE = Object.fromEntries(Object.entries(PAGE_URL).map(([k, v]) => [v, k]));
 
 function parseUrl() {
   const segs = window.location.pathname.replace(/^\//, '').split('/').filter(Boolean);
+  // /payment/result
+  if (segs[0] === 'payment' && segs[1] === 'result') {
+    return { page: 'payment-result', brandId: null };
+  }
   // /brands/:brandId/:page
   if (segs[0] === 'brands' && segs[1] && segs[2]) {
     return { page: URL_PAGE[segs[2]] || 'dashboard', brandId: segs[1] };

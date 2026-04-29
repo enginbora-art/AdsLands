@@ -135,6 +135,12 @@ export const updateProfile = (data) => api.patch('/users/me', data).then(r => r.
 export const getNotificationPrefs = () => api.get('/users/me/notification-prefs').then(r => r.data);
 export const saveNotificationPrefs = (prefs) => api.patch('/users/me/notification-prefs', prefs).then(r => r.data);
 
+// ── Ödeme & Abonelik ──────────────────────────────────────────────────────────
+export const initiatePayment    = (data) => api.post('/payments/initiate', data).then(r => r.data);
+export const getSubscription    = () => api.get('/payments/subscription').then(r => r.data);
+export const cancelSubscription = () => api.post('/payments/cancel').then(r => r.data);
+export const getPaymentHistory  = () => api.get('/payments/history').then(r => r.data);
+
 // ── TV Medya Planı ────────────────────────────────────────────────────────────
 export const getTvCampaigns    = (brandId) => api.get(`/tv/campaigns${brandId ? `?brandId=${brandId}` : ''}`).then(r => r.data);
 export const createTvCampaign  = (data) => api.post('/tv/campaigns', data).then(r => r.data);

@@ -379,6 +379,42 @@ async function migrate() {
       );
     `);
 
+    // ── Abonelikler ───────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        plan VARCHAR(20) NOT NULL CHECK (plan IN ('starter','growth','scale','brand_direct')),
+        interval VARCHAR(10) NOT NULL CHECK (interval IN ('monthly','yearly')),
+        amount NUMERIC(10,2) NOT NULL,
+        currency VARCHAR(5) NOT NULL DEFAULT 'TRY',
+        status VARCHAR(15) NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled','past_due','trialing')),
+        sipay_recurring_id TEXT,
+        current_period_start TIMESTAMPTZ,
+        current_period_end TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // ── Ödeme İşlemleri ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payment_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        order_id VARCHAR(100) UNIQUE NOT NULL,
+        sipay_invoice_id TEXT,
+        amount NUMERIC(10,2) NOT NULL,
+        currency VARCHAR(5) NOT NULL DEFAULT 'TRY',
+        status VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','success','failed','refunded')),
+        plan VARCHAR(20),
+        interval VARCHAR(10),
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`
