@@ -1,12 +1,12 @@
 const jwt = require('jsonwebtoken');
 
 const authMiddleware = (req, res, next) => {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  if (!token) {
     return res.status(401).json({ error: 'Oturum açmanız gerekiyor.' });
   }
   try {
-    req.user = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
     next();
   } catch {
     res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token.' });

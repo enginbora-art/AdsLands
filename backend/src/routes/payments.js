@@ -245,29 +245,38 @@ router.post('/cancel', auth, async (req, res) => {
 // ── GET /api/payments/history ─────────────────────────────────────────────────
 router.get('/history', auth, async (req, res) => {
   try {
-    const { month } = req.query; // YYYY-MM formatı, opsiyonel
-    let query, params;
+    const { month, page = '1', limit: limitParam = '5' } = req.query;
+    const limit  = Math.min(Math.max(parseInt(limitParam) || 5, 1), 50);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
+
+    let where, countParams, dataParams;
 
     if (month && /^\d{4}-\d{2}$/.test(month)) {
-      query = `
-        SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
-        FROM payment_transactions
-        WHERE company_id = $1
-          AND TO_CHAR(created_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM') = $2
-        ORDER BY created_at DESC LIMIT 100`;
-      params = [req.user.company_id, month];
+      where       = `company_id = $1 AND TO_CHAR(created_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM') = $2`;
+      countParams = [req.user.company_id, month];
+      dataParams  = [req.user.company_id, month, limit, offset];
     } else {
-      query = `
-        SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
-        FROM payment_transactions
-        WHERE company_id = $1
-          AND created_at >= NOW() - INTERVAL '3 months'
-        ORDER BY created_at DESC LIMIT 100`;
-      params = [req.user.company_id];
+      where       = `company_id = $1 AND created_at >= NOW() - INTERVAL '3 months'`;
+      countParams = [req.user.company_id];
+      dataParams  = [req.user.company_id, limit, offset];
     }
 
-    const { rows } = await pool.query(query, params);
-    res.json(rows);
+    const offsetIdx = dataParams.length - 1; // $3 or $4 index for OFFSET
+    const limitIdx  = dataParams.length - 2;
+
+    const [{ rows: [{ count }] }, { rows }] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM payment_transactions WHERE ${where}`, countParams),
+      pool.query(
+        `SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
+         FROM payment_transactions
+         WHERE ${where}
+         ORDER BY created_at DESC
+         LIMIT $${limitIdx + 1} OFFSET $${offsetIdx + 1}`,
+        dataParams
+      ),
+    ]);
+
+    res.json({ transactions: rows, total: parseInt(count), page: parseInt(page), limit });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

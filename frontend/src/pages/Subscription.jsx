@@ -63,26 +63,32 @@ export default function Subscription({ onNav }) {
   const [cancelModal, setCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [msg, setMsg]               = useState(null);
+  const [page, setPage]             = useState(1);
+  const [total, setTotal]           = useState(0);
+  const LIMIT = 5;
 
   const now = new Date();
-  const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);        // 1-12
+  const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear,  setFilterYear]  = useState(now.getFullYear());
   const yearOptions = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+  const totalPages  = Math.max(1, Math.ceil(total / LIMIT));
 
   useEffect(() => {
     const monthStr = `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
-    Promise.all([getSubscription(), getPaymentHistory(monthStr)])
-      .then(([s, h]) => { setSub(s); setHistory(h); })
+    Promise.all([getSubscription(), getPaymentHistory(monthStr, 1, LIMIT)])
+      .then(([s, h]) => { setSub(s); setHistory(h.transactions); setTotal(h.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const loadHistory = async (month, year) => {
+  const loadHistory = async (month, year, p = 1) => {
     setHistLoading(true);
     try {
       const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-      const h = await getPaymentHistory(monthStr);
-      setHistory(h);
+      const h = await getPaymentHistory(monthStr, p, LIMIT);
+      setHistory(h.transactions);
+      setTotal(h.total);
+      setPage(p);
     } catch (_) {}
     finally { setHistLoading(false); }
   };
@@ -90,14 +96,16 @@ export default function Subscription({ onNav }) {
   const handleMonthChange = (e) => {
     const m = Number(e.target.value);
     setFilterMonth(m);
-    loadHistory(m, filterYear);
+    loadHistory(m, filterYear, 1);
   };
 
   const handleYearChange = (e) => {
     const y = Number(e.target.value);
     setFilterYear(y);
-    loadHistory(filterMonth, y);
+    loadHistory(filterMonth, y, 1);
   };
+
+  const handlePage = (p) => loadHistory(filterMonth, filterYear, p);
 
   const handleCancel = async () => {
     setCancelling(true);
@@ -280,7 +288,7 @@ export default function Subscription({ onNav }) {
             Bu dönemde ödeme kaydı yok.
           </div>
         ) : (
-          <div style={{ background: '#161b27', border: '1px solid #1e2535', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: '#161b27', border: '1px solid #1e2535', borderRadius: 12, overflow: 'hidden', marginBottom: 0 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e2535' }}>
@@ -330,6 +338,27 @@ export default function Subscription({ onNav }) {
                 })}
               </tbody>
             </table>
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '14px 16px', borderTop: '1px solid #1e2535' }}>
+                <button
+                  onClick={() => handlePage(page - 1)}
+                  disabled={page <= 1}
+                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid #2d3748', color: page <= 1 ? '#475569' : '#cbd5e1', fontWeight: 600, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}
+                >
+                  ← Önceki
+                </button>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  Sayfa <strong style={{ color: '#f1f5f9' }}>{page}</strong> / {totalPages}
+                </span>
+                <button
+                  onClick={() => handlePage(page + 1)}
+                  disabled={page >= totalPages}
+                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid #2d3748', color: page >= totalPages ? '#475569' : '#cbd5e1', fontWeight: 600, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}
+                >
+                  Sonraki →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
