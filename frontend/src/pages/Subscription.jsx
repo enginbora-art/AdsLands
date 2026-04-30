@@ -212,12 +212,14 @@ export default function Subscription({ onNav }) {
                   Aboneliği Yeniden Başlat
                 </button>
               )}
-              <button
-                onClick={() => onNav && onNav('pricing')}
-                style={{ padding: '10px 20px', borderRadius: 9, background: 'rgba(13,148,136,0.1)', border: '1px solid rgba(13,148,136,0.25)', color: '#0d9488', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-              >
-                Plan Değiştir
-              </button>
+              {!isCancelPending && sub.status !== 'cancelled' && (
+                <button
+                  onClick={() => onNav && onNav('pricing')}
+                  style={{ padding: '10px 20px', borderRadius: 9, background: 'rgba(13,148,136,0.1)', border: '1px solid rgba(13,148,136,0.25)', color: '#0d9488', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Plan Değiştir
+                </button>
+              )}
             </div>
           </>
         ) : (
