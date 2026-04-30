@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { getSubscription, cancelSubscription, getPaymentHistory, downloadInvoice } from '../api';
 
 const PLAN_LABELS = {
@@ -25,21 +25,11 @@ const TX_STATUS = {
 const fmt      = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '—';
 const fmtMoney = (n) => `₺${Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0 })}`;
 
+const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
 function daysUntil(date) {
   if (!date) return null;
   return Math.ceil((new Date(date) - Date.now()) / 86400000);
-}
-
-function generateMonthOptions() {
-  const options = [];
-  const now = new Date();
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
-    options.push({ value, label });
-  }
-  return options;
 }
 
 function CancelModal({ onConfirm, onCancel, loading, periodEnd }) {
@@ -73,29 +63,40 @@ export default function Subscription({ onNav }) {
   const [cancelModal, setCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [msg, setMsg]               = useState(null);
-  const [monthFilter, setMonthFilter] = useState('');
 
-  const monthOptions = useMemo(() => generateMonthOptions(), []);
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);        // 1-12
+  const [filterYear,  setFilterYear]  = useState(now.getFullYear());
+  const yearOptions = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
 
   useEffect(() => {
-    Promise.all([getSubscription(), getPaymentHistory()])
+    const monthStr = `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
+    Promise.all([getSubscription(), getPaymentHistory(monthStr)])
       .then(([s, h]) => { setSub(s); setHistory(h); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const loadHistory = async (month) => {
+  const loadHistory = async (month, year) => {
     setHistLoading(true);
     try {
-      const h = await getPaymentHistory(month || undefined);
+      const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+      const h = await getPaymentHistory(monthStr);
       setHistory(h);
     } catch (_) {}
     finally { setHistLoading(false); }
   };
 
   const handleMonthChange = (e) => {
-    setMonthFilter(e.target.value);
-    loadHistory(e.target.value);
+    const m = Number(e.target.value);
+    setFilterMonth(m);
+    loadHistory(m, filterYear);
+  };
+
+  const handleYearChange = (e) => {
+    const y = Number(e.target.value);
+    setFilterYear(y);
+    loadHistory(filterMonth, y);
   };
 
   const handleCancel = async () => {
@@ -246,16 +247,26 @@ export default function Subscription({ onNav }) {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
           <h2 style={{ fontFamily: 'var(--font)', fontSize: 16, color: '#f1f5f9', margin: 0 }}>Ödeme Geçmişi</h2>
-          <select
-            value={monthFilter}
-            onChange={handleMonthChange}
-            style={{ background: '#1e2535', border: '1px solid #2d3748', borderRadius: 8, color: '#cbd5e1', fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}
-          >
-            <option value="">Son 3 Ay</option>
-            {monthOptions.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select
+              value={filterMonth}
+              onChange={handleMonthChange}
+              style={{ background: '#1e2535', border: '1px solid #2d3748', borderRadius: 8, color: '#cbd5e1', fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}
+            >
+              {MONTHS.map((label, i) => (
+                <option key={i + 1} value={i + 1}>{label}</option>
+              ))}
+            </select>
+            <select
+              value={filterYear}
+              onChange={handleYearChange}
+              style={{ background: '#1e2535', border: '1px solid #2d3748', borderRadius: 8, color: '#cbd5e1', fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}
+            >
+              {yearOptions.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {histLoading ? (
