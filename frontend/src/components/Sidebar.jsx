@@ -33,7 +33,6 @@ const AGENCY_BASE_NAV = [
     { id: 'users',         label: 'Kullanıcılar',   perm: 'kullanici_yonetimi' },
     { id: 'settings',      label: 'Ayarlar',        perm: 'ayarlar' },
     { id: 'subscription',  label: 'Abonelik',       perm: null },
-    { id: 'pricing',       label: 'Planlar',        perm: null },
   ]},
 ];
 
@@ -57,7 +56,6 @@ const AGENCY_BRAND_NAV = [
     { id: 'users',         label: 'Kullanıcılar',   perm: 'kullanici_yonetimi' },
     { id: 'settings',      label: 'Ayarlar',        perm: 'ayarlar' },
     { id: 'subscription',  label: 'Abonelik',       perm: null },
-    { id: 'pricing',       label: 'Planlar',        perm: null },
   ]},
 ];
 
@@ -84,7 +82,6 @@ const BRAND_NAV = [
     { id: 'users',         label: 'Kullanıcılar',   perm: 'kullanici_yonetimi' },
     { id: 'settings',      label: 'Ayarlar',        perm: 'ayarlar' },
     { id: 'subscription',  label: 'Abonelik',       perm: null },
-    { id: 'pricing',       label: 'Planlar',        perm: null },
   ]},
 ];
 

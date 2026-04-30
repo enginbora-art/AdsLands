@@ -1,10 +1,13 @@
 const express  = require('express');
 const router   = express.Router();
+const fs       = require('fs');
+const path     = require('path');
 const { v4: uuidv4 } = require('uuid');
 const pool     = require('../db');
 const auth     = require('../middleware/auth');
 const sipay    = require('../services/sipayService');
 const { PLANS, getAmount } = require('../config/plans');
+const { createInvoice } = require('../services/invoiceService');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:3001';
@@ -62,7 +65,8 @@ router.post('/initiate', auth, async (req, res) => {
       billPhone:    req.user.phone || '',
       returnUrl,
       cancelUrl,
-      description:  `AdsLands ${planCfg.label} — ${interval === 'yearly' ? 'Yıllık' : 'Aylık'}`,
+      description:           `AdsLands ${planCfg.label} — ${interval === 'yearly' ? 'Yıllık' : 'Aylık'}`,
+      recurringFrequencyType: interval === 'yearly' ? 'Y' : 'M',
     });
 
     res.json({ html: result.html, orderId });
@@ -120,14 +124,14 @@ router.post('/callback', express.urlencoded({ extended: true }), async (req, res
     `UPDATE payment_transactions
      SET status = $1, sipay_invoice_id = $2, error_message = $3
      WHERE order_id = $4
-     RETURNING company_id, plan, interval, amount`,
+     RETURNING id, company_id, plan, interval, amount`,
     [status, callbackData.sipay_invoice_id || invoiceId, status === 'failed' ? sipayErr : null, invoiceId]
   );
 
   if (!tx) return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=notfound`);
 
   if (status === 'success') {
-    const now     = new Date();
+    const now       = new Date();
     const periodEnd = new Date(now);
     if (tx.interval === 'yearly') {
       periodEnd.setFullYear(periodEnd.getFullYear() + 1);
@@ -137,15 +141,33 @@ router.post('/callback', express.urlencoded({ extended: true }), async (req, res
 
     // Önceki aktif aboneliği kapat, yeni oluştur
     await pool.query(
-      `UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-       WHERE company_id = $1 AND status = 'active'`,
+      `UPDATE subscriptions SET status = 'cancelled', cancel_at_period_end = false, updated_at = NOW()
+       WHERE company_id = $1 AND status IN ('active','cancelled') AND cancel_at_period_end = false`,
       [tx.company_id]
     );
+
+    const recurringId = callbackData.sipay_recurring_id || callbackData.recurring_id || null;
     await pool.query(
-      `INSERT INTO subscriptions (company_id, plan, interval, amount, currency, status, current_period_start, current_period_end)
-       VALUES ($1, $2, $3, $4, 'TRY', 'active', $5, $6)`,
-      [tx.company_id, tx.plan, tx.interval, tx.amount, now, periodEnd]
+      `INSERT INTO subscriptions (company_id, plan, interval, amount, currency, status, sipay_recurring_id, current_period_start, current_period_end)
+       VALUES ($1, $2, $3, $4, 'TRY', 'active', $5, $6, $7)`,
+      [tx.company_id, tx.plan, tx.interval, tx.amount, recurringId, now, periodEnd]
     );
+
+    // Fatura oluştur
+    try {
+      const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [tx.company_id]);
+      await createInvoice({
+        companyId:   tx.company_id,
+        companyName: company?.name,
+        transactionId: tx.id,
+        planKey:     tx.plan,
+        amount:      tx.amount,
+        periodStart: now,
+        periodEnd,
+      });
+    } catch (e) {
+      console.error('[Invoice] Fatura oluşturulamadı:', e.message);
+    }
 
     return res.redirect(`${FRONTEND_URL}/payment/result?status=success`);
   }
@@ -175,10 +197,21 @@ router.post('/webhook', async (req, res) => {
 router.get('/subscription', auth, async (req, res) => {
   try {
     const { rows: [sub] } = await pool.query(
-      `SELECT * FROM subscriptions WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT s.*, c.trial_ends_at
+       FROM subscriptions s
+       JOIN companies c ON c.id = s.company_id
+       WHERE s.company_id = $1
+       ORDER BY s.created_at DESC LIMIT 1`,
       [req.user.company_id]
     );
-    res.json(sub || null);
+    if (sub) return res.json(sub);
+
+    // Abonelik yok — sadece trial bilgisi döndür
+    const { rows: [comp] } = await pool.query(
+      `SELECT trial_ends_at FROM companies WHERE id = $1`,
+      [req.user.company_id]
+    );
+    res.json(comp ? { trial_ends_at: comp.trial_ends_at } : null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -200,10 +233,10 @@ router.post('/cancel', auth, async (req, res) => {
     }
 
     await pool.query(
-      `UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+      `UPDATE subscriptions SET cancel_at_period_end = true, updated_at = NOW() WHERE id = $1`,
       [sub.id]
     );
-    res.json({ ok: true });
+    res.json({ ok: true, cancel_at_period_end: true, current_period_end: sub.current_period_end });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -212,14 +245,50 @@ router.post('/cancel', auth, async (req, res) => {
 // ── GET /api/payments/history ─────────────────────────────────────────────────
 router.get('/history', auth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
-       FROM payment_transactions
-       WHERE company_id = $1
-       ORDER BY created_at DESC LIMIT 50`,
-      [req.user.company_id]
-    );
+    const { month } = req.query; // YYYY-MM formatı, opsiyonel
+    let query, params;
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      query = `
+        SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
+        FROM payment_transactions
+        WHERE company_id = $1
+          AND TO_CHAR(created_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM') = $2
+        ORDER BY created_at DESC LIMIT 100`;
+      params = [req.user.company_id, month];
+    } else {
+      query = `
+        SELECT id, order_id, sipay_invoice_id, amount, currency, status, plan, interval, error_message, created_at
+        FROM payment_transactions
+        WHERE company_id = $1
+          AND created_at >= NOW() - INTERVAL '3 months'
+        ORDER BY created_at DESC LIMIT 100`;
+      params = [req.user.company_id];
+    }
+
+    const { rows } = await pool.query(query, params);
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/payments/invoice/:transactionId ──────────────────────────────────
+router.get('/invoice/:transactionId', auth, async (req, res) => {
+  try {
+    const { rows: [inv] } = await pool.query(
+      `SELECT i.* FROM invoices i
+       JOIN payment_transactions pt ON pt.id = i.transaction_id
+       WHERE i.transaction_id = $1 AND pt.company_id = $2`,
+      [req.params.transactionId, req.user.company_id]
+    );
+    if (!inv) return res.status(404).json({ error: 'Fatura bulunamadı.' });
+    if (!inv.pdf_path || !fs.existsSync(inv.pdf_path)) {
+      return res.status(404).json({ error: 'PDF dosyası bulunamadı.' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${inv.invoice_number}.pdf"`);
+    fs.createReadStream(inv.pdf_path).pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

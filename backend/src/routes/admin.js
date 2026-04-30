@@ -80,7 +80,8 @@ router.post('/companies', platformAdmin, async (req, res) => {
     }
 
     const { rows: [company] } = await pool.query(
-      'INSERT INTO companies (name, type, sector) VALUES ($1, $2, $3) RETURNING *',
+      `INSERT INTO companies (name, type, sector, trial_ends_at)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '30 days') RETURNING *`,
       [name.trim(), type, sector || null]
     );
 

@@ -415,6 +415,33 @@ async function migrate() {
       );
     `);
 
+    // ── trial_ends_at (şirket kaydından 30 gün) ──────────────────────────────────
+    await client.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+    `);
+
+    // ── cancel_at_period_end (iptal, dönem sonuna kadar erişim açık) ─────────────
+    await client.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT false;
+    `);
+
+    // ── Faturalar ─────────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        transaction_id UUID REFERENCES payment_transactions(id) ON DELETE SET NULL,
+        invoice_number VARCHAR(30) NOT NULL UNIQUE,
+        amount NUMERIC(10,2) NOT NULL,
+        currency VARCHAR(5) NOT NULL DEFAULT 'TRY',
+        plan VARCHAR(20),
+        period_start TIMESTAMPTZ,
+        period_end TIMESTAMPTZ,
+        pdf_path TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

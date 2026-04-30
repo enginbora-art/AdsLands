@@ -139,7 +139,10 @@ export const saveNotificationPrefs = (prefs) => api.patch('/users/me/notificatio
 export const initiatePayment    = (data) => api.post('/payments/initiate', data).then(r => r.data);
 export const getSubscription    = () => api.get('/payments/subscription').then(r => r.data);
 export const cancelSubscription = () => api.post('/payments/cancel').then(r => r.data);
-export const getPaymentHistory  = () => api.get('/payments/history').then(r => r.data);
+export const getPaymentHistory  = (month) =>
+  api.get(`/payments/history${month ? `?month=${month}` : ''}`).then(r => r.data);
+export const downloadInvoice    = (transactionId) =>
+  `${import.meta.env.VITE_API_URL}/payments/invoice/${transactionId}`;
 
 // ── TV Medya Planı ────────────────────────────────────────────────────────────
 export const getTvCampaigns    = (brandId) => api.get(`/tv/campaigns${brandId ? `?brandId=${brandId}` : ''}`).then(r => r.data);

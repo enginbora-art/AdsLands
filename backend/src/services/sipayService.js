@@ -87,7 +87,8 @@ async function getPos(amount, currencyCode = 'TRY', ccNo = '') {
 // ── 3D Ödeme başlat ──────────────────────────────────────────────────────────
 async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   ccHolderName, ccNo, expiryMonth, expiryYear, cvv,
-  name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items }) {
+  name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items,
+  recurringFrequencyType = 'M' }) {
 
   const token      = await getToken();
   const cleanCard  = String(ccNo).replace(/\s+/g, '').trim();
@@ -118,6 +119,11 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     return_url:          returnUrl,
     cancel_url:          cancelUrl,
     response_method:     'POST',
+    recurring_payment_number:         0,
+    recurring_payment_frequency:      1,
+    recurring_payment_frequency_type: recurringFrequencyType,
+    recurring_first_amount:           fmtAmount,
+    recurring_subsequent_amount:      fmtAmount,
   };
 
   const maskedCard = cleanCard.slice(0, 6) + '******' + cleanCard.slice(-4);
