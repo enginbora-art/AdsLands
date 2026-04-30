@@ -36,12 +36,13 @@ function sha256b64(...parts) {
 
 // ── POS al ───────────────────────────────────────────────────────────────────
 async function getPos(amount, currencyCode = 'TRY') {
-  const token   = await getToken();
-  const hashKey = sha256b64(MERCHANT_KEY, amount, currencyCode, APP_SECRET);
+  const token      = await getToken();
+  const fmtAmount  = Number(amount).toFixed(2);
+  const hashKey    = sha256b64(MERCHANT_KEY, fmtAmount, currencyCode, APP_SECRET);
 
   const params = new URLSearchParams();
   params.append('merchant_key',   MERCHANT_KEY);
-  params.append('amount',         Number(amount).toFixed(2));
+  params.append('amount',         fmtAmount);
   params.append('currency_code',  currencyCode);
   params.append('hash_key',       hashKey);
   params.append('is_2d',          '0');
@@ -69,14 +70,16 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   ccHolderName, ccNo, expiryMonth, expiryYear, cvv,
   name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items }) {
 
-  const token   = await getToken();
-  const posId   = await getPos(amount, currencyCode);
-  // Hash: merchant_key|invoice_id|amount|currency_code|app_secret
-  const hashKey = sha256b64(MERCHANT_KEY, invoiceId, amount, currencyCode, APP_SECRET);
+  const token      = await getToken();
+  const posId      = await getPos(amount, currencyCode);
+  const cleanCard  = String(ccNo).replace(/\s/g, '');
+  const fmtAmount  = Number(amount).toFixed(2);
+  // Hash: merchant_key|invoice_id|total|currency_code|app_secret
+  const hashKey    = sha256b64(MERCHANT_KEY, invoiceId, fmtAmount, currencyCode, APP_SECRET);
 
   const payload = {
     cc_holder_name:      ccHolderName,
-    cc_no:               ccNo,
+    credit_card:         cleanCard,
     expiry_month:        String(expiryMonth).padStart(2, '0'),
     expiry_year:         String(expiryYear).slice(-2),
     cvv:                 String(cvv),
@@ -84,9 +87,9 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     installments_number: 1,
     invoice_id:          invoiceId,
     invoice_description: description || 'AdsLands Abonelik',
-    total:               Number(amount).toFixed(2),
+    total:               fmtAmount,
     merchant_key:        MERCHANT_KEY,
-    items:               items || [{ name: description || 'Abonelik', price: Number(amount).toFixed(2), quantity: 1, description: 'AdsLands' }],
+    items:               items || [{ name: description || 'Abonelik', price: fmtAmount, quantity: 1, description: 'AdsLands' }],
     name,
     surname,
     bill_email:          billEmail || '',
@@ -98,9 +101,10 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     response_method:     'POST',
   };
 
+  const maskedCard = cleanCard.slice(0, 6) + '******' + cleanCard.slice(-4);
   console.log('[Sipay] pay3d REQUEST:', JSON.stringify({
     ...payload,
-    cc_no: '****',
+    credit_card: maskedCard,
     cvv: '***',
   }, null, 2));
 
