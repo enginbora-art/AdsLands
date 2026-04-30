@@ -40,7 +40,7 @@ router.post('/initiate', auth, async (req, res) => {
   );
 
   const returnUrl = `${BACKEND_URL}/api/payments/callback`;
-  const cancelUrl = `${BACKEND_URL}/api/payments/callback`;
+  const cancelUrl = `${FRONTEND_URL}/payment/result?status=failed`;
 
   const nameParts = (cc_holder_name || 'Kullanıcı').split(' ');
   const firstName = nameParts[0] || 'Ad';
@@ -57,6 +57,8 @@ router.post('/initiate', auth, async (req, res) => {
       cvv,
       name:         firstName,
       surname:      lastName,
+      billEmail:    email,
+      billPhone:    req.user.phone || '',
       returnUrl,
       cancelUrl,
       description:  `AdsLands ${planCfg.label} — ${interval === 'yearly' ? 'Yıllık' : 'Aylık'}`,

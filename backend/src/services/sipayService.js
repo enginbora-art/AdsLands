@@ -29,43 +29,50 @@ async function getToken() {
 
 // ── Hash hesaplama ────────────────────────────────────────────────────────────
 // SHA-256 raw bytes → base64 (PHP: base64_encode(hash('sha256', $str, true)))
+// Sipay separator: |
 function sha256b64(...parts) {
-  return crypto.createHash('sha256').update(parts.join(';')).digest('base64');
+  return crypto.createHash('sha256').update(parts.join('|')).digest('base64');
 }
 
 // ── 3D Ödeme başlat ──────────────────────────────────────────────────────────
 async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   ccHolderName, ccNo, expiryMonth, expiryYear, cvv,
-  name, surname, returnUrl, cancelUrl, description, items }) {
+  name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items }) {
 
   const token   = await getToken();
-  const hashKey = sha256b64(MERCHANT_KEY, invoiceId, amount, currencyCode, returnUrl, cancelUrl);
+  // Hash: merchant_key|invoice_id|amount|currency_code|app_secret
+  const hashKey = sha256b64(MERCHANT_KEY, invoiceId, amount, currencyCode, APP_SECRET);
 
   const payload = {
-    cc_holder_name:     ccHolderName,
-    cc_no:              ccNo,
-    expiry_month:       String(expiryMonth).padStart(2, '0'),
-    expiry_year:        String(expiryYear).slice(-2),
-    cvv:                String(cvv),
-    currency_code:      currencyCode,
+    cc_holder_name:      ccHolderName,
+    cc_no:               ccNo,
+    expiry_month:        String(expiryMonth).padStart(2, '0'),
+    expiry_year:         String(expiryYear).slice(-2),
+    cvv:                 String(cvv),
+    currency_code:       currencyCode,
     installments_number: 1,
-    invoice_id:         invoiceId,
+    invoice_id:          invoiceId,
     invoice_description: description || 'AdsLands Abonelik',
-    total:              Number(amount).toFixed(2),
-    merchant_key:       MERCHANT_KEY,
-    items:              items || [{ name: description || 'Abonelik', price: Number(amount).toFixed(2), quantity: 1, description: 'AdsLands' }],
+    total:               Number(amount).toFixed(2),
+    merchant_key:        MERCHANT_KEY,
+    items:               items || [{ name: description || 'Abonelik', price: Number(amount).toFixed(2), quantity: 1, description: 'AdsLands' }],
     name,
     surname,
-    hash_key:           hashKey,
-    return_url:         returnUrl,
-    cancel_url:         cancelUrl,
-    response_method:    'POST',
+    bill_email:          billEmail || '',
+    bill_phone:          billPhone || '',
+    hash_key:            hashKey,
+    return_url:          returnUrl,
+    cancel_url:          cancelUrl,
+    response_method:     'POST',
   };
+
+  console.log('[Sipay] initiate3DPayment payload:', JSON.stringify({ ...payload, cc_no: '****', cvv: '***' }, null, 2));
 
   const res = await axios.post(`${BASE_URL}/api/pay3d`, payload, {
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
 
+  console.log('[Sipay] pay3d response:', JSON.stringify(res.data, null, 2));
   if (res.data?.status_code !== 100) {
     throw new Error(res.data?.status_description || '3D ödeme başlatılamadı.');
   }
