@@ -227,6 +227,27 @@ async function cancelRecurring(recurringId) {
   return res.data;
 }
 
+// ── Ödeme durumu doğrula (callback güvenlik kontrolü) ────────────────────────
+async function checkStatus(invoiceId) {
+  const token = await getToken();
+  const params = new URLSearchParams();
+  params.append('invoice_id',   invoiceId);
+  params.append('merchant_key', MERCHANT_KEY);
+
+  let res;
+  try {
+    res = await axios.post(`${BASE_URL}/api/checkstatus`, params, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+  } catch (axiosErr) {
+    console.error('[Sipay] checkstatus ERROR:', axiosErr.response?.status, JSON.stringify(axiosErr.response?.data));
+    throw new Error('Sipay checkstatus başarısız: ' + axiosErr.message);
+  }
+
+  console.log('[Sipay] checkstatus RESPONSE:', JSON.stringify(res.data, null, 2));
+  return res.data;
+}
+
 // ── İade ─────────────────────────────────────────────────────────────────────
 async function refund(invoiceId, amount) {
   const token = await getToken();
@@ -237,4 +258,4 @@ async function refund(invoiceId, amount) {
   return res.data;
 }
 
-module.exports = { getToken, initiate3DPayment, verifyHash, saveCard, chargeWithSavedCard, getRecurringPlan, cancelRecurring, refund };
+module.exports = { getToken, initiate3DPayment, verifyHash, checkStatus, saveCard, chargeWithSavedCard, getRecurringPlan, cancelRecurring, refund };

@@ -88,15 +88,32 @@ router.post('/callback', express.urlencoded({ extended: true }), async (req, res
   console.log('[Payment] callback data (kullanılan):', JSON.stringify(callbackData, null, 2));
   console.log('[Payment] sipay_status:', callbackData.sipay_status, '| status:', callbackData.status);
 
-  // Hash doğrulama — TEST: geçici olarak bypass edildi
-  // if (!sipay.verifyHash(callbackData)) {
-  //   console.warn('Sipay callback: geçersiz hash', callbackData);
-  //   return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=hash`);
-  // }
-
   const invoiceId = callbackData.invoice_id;
-  const status    = (String(callbackData.sipay_status) === '1' || String(callbackData.status) === '1') ? 'success' : 'failed';
-  const sipayErr  = callbackData.error || callbackData.status_description || null;
+  if (!invoiceId) {
+    console.error('[Payment] callback: invoice_id yok');
+    return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=noinvoice`);
+  }
+
+  // Sipay checkstatus API ile doğrula
+  let verifiedStatus;
+  try {
+    const checkRes  = await sipay.checkStatus(invoiceId);
+    const apiStatus = String(checkRes?.data?.sipay_status ?? checkRes?.sipay_status ?? '0');
+    const cbStatus  = String(callbackData.sipay_status ?? '0');
+    console.log('[Payment] checkstatus sipay_status:', apiStatus, '| callback sipay_status:', cbStatus);
+
+    if (apiStatus !== cbStatus) {
+      console.warn('[Payment] checkstatus uyuşmazlığı — güvenlik reddi');
+      return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=mismatch`);
+    }
+    verifiedStatus = apiStatus === '1' ? 'success' : 'failed';
+  } catch (err) {
+    console.error('[Payment] checkstatus hatası, callback status\'e güveniliyor:', err.message);
+    verifiedStatus = (String(callbackData.sipay_status) === '1' || String(callbackData.status) === '1') ? 'success' : 'failed';
+  }
+
+  const status   = verifiedStatus;
+  const sipayErr = callbackData.error || callbackData.status_description || null;
 
   // Transaction güncelle
   const { rows: [tx] } = await pool.query(
