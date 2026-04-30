@@ -34,12 +34,43 @@ function sha256b64(...parts) {
   return crypto.createHash('sha256').update(parts.join('|')).digest('base64');
 }
 
+// ── POS al ───────────────────────────────────────────────────────────────────
+async function getPos(amount, currencyCode = 'TRY') {
+  const token   = await getToken();
+  const hashKey = sha256b64(MERCHANT_KEY, amount, currencyCode, APP_SECRET);
+
+  const params = new URLSearchParams();
+  params.append('merchant_key',   MERCHANT_KEY);
+  params.append('amount',         Number(amount).toFixed(2));
+  params.append('currency_code',  currencyCode);
+  params.append('hash_key',       hashKey);
+  params.append('is_2d',          '0');
+
+  let res;
+  try {
+    res = await axios.post(`${BASE_URL}/api/getpos`, params, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+  } catch (axiosErr) {
+    console.error('[Sipay] getpos AXIOS ERROR status:', axiosErr.response?.status);
+    console.error('[Sipay] getpos AXIOS ERROR body:', JSON.stringify(axiosErr.response?.data, null, 2));
+    throw new Error(axiosErr.response?.data?.status_description || axiosErr.message);
+  }
+
+  console.log('[Sipay] getpos RESPONSE:', JSON.stringify(res.data, null, 2));
+  if (res.data?.status_code !== 100) {
+    throw new Error(res.data?.status_description || 'POS alınamadı.');
+  }
+  return res.data.data.pos_id;
+}
+
 // ── 3D Ödeme başlat ──────────────────────────────────────────────────────────
 async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   ccHolderName, ccNo, expiryMonth, expiryYear, cvv,
   name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items }) {
 
   const token   = await getToken();
+  const posId   = await getPos(amount, currencyCode);
   // Hash: merchant_key|invoice_id|amount|currency_code|app_secret
   const hashKey = sha256b64(MERCHANT_KEY, invoiceId, amount, currencyCode, APP_SECRET);
 
@@ -60,6 +91,7 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     surname,
     bill_email:          billEmail || '',
     bill_phone:          billPhone || '',
+    pos_id:              posId,
     hash_key:            hashKey,
     return_url:          returnUrl,
     cancel_url:          cancelUrl,
@@ -70,8 +102,6 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     ...payload,
     cc_no: '****',
     cvv: '***',
-    return_url: payload.return_url,
-    cancel_url: payload.cancel_url,
   }, null, 2));
 
   const params = new URLSearchParams();
