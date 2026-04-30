@@ -66,13 +66,26 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     response_method:     'POST',
   };
 
-  console.log('[Sipay] initiate3DPayment payload:', JSON.stringify({ ...payload, cc_no: '****', cvv: '***' }, null, 2));
+  console.log('[Sipay] pay3d REQUEST:', JSON.stringify({
+    ...payload,
+    cc_no: '****',
+    cvv: '***',
+    return_url: payload.return_url,
+    cancel_url: payload.cancel_url,
+  }, null, 2));
 
-  const res = await axios.post(`${BASE_URL}/api/pay3d`, payload, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-  });
+  let res;
+  try {
+    res = await axios.post(`${BASE_URL}/api/pay3d`, payload, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+  } catch (axiosErr) {
+    console.error('[Sipay] pay3d AXIOS ERROR status:', axiosErr.response?.status);
+    console.error('[Sipay] pay3d AXIOS ERROR body:', JSON.stringify(axiosErr.response?.data, null, 2));
+    throw new Error(axiosErr.response?.data?.status_description || axiosErr.message);
+  }
 
-  console.log('[Sipay] pay3d response:', JSON.stringify(res.data, null, 2));
+  console.log('[Sipay] pay3d RESPONSE:', JSON.stringify(res.data, null, 2));
   if (res.data?.status_code !== 100) {
     throw new Error(res.data?.status_description || '3D ödeme başlatılamadı.');
   }
