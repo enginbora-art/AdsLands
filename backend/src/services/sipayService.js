@@ -74,10 +74,15 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     cancel_url: payload.cancel_url,
   }, null, 2));
 
+  const params = new URLSearchParams();
+  Object.entries(payload).forEach(([k, v]) => {
+    params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  });
+
   let res;
   try {
-    res = await axios.post(`${BASE_URL}/api/pay3d`, payload, {
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    res = await axios.post(`${BASE_URL}/api/pay3d`, params, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     });
   } catch (axiosErr) {
     console.error('[Sipay] pay3d AXIOS ERROR status:', axiosErr.response?.status);
