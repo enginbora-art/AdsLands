@@ -230,13 +230,14 @@ export default function AdminPanel({ onLogout }) {
                   <th>Şirket</th>
                   <th>Tip</th>
                   <th>Sektör</th>
+                  <th>Admin E-posta</th>
                   <th>Kullanıcı</th>
-                  <th>Oluşturulma</th>
+                  <th>Kayıt Tarihi</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
                 ) : filtered.map(c => (
                   <tr key={c.id}>
                     <td style={{ fontWeight: 600 }}>{c.name}</td>
@@ -246,6 +247,9 @@ export default function AdminPanel({ onLogout }) {
                       </span>
                     </td>
                     <td><SectorCell company={c} onUpdate={load} /></td>
+                    <td style={{ fontSize: 12, color: c.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
+                      {c.admin_email || 'Admin yok'}
+                    </td>
                     <td style={{ color: 'var(--text2)' }}>{c.user_count}</td>
                     <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
                   </tr>

@@ -415,6 +415,12 @@ async function migrate() {
       );
     `);
 
+    // ── Ajans şirketleri için varsayılan sektör ───────────────────────────────────
+    await client.query(`
+      UPDATE companies SET sector = 'Ajans'
+      WHERE type = 'agency' AND (sector IS NULL OR sector = '');
+    `);
+
     // ── trial_ends_at (şirket kaydından 30 gün) ──────────────────────────────────
     await client.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;

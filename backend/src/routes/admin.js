@@ -47,7 +47,10 @@ router.get('/companies', platformAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT c.id, c.name, c.type, c.sector, c.created_at,
-             COUNT(u.id) AS user_count
+             COUNT(u.id) AS user_count,
+             (SELECT u2.email FROM users u2
+              WHERE u2.company_id = c.id AND u2.is_company_admin = true AND u2.is_active = true
+              ORDER BY u2.created_at LIMIT 1) AS admin_email
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
       WHERE c.type != 'admin'
@@ -79,10 +82,11 @@ router.post('/companies', platformAdmin, async (req, res) => {
       return res.status(409).json({ error: 'Bu e-posta zaten kayıtlı.' });
     }
 
+    const finalSector = sector || (type === 'agency' ? 'Ajans' : null);
     const { rows: [company] } = await pool.query(
       `INSERT INTO companies (name, type, sector, trial_ends_at)
        VALUES ($1, $2, $3, NOW() + INTERVAL '30 days') RETURNING *`,
-      [name.trim(), type, sector || null]
+      [name.trim(), type, finalSector]
     );
 
     const setupToken = uuidv4();
