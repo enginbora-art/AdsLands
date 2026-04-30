@@ -9,6 +9,13 @@ const SECTORS = [
   'Sağlık & Güzellik', 'Eğitim', 'Gayrimenkul', 'Medya & Eğlence', 'Diğer',
 ];
 
+const PLAN_LABELS = {
+  starter: 'Starter',
+  growth: 'Growth',
+  scale: 'Scale',
+  brand_direct: 'Direkt',
+};
+
 const inp = {
   padding: '9px 12px', background: 'var(--bg)', border: '1px solid var(--border2)',
   borderRadius: 8, color: 'var(--text1)', fontSize: 14, width: '100%', boxSizing: 'border-box',
@@ -17,6 +24,50 @@ const fieldLabel = {
   display: 'block', fontSize: 11, color: 'var(--text3)',
   textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600,
 };
+
+function PlanBadge({ status, plan, cancelAtPeriodEnd }) {
+  if (status === 'active') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ background: 'rgba(0,191,166,0.12)', color: 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+          Pro {plan ? `· ${PLAN_LABELS[plan] || plan}` : ''}
+        </span>
+      </span>
+    );
+  }
+  if (status === 'cancelling') {
+    return (
+      <span style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+        İptal Süreci
+      </span>
+    );
+  }
+  if (status === 'trial') {
+    return (
+      <span style={{ background: 'rgba(167,139,250,0.12)', color: '#A78BFA', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+        Deneme
+      </span>
+    );
+  }
+  if (status === 'cancelled') {
+    return (
+      <span style={{ background: 'rgba(255,107,90,0.1)', color: 'var(--coral)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+        İptal
+      </span>
+    );
+  }
+  return (
+    <span style={{ background: 'rgba(148,163,179,0.1)', color: 'var(--text3)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+      Pasif
+    </span>
+  );
+}
+
+function ActivityCell({ months }) {
+  const n = parseInt(months) || 0;
+  if (n === 0) return <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>;
+  return <span style={{ color: 'var(--text2)', fontSize: 12 }}>{n} ay</span>;
+}
 
 function CreateModal({ onClose, onSuccess }) {
   const [form, setForm] = useState({ name: '', type: 'brand', sector: '', admin_email: '' });
@@ -138,8 +189,74 @@ function SectorCell({ company, onUpdate }) {
   );
 }
 
+function CompanyRow({ c, indent = false, onUpdate }) {
+  return (
+    <tr key={c.id}>
+      <td style={{ fontWeight: indent ? 500 : 600, paddingLeft: indent ? 32 : 16 }}>
+        {indent && <span style={{ color: 'var(--text3)', marginRight: 6, fontSize: 11 }}>↳</span>}
+        {c.name}
+      </td>
+      <td>
+        <span style={{ background: c.type === 'agency' ? 'rgba(167,139,250,0.15)' : 'rgba(0,191,166,0.12)', color: c.type === 'agency' ? '#A78BFA' : 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+          {c.type === 'agency' ? 'Ajans' : 'Marka'}
+        </span>
+      </td>
+      <td><SectorCell company={c} onUpdate={onUpdate} /></td>
+      <td style={{ fontSize: 12, color: c.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
+        {c.admin_email || 'Admin yok'}
+      </td>
+      <td><PlanBadge status={c.plan_status} plan={c.plan} cancelAtPeriodEnd={c.cancel_at_period_end} /></td>
+      <td><ActivityCell months={c.months_active} /></td>
+      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{c.user_count}</td>
+      <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
+    </tr>
+  );
+}
+
+function AgencyGroup({ agency, onUpdate }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const hasBrands = agency.brands?.length > 0;
+
+  return (
+    <>
+      <tr style={{ background: 'rgba(167,139,250,0.04)' }}>
+        <td style={{ fontWeight: 700, paddingLeft: 16 }}>
+          {hasBrands && (
+            <button onClick={() => setCollapsed(v => !v)}
+              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', marginRight: 6, fontSize: 12, padding: 0 }}>
+              {collapsed ? '▶' : '▼'}
+            </button>
+          )}
+          {agency.name}
+          {hasBrands && (
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>
+              {agency.brands.length} marka
+            </span>
+          )}
+        </td>
+        <td>
+          <span style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
+            Ajans
+          </span>
+        </td>
+        <td><SectorCell company={agency} onUpdate={onUpdate} /></td>
+        <td style={{ fontSize: 12, color: agency.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
+          {agency.admin_email || 'Admin yok'}
+        </td>
+        <td><PlanBadge status={agency.plan_status} plan={agency.plan} cancelAtPeriodEnd={agency.cancel_at_period_end} /></td>
+        <td><ActivityCell months={agency.months_active} /></td>
+        <td style={{ color: 'var(--text2)', fontSize: 12 }}>{agency.user_count}</td>
+        <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(agency.created_at)}</td>
+      </tr>
+      {!collapsed && hasBrands && agency.brands.map(brand => (
+        <CompanyRow key={brand.id} c={brand} indent onUpdate={onUpdate} />
+      ))}
+    </>
+  );
+}
+
 export default function AdminPanel({ onLogout }) {
-  const [companies, setCompanies] = useState([]);
+  const [data, setData] = useState({ agencies: [], independent_brands: [] });
   const [filter, setFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -148,23 +265,22 @@ export default function AdminPanel({ onLogout }) {
   const load = () => {
     setLoading(true);
     return adminGetCompanies()
-      .then(setCompanies)
+      .then(d => setData(d && d.agencies ? d : { agencies: [], independent_brands: [] }))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
-  const filtered = filter === 'all' ? companies : companies.filter(c => c.type === filter);
+  const allCompanies = [
+    ...data.agencies,
+    ...data.agencies.flatMap(a => a.brands || []),
+    ...data.independent_brands,
+  ];
 
-  const handleToggleUser = async (userId) => {
-    try {
-      await adminToggleUser(userId);
-      load();
-    } catch (err) {
-      alert(err.response?.data?.error || 'Hata oluştu.');
-    }
-  };
+  const totalAgencies = data.agencies.length;
+  const totalBrands = data.agencies.reduce((s, a) => s + (a.brands?.length || 0), 0) + data.independent_brands.length;
+  const totalAll = totalAgencies + totalBrands;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text1)' }}>
@@ -180,7 +296,7 @@ export default function AdminPanel({ onLogout }) {
         />
       )}
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -211,11 +327,15 @@ export default function AdminPanel({ onLogout }) {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {['all', 'agency', 'brand'].map(t => (
-            <button key={t} onClick={() => setFilter(t)}
+          {[
+            { key: 'all',    label: 'Tümü',  count: totalAll },
+            { key: 'agency', label: 'Ajans', count: totalAgencies },
+            { key: 'brand',  label: 'Marka', count: totalBrands },
+          ].map(({ key, label, count }) => (
+            <button key={key} onClick={() => setFilter(key)}
               style={{ padding: '6px 14px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                background: filter === t ? 'var(--teal)' : 'var(--bg2)', color: filter === t ? '#0B1219' : 'var(--text3)' }}>
-              {t === 'all' ? 'Tümü' : t === 'agency' ? 'Ajans' : 'Marka'} ({t === 'all' ? companies.length : companies.filter(c => c.type === t).length})
+                background: filter === key ? 'var(--teal)' : 'var(--bg2)', color: filter === key ? '#0B1219' : 'var(--text3)' }}>
+              {label} ({count})
             </button>
           ))}
         </div>
@@ -223,7 +343,7 @@ export default function AdminPanel({ onLogout }) {
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
         ) : (
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12 }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, overflowX: 'auto' }}>
             <table className="cmp-table">
               <thead>
                 <tr>
@@ -231,29 +351,56 @@ export default function AdminPanel({ onLogout }) {
                   <th>Tip</th>
                   <th>Sektör</th>
                   <th>Admin E-posta</th>
+                  <th>Plan</th>
+                  <th>Aktiflik</th>
                   <th>Kullanıcı</th>
                   <th>Kayıt Tarihi</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
-                ) : filtered.map(c => (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 600 }}>{c.name}</td>
-                    <td>
-                      <span style={{ background: c.type === 'agency' ? 'rgba(167,139,250,0.15)' : 'rgba(0,191,166,0.12)', color: c.type === 'agency' ? '#A78BFA' : 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
-                        {c.type === 'agency' ? 'Ajans' : 'Marka'}
-                      </span>
-                    </td>
-                    <td><SectorCell company={c} onUpdate={load} /></td>
-                    <td style={{ fontSize: 12, color: c.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
-                      {c.admin_email || 'Admin yok'}
-                    </td>
-                    <td style={{ color: 'var(--text2)' }}>{c.user_count}</td>
-                    <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
-                  </tr>
+                {filter === 'all' && data.agencies.length === 0 && data.independent_brands.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
+                )}
+
+                {/* Ajans + bağlı markalar */}
+                {filter !== 'brand' && data.agencies.map(agency => (
+                  <AgencyGroup key={agency.id} agency={agency} onUpdate={load} />
                 ))}
+
+                {/* Bağımsız markalar (all view) */}
+                {filter === 'all' && data.independent_brands.length > 0 && (
+                  <>
+                    {data.agencies.length > 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text3)', background: 'var(--bg)', borderTop: '1px solid var(--border2)' }}>
+                          Bağımsız Markalar
+                        </td>
+                      </tr>
+                    )}
+                    {data.independent_brands.map(brand => (
+                      <CompanyRow key={brand.id} c={brand} onUpdate={load} />
+                    ))}
+                  </>
+                )}
+
+                {/* Ajans filtresi — boş durum */}
+                {filter === 'agency' && data.agencies.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Ajans bulunamadı.</td></tr>
+                )}
+
+                {/* Marka filtresi: tüm markalar (bağlı + bağımsız) */}
+                {filter === 'brand' && (() => {
+                  const allBrands = [
+                    ...data.agencies.flatMap(a => a.brands || []),
+                    ...data.independent_brands,
+                  ];
+                  if (allBrands.length === 0) {
+                    return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Marka bulunamadı.</td></tr>;
+                  }
+                  return allBrands.map(brand => (
+                    <CompanyRow key={brand.id} c={brand} onUpdate={load} />
+                  ));
+                })()}
               </tbody>
             </table>
           </div>

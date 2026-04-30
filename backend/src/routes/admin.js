@@ -42,22 +42,81 @@ async function sendSetupEmail(email, companyName, companyType, setupToken) {
   });
 }
 
-// GET /api/admin/companies — tüm şirketleri listele
+// GET /api/admin/companies — tüm şirketleri listele (gruplu: ajanslar + bağımsız markalar)
 router.get('/companies', platformAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT c.id, c.name, c.type, c.sector, c.created_at,
-             COUNT(u.id) AS user_count,
+      SELECT c.id, c.name, c.type, c.sector, c.created_at, c.trial_ends_at,
+             COUNT(DISTINCT u.id) AS user_count,
              (SELECT u2.email FROM users u2
               WHERE u2.company_id = c.id AND u2.is_company_admin = true AND u2.is_active = true
-              ORDER BY u2.created_at LIMIT 1) AS admin_email
+              ORDER BY u2.created_at LIMIT 1) AS admin_email,
+             s.plan,
+             s.status        AS sub_status,
+             s.interval      AS sub_interval,
+             s.cancel_at_period_end,
+             s.current_period_start,
+             s.current_period_end,
+             CASE
+               WHEN s.id IS NOT NULL AND s.status = 'active' AND NOT s.cancel_at_period_end
+                 THEN 'active'
+               WHEN s.id IS NOT NULL AND s.status = 'active' AND s.cancel_at_period_end
+                 THEN 'cancelling'
+               WHEN s.id IS NOT NULL AND s.status = 'cancelled'
+                 THEN 'cancelled'
+               WHEN c.trial_ends_at IS NOT NULL AND c.trial_ends_at > NOW()
+                 THEN 'trial'
+               ELSE 'inactive'
+             END AS plan_status,
+             CASE
+               WHEN s.id IS NOT NULL AND s.current_period_start IS NOT NULL
+                 THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - s.current_period_start)) / 2592000)::int
+               WHEN c.trial_ends_at IS NOT NULL AND c.trial_ends_at > NOW()
+                 THEN 0
+               ELSE FLOOR(EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 2592000)::int
+             END AS months_active
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
+      LEFT JOIN LATERAL (
+        SELECT * FROM subscriptions
+        WHERE company_id = c.id
+        ORDER BY created_at DESC LIMIT 1
+      ) s ON true
       WHERE c.type != 'admin'
-      GROUP BY c.id
+      GROUP BY c.id, s.id, s.plan, s.status, s.interval, s.cancel_at_period_end,
+               s.current_period_start, s.current_period_end
       ORDER BY c.created_at DESC
     `);
-    res.json(rows);
+
+    // Ajans-marka ilişkilerini çek
+    const { rows: connections } = await pool.query(`
+      SELECT agency_company_id, brand_company_id
+      FROM connections
+      WHERE status = 'accepted'
+    `);
+
+    const companyMap = Object.fromEntries(rows.map(r => [r.id, r]));
+    const brandToAgency = {};
+    connections.forEach(({ agency_company_id, brand_company_id }) => {
+      brandToAgency[brand_company_id] = agency_company_id;
+    });
+
+    const agencies = rows
+      .filter(c => c.type === 'agency')
+      .map(agency => ({
+        ...agency,
+        brands: connections
+          .filter(cn => cn.agency_company_id === agency.id)
+          .map(cn => companyMap[cn.brand_company_id])
+          .filter(Boolean),
+      }));
+
+    const connectedBrandIds = new Set(Object.keys(brandToAgency));
+    const independent_brands = rows.filter(
+      c => c.type === 'brand' && !connectedBrandIds.has(c.id)
+    );
+
+    res.json({ agencies, independent_brands });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
