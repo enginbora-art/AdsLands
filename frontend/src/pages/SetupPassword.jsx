@@ -38,6 +38,7 @@ export default function SetupPassword({ token, onDone }) {
         company_type: payload.company_type,
         is_company_admin: payload.is_company_admin,
         is_platform_admin: payload.is_platform_admin,
+        is_managed_by_agency: payload.is_managed_by_agency ?? false,
         permissions: payload.permissions,
       });
       onDone?.();

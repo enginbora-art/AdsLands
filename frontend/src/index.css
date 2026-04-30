@@ -254,7 +254,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text1); min
 .fade-in { animation: fadeIn 0.25s ease; }
 
 /* Comparison table */
-.cmp-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cmp-table { width: 100%; border-collapse: collapse; table-layout: auto; }
 .cmp-table th { text-align: left; padding: 10px 16px; font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid rgba(255,255,255,0.08); white-space: nowrap; }
 .cmp-table td { padding: 13px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
 .cmp-table tr:last-child td { border-bottom: none; }

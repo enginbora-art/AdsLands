@@ -202,10 +202,15 @@ function CompanyRow({ c, indent = false, onUpdate }) {
         </span>
       </td>
       <td><SectorCell company={c} onUpdate={onUpdate} /></td>
-      <td style={{ fontSize: 12, color: c.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
+      <td style={{ fontSize: 12, color: c.admin_email ? 'var(--text2)' : 'var(--text3)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {c.admin_email || 'Admin yok'}
       </td>
-      <td><PlanBadge status={c.plan_status} plan={c.plan} cancelAtPeriodEnd={c.cancel_at_period_end} /></td>
+      <td>
+        {indent
+          ? <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>
+          : <PlanBadge status={c.plan_status} plan={c.plan} cancelAtPeriodEnd={c.cancel_at_period_end} />
+        }
+      </td>
       <td><ActivityCell months={c.months_active} /></td>
       <td style={{ color: 'var(--text2)', fontSize: 12 }}>{c.user_count}</td>
       <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(c.created_at)}</td>
@@ -240,7 +245,7 @@ function AgencyGroup({ agency, onUpdate }) {
           </span>
         </td>
         <td><SectorCell company={agency} onUpdate={onUpdate} /></td>
-        <td style={{ fontSize: 12, color: agency.admin_email ? 'var(--text2)' : 'var(--text3)' }}>
+        <td style={{ fontSize: 12, color: agency.admin_email ? 'var(--text2)' : 'var(--text3)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {agency.admin_email || 'Admin yok'}
         </td>
         <td><PlanBadge status={agency.plan_status} plan={agency.plan} cancelAtPeriodEnd={agency.cancel_at_period_end} /></td>
@@ -347,14 +352,14 @@ export default function AdminPanel({ onLogout }) {
             <table className="cmp-table">
               <thead>
                 <tr>
-                  <th>Şirket</th>
-                  <th>Tip</th>
-                  <th>Sektör</th>
-                  <th>Admin E-posta</th>
-                  <th>Plan</th>
-                  <th>Aktiflik</th>
-                  <th>Kullanıcı</th>
-                  <th>Kayıt Tarihi</th>
+                  <th style={{ minWidth: 160 }}>Şirket</th>
+                  <th style={{ minWidth: 90 }}>Tip</th>
+                  <th style={{ minWidth: 100 }}>Sektör</th>
+                  <th style={{ minWidth: 200, maxWidth: 220 }}>Admin E-posta</th>
+                  <th style={{ minWidth: 80 }}>Plan</th>
+                  <th style={{ minWidth: 80 }}>Aktiflik</th>
+                  <th style={{ minWidth: 80 }}>Kullanıcı</th>
+                  <th style={{ minWidth: 110 }}>Kayıt Tarihi</th>
                 </tr>
               </thead>
               <tbody>

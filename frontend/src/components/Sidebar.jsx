@@ -120,6 +120,7 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
   };
 
   const isVisible = (item) => {
+    if (item.id === 'subscription' && user?.is_managed_by_agency) return false;
     if (!item.perm) return true;
     return hasPermission(item.perm);
   };

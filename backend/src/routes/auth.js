@@ -21,6 +21,12 @@ async function buildToken(userId) {
     ? ALL_PERMISSIONS
     : (user.role_permissions || []);
 
+  const { rows: [conn] } = await pool.query(
+    `SELECT 1 FROM connections WHERE brand_company_id = $1 LIMIT 1`,
+    [user.company_id]
+  );
+  const is_managed_by_agency = !!conn;
+
   return jwt.sign(
     {
       user_id: user.id,
@@ -30,6 +36,7 @@ async function buildToken(userId) {
       full_name: user.full_name || null,
       is_company_admin: user.is_company_admin,
       is_platform_admin: user.is_platform_admin,
+      is_managed_by_agency,
       permissions,
     },
     process.env.JWT_SECRET,
@@ -73,6 +80,7 @@ router.post('/login', async (req, res) => {
         company_type: user.company_type,
         is_company_admin: user.is_company_admin,
         is_platform_admin: user.is_platform_admin,
+        is_managed_by_agency: payload.is_managed_by_agency,
         permissions: payload.permissions,
       },
     });
