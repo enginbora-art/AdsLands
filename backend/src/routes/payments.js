@@ -81,20 +81,22 @@ router.post('/initiate', auth, async (req, res) => {
 });
 
 // ── POST /api/payments/callback — Sipay 3D return (public) ───────────────────
-router.post('/callback', async (req, res) => {
-  const body = req.body;
-  console.log('[Payment] callback body:', JSON.stringify(body, null, 2));
-  console.log('[Payment] sipay_status:', body.sipay_status, '| status:', body.status);
+router.post('/callback', express.urlencoded({ extended: true }), async (req, res) => {
+  const callbackData = Object.keys(req.body).length > 0 ? req.body : req.query;
+  console.log('[Payment] callback body:', JSON.stringify(req.body, null, 2));
+  console.log('[Payment] callback query:', JSON.stringify(req.query, null, 2));
+  console.log('[Payment] callback data (kullanılan):', JSON.stringify(callbackData, null, 2));
+  console.log('[Payment] sipay_status:', callbackData.sipay_status, '| status:', callbackData.status);
 
   // Hash doğrulama — TEST: geçici olarak bypass edildi
-  // if (!sipay.verifyHash(body)) {
-  //   console.warn('Sipay callback: geçersiz hash', body);
+  // if (!sipay.verifyHash(callbackData)) {
+  //   console.warn('Sipay callback: geçersiz hash', callbackData);
   //   return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=hash`);
   // }
 
-  const invoiceId = body.invoice_id;
-  const status    = (String(body.sipay_status) === '1' || String(body.status) === '1') ? 'success' : 'failed';
-  const sipayErr  = body.error || body.status_description || null;
+  const invoiceId = callbackData.invoice_id;
+  const status    = (String(callbackData.sipay_status) === '1' || String(callbackData.status) === '1') ? 'success' : 'failed';
+  const sipayErr  = callbackData.error || callbackData.status_description || null;
 
   // Transaction güncelle
   const { rows: [tx] } = await pool.query(
@@ -102,7 +104,7 @@ router.post('/callback', async (req, res) => {
      SET status = $1, sipay_invoice_id = $2, error_message = $3
      WHERE order_id = $4
      RETURNING company_id, plan, interval, amount`,
-    [status, body.sipay_invoice_id || invoiceId, status === 'failed' ? sipayErr : null, invoiceId]
+    [status, callbackData.sipay_invoice_id || invoiceId, status === 'failed' ? sipayErr : null, invoiceId]
   );
 
   if (!tx) return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=notfound`);
