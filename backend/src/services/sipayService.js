@@ -53,7 +53,7 @@ function generateHashKey(total, installment, currencyCode, merchantKey, invoiceI
 }
 
 // ── POS al ───────────────────────────────────────────────────────────────────
-async function getPos(amount, currencyCode = 'TRY') {
+async function getPos(amount, currencyCode = 'TRY', ccNo = '') {
   const token      = await getToken();
   const fmtAmount  = Number(amount).toFixed(2);
   const hashKey    = sha256b64(MERCHANT_KEY, fmtAmount, currencyCode, APP_SECRET);
@@ -64,6 +64,7 @@ async function getPos(amount, currencyCode = 'TRY') {
   params.append('currency_code',  currencyCode);
   params.append('hash_key',       hashKey);
   params.append('is_2d',          '0');
+  params.append('cc_no',          ccNo);
 
   let res;
   try {
@@ -89,9 +90,9 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   name, surname, billEmail, billPhone, returnUrl, cancelUrl, description, items }) {
 
   const token      = await getToken();
-  const posId      = await getPos(amount, currencyCode);
   const cleanCard  = String(ccNo).replace(/\s+/g, '').trim();
   console.log('[Sipay] cc_no ham değer:', JSON.stringify(ccNo), '| temizlenmiş:', cleanCard, '| uzunluk:', cleanCard.length);
+  const posId      = await getPos(amount, currencyCode, cleanCard);
   const fmtAmount  = Number(amount).toFixed(2);
   const hashKey    = generateHashKey(fmtAmount, 1, currencyCode, MERCHANT_KEY, invoiceId, APP_SECRET);
 
