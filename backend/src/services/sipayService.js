@@ -27,11 +27,29 @@ async function getToken() {
   return token;
 }
 
-// ── Hash hesaplama ────────────────────────────────────────────────────────────
-// SHA-256 raw bytes → base64 (PHP: base64_encode(hash('sha256', $str, true)))
-// Sipay separator: |
+// ── Hash hesaplama (getpos için basit SHA-256) ────────────────────────────────
 function sha256b64(...parts) {
   return crypto.createHash('sha256').update(parts.join('|')).digest('base64');
+}
+
+// ── Hash hesaplama (paySmart3D için AES-256-CBC) ──────────────────────────────
+function generateHashKey(total, installment, currencyCode, merchantKey, invoiceId, appSecret) {
+  const data     = `${total}|${installment}|${currencyCode}|${merchantKey}|${invoiceId}`;
+  const iv       = crypto.randomBytes(16).toString('hex').substring(0, 16);
+  const password = crypto.createHash('sha1').update(appSecret).digest('hex');
+  const salt     = crypto.randomBytes(16).toString('hex').substring(0, 4);
+  const saltWithPassword = crypto.createHash('sha256')
+    .update(password + salt).digest('hex').substring(0, 32);
+
+  const cipher = crypto.createCipheriv(
+    'aes-256-cbc',
+    Buffer.from(saltWithPassword, 'utf8'),
+    Buffer.from(iv, 'utf8')
+  );
+  let encrypted = cipher.update(data, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+
+  return `${iv}:${salt}:${encrypted}`.replace(/\//g, '__');
 }
 
 // ── POS al ───────────────────────────────────────────────────────────────────
@@ -74,12 +92,11 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   const posId      = await getPos(amount, currencyCode);
   const cleanCard  = String(ccNo).replace(/\s/g, '');
   const fmtAmount  = Number(amount).toFixed(2);
-  // Hash: merchant_key|invoice_id|total|currency_code|app_secret
-  const hashKey    = sha256b64(MERCHANT_KEY, invoiceId, fmtAmount, currencyCode, APP_SECRET);
+  const hashKey    = generateHashKey(fmtAmount, 1, currencyCode, MERCHANT_KEY, invoiceId, APP_SECRET);
 
   const payload = {
     cc_holder_name:      ccHolderName,
-    credit_card:         cleanCard,
+    cc_no:               cleanCard,
     expiry_month:        String(expiryMonth).padStart(2, '0'),
     expiry_year:         String(expiryYear).slice(-2),
     cvv:                 String(cvv),
@@ -102,9 +119,9 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
   };
 
   const maskedCard = cleanCard.slice(0, 6) + '******' + cleanCard.slice(-4);
-  console.log('[Sipay] pay3d REQUEST:', JSON.stringify({
+  console.log('[Sipay] paySmart3D REQUEST:', JSON.stringify({
     ...payload,
-    credit_card: maskedCard,
+    cc_no: maskedCard,
     cvv: '***',
   }, null, 2));
 
@@ -115,7 +132,7 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
 
   let res;
   try {
-    res = await axios.post(`${BASE_URL}/api/pay3d`, params, {
+    res = await axios.post(`${BASE_URL}/api/paySmart3D`, params, {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     });
   } catch (axiosErr) {
@@ -124,7 +141,7 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     throw new Error(axiosErr.response?.data?.status_description || axiosErr.message);
   }
 
-  console.log('[Sipay] pay3d RESPONSE:', JSON.stringify(res.data, null, 2));
+  console.log('[Sipay] paySmart3D RESPONSE:', JSON.stringify(res.data, null, 2));
   if (res.data?.status_code !== 100) {
     throw new Error(res.data?.status_description || '3D ödeme başlatılamadı.');
   }
