@@ -11,46 +11,45 @@ const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:3001';
 
 // ── POST /api/payments/initiate ───────────────────────────────────────────────
 router.post('/initiate', auth, async (req, res) => {
-  console.log('[Payment] Frontend isteği:', { ...req.body, cc_no: req.body.cc_no ? `${req.body.cc_no} (uzunluk:${req.body.cc_no.length})` : 'YOK', cvv: '***' });
-
-  const { plan, interval = 'monthly', cc_holder_name, cc_no, expiry_month, expiry_year, cvv } = req.body;
-
-  if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'Geçersiz plan.' });
-  if (!cc_no || !expiry_month || !expiry_year || !cvv || !cc_holder_name) {
-    return res.status(400).json({ error: 'Kart bilgileri eksik.' });
-  }
-
-  const { company_type, company_id, user_id, email } = req.user;
-
-  // Plan / şirket tipi uyumu
-  const planCfg = PLANS[plan];
-  if (planCfg.type === 'agency' && company_type !== 'agency') {
-    return res.status(403).json({ error: 'Bu plan ajans hesapları içindir.' });
-  }
-  if (planCfg.type === 'brand' && company_type !== 'brand') {
-    return res.status(403).json({ error: 'Bu plan marka hesapları içindir.' });
-  }
-
-  const amount  = getAmount(plan, interval);
-  const orderId = uuidv4();
-
-  // Pending transaction kaydet
-  await pool.query(
-    `INSERT INTO payment_transactions (company_id, user_id, order_id, amount, currency, status, plan, interval)
-     VALUES ($1, $2, $3, $4, 'TRY', 'pending', $5, $6)`,
-    [company_id, user_id, orderId, amount, plan, interval]
-  );
-
-  const returnUrl = `${BACKEND_URL}/api/payments/callback`;
-  const cancelUrl = `${FRONTEND_URL}/payment/result?status=failed`;
-
-  const nameParts = (cc_holder_name || 'Kullanıcı').split(' ');
-  const firstName = nameParts[0] || 'Ad';
-  const lastName  = nameParts.slice(1).join(' ') || 'Soyad';
-
+  let orderId = null;
   try {
+    console.log('[Payment] Frontend isteği:', { ...req.body, cc_no: req.body.cc_no ? `${req.body.cc_no} (uzunluk:${req.body.cc_no.length})` : 'YOK', cvv: '***' });
+
+    const { plan, interval = 'monthly', cc_holder_name, cc_no, expiry_month, expiry_year, cvv } = req.body;
+
+    if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'Geçersiz plan.' });
+    if (!cc_no || !expiry_month || !expiry_year || !cvv || !cc_holder_name) {
+      return res.status(400).json({ error: 'Kart bilgileri eksik.' });
+    }
+
+    const { company_type, company_id, user_id, email } = req.user;
+
+    const planCfg = PLANS[plan];
+    if (planCfg.type === 'agency' && company_type !== 'agency') {
+      return res.status(403).json({ error: 'Bu plan ajans hesapları içindir.' });
+    }
+    if (planCfg.type === 'brand' && company_type !== 'brand') {
+      return res.status(403).json({ error: 'Bu plan marka hesapları içindir.' });
+    }
+
+    const amount = getAmount(plan, interval);
+    orderId = uuidv4();
+
+    await pool.query(
+      `INSERT INTO payment_transactions (company_id, user_id, order_id, amount, currency, status, plan, interval)
+       VALUES ($1, $2, $3, $4, 'TRY', 'pending', $5, $6)`,
+      [company_id, user_id, orderId, amount, plan, interval]
+    );
+
+    const returnUrl = `${BACKEND_URL}/api/payments/callback`;
+    const cancelUrl = `${FRONTEND_URL}/payment/result?status=failed`;
+
+    const nameParts = (cc_holder_name || 'Kullanıcı').split(' ');
+    const firstName = nameParts[0] || 'Ad';
+    const lastName  = nameParts.slice(1).join(' ') || 'Soyad';
+
     const html = await sipay.initiate3DPayment({
-      invoiceId:   orderId,
+      invoiceId:    orderId,
       amount,
       ccHolderName: cc_holder_name,
       ccNo:         cc_no,
@@ -68,11 +67,16 @@ router.post('/initiate', auth, async (req, res) => {
 
     res.json({ html, orderId });
   } catch (err) {
-    await pool.query(
-      `UPDATE payment_transactions SET status = 'failed', error_message = $1 WHERE order_id = $2`,
-      [err.message, orderId]
-    );
-    res.status(502).json({ error: err.message || 'Ödeme başlatılamadı.' });
+    console.error('[Payment] HATA:', err.message, err.stack);
+    if (orderId) {
+      try {
+        await pool.query(
+          `UPDATE payment_transactions SET status = 'failed', error_message = $1 WHERE order_id = $2`,
+          [err.message, orderId]
+        );
+      } catch (_) {}
+    }
+    res.status(500).json({ error: err.message || 'Ödeme başlatılamadı.' });
   }
 });
 

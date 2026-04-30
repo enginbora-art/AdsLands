@@ -29,6 +29,9 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors({
   origin: ['http://localhost:5173', 'https://adslands-frontend.onrender.com', 'https://adslands.com', 'https://www.adslands.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 app.use(express.json());
 
