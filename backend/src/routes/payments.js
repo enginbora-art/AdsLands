@@ -285,20 +285,52 @@ router.get('/history', auth, async (req, res) => {
 // ── GET /api/payments/invoice/:transactionId ──────────────────────────────────
 router.get('/invoice/:transactionId', auth, async (req, res) => {
   try {
-    const { rows: [inv] } = await pool.query(
+    const { transactionId } = req.params;
+
+    // Önce mevcut faturayı ara
+    let { rows: [inv] } = await pool.query(
       `SELECT i.* FROM invoices i
        JOIN payment_transactions pt ON pt.id = i.transaction_id
        WHERE i.transaction_id = $1 AND pt.company_id = $2`,
-      [req.params.transactionId, req.user.company_id]
+      [transactionId, req.user.company_id]
     );
-    if (!inv) return res.status(404).json({ error: 'Fatura bulunamadı.' });
-    if (!inv.pdf_path || !fs.existsSync(inv.pdf_path)) {
-      return res.status(404).json({ error: 'PDF dosyası bulunamadı.' });
+
+    // Yoksa veya PDF dosyası eksikse anında oluştur
+    if (!inv || !inv.pdf_path || !fs.existsSync(inv.pdf_path)) {
+      const { rows: [tx] } = await pool.query(
+        `SELECT pt.*, c.name AS company_name
+         FROM payment_transactions pt
+         JOIN companies c ON c.id = pt.company_id
+         WHERE pt.id = $1 AND pt.company_id = $2 AND pt.status = 'success'`,
+        [transactionId, req.user.company_id]
+      );
+      if (!tx) return res.status(404).json({ error: 'Başarılı ödeme işlemi bulunamadı.' });
+
+      // Dönem bilgisini abonelikten almayı dene
+      const { rows: [sub] } = await pool.query(
+        `SELECT current_period_start, current_period_end
+         FROM subscriptions
+         WHERE company_id = $1
+         ORDER BY created_at DESC LIMIT 1`,
+        [req.user.company_id]
+      );
+
+      inv = await createInvoice({
+        companyId:    tx.company_id,
+        companyName:  tx.company_name,
+        transactionId: tx.id,
+        planKey:      tx.plan,
+        amount:       tx.amount,
+        periodStart:  sub?.current_period_start || tx.created_at,
+        periodEnd:    sub?.current_period_end   || null,
+      });
     }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${inv.invoice_number}.pdf"`);
     fs.createReadStream(inv.pdf_path).pipe(res);
   } catch (err) {
+    console.error('[Invoice] GET hatası:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

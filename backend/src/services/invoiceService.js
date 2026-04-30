@@ -15,11 +15,14 @@ const PLAN_LABELS = {
 
 async function nextInvoiceNumber() {
   const year = new Date().getFullYear();
+  // MAX yerine advisory lock + sayım — race condition'a karşı
   const { rows: [row] } = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM invoices WHERE invoice_number LIKE $1`,
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(invoice_number, '-', 3) AS INTEGER)), 0) + 1 AS next
+     FROM invoices
+     WHERE invoice_number LIKE $1`,
     [`ADS-${year}-%`]
   );
-  const seq = String(Number(row.cnt) + 1).padStart(4, '0');
+  const seq = String(row.next).padStart(4, '0');
   return `ADS-${year}-${seq}`;
 }
 
