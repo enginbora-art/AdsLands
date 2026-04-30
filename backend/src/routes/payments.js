@@ -48,7 +48,7 @@ router.post('/initiate', auth, async (req, res) => {
     const firstName = nameParts[0] || 'Ad';
     const lastName  = nameParts.slice(1).join(' ') || 'Soyad';
 
-    const html = await sipay.initiate3DPayment({
+    const result = await sipay.initiate3DPayment({
       invoiceId:    orderId,
       amount,
       ccHolderName: cc_holder_name,
@@ -65,7 +65,7 @@ router.post('/initiate', auth, async (req, res) => {
       description:  `AdsLands ${planCfg.label} — ${interval === 'yearly' ? 'Yıllık' : 'Aylık'}`,
     });
 
-    res.json({ html, orderId });
+    res.json({ html: result.html, orderId });
   } catch (err) {
     console.error('[Payment] HATA:', err.message, err.stack);
     if (orderId) {

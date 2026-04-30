@@ -143,11 +143,27 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
     throw new Error(axiosErr.response?.data?.status_description || axiosErr.message);
   }
 
-  console.log('[Sipay] paySmart3D RESPONSE:', JSON.stringify(res.data, null, 2));
-  if (res.data?.status_code !== 100) {
-    throw new Error(res.data?.status_description || '3D ödeme başlatılamadı.');
+  const responseData = res.data;
+  console.log('[Sipay] paySmart3D RESPONSE type:', typeof responseData,
+    typeof responseData === 'string' ? `(${responseData.length} chars)` : JSON.stringify(responseData, null, 2));
+
+  // Sipay HTML form döndürdüyse (3DS sayfası) — başarılı
+  if (typeof responseData === 'string' &&
+      (responseData.includes('<form') || responseData.includes('<!doctype') || responseData.includes('<html'))) {
+    return { success: true, html: responseData };
   }
-  return res.data.data; // HTML form string
+
+  // JSON hata dönüyorsa fırlat
+  if (responseData?.status_code && responseData.status_code !== 100) {
+    throw new Error(responseData.status_description || '3D ödeme başlatılamadı.');
+  }
+
+  // JSON içinde HTML varsa
+  if (responseData?.data) {
+    return { success: true, html: responseData.data };
+  }
+
+  return { success: true, html: responseData };
 }
 
 // ── Callback hash doğrulama ───────────────────────────────────────────────────
