@@ -90,7 +90,8 @@ async function initiate3DPayment({ invoiceId, amount, currencyCode = 'TRY',
 
   const token      = await getToken();
   const posId      = await getPos(amount, currencyCode);
-  const cleanCard  = String(ccNo).replace(/\s/g, '');
+  const cleanCard  = String(ccNo).replace(/\s+/g, '').trim();
+  console.log('[Sipay] cc_no ham değer:', JSON.stringify(ccNo), '| temizlenmiş:', cleanCard, '| uzunluk:', cleanCard.length);
   const fmtAmount  = Number(amount).toFixed(2);
   const hashKey    = generateHashKey(fmtAmount, 1, currencyCode, MERCHANT_KEY, invoiceId, APP_SECRET);
 

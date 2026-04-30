@@ -11,6 +11,8 @@ const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:3001';
 
 // ── POST /api/payments/initiate ───────────────────────────────────────────────
 router.post('/initiate', auth, async (req, res) => {
+  console.log('[Payment] Frontend isteği:', { ...req.body, cc_no: req.body.cc_no ? `${req.body.cc_no} (uzunluk:${req.body.cc_no.length})` : 'YOK', cvv: '***' });
+
   const { plan, interval = 'monthly', cc_holder_name, cc_no, expiry_month, expiry_year, cvv } = req.body;
 
   if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'Geçersiz plan.' });
