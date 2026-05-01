@@ -4,6 +4,7 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const pptxService = require('../services/pptxService');
 const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
+const { queueAiRequest, getQueueStatus } = require('../services/aiQueue');
 
 async function resolveCompanyId(user, brandId) {
   if (user.company_type === 'agency' && brandId) {
@@ -159,16 +160,24 @@ Rakamları kullan. Net ol. Tekrar yapma.`;
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    const { size: queueSize } = getQueueStatus();
+    if (queueSize > 0) {
+      res.write(`data: ${JSON.stringify({ queueStatus: 'queued', size: queueSize })}\n\n`);
+    }
+
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const stream = client.messages.stream({
-      model: 'claude-opus-4-7',
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{
-        role: 'user',
-        content: `Rapor Tipi: ${reportLabel}
+    await queueAiRequest(async () => {
+      res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
+
+      const stream = client.messages.stream({
+        model: 'claude-opus-4-7',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{
+          role: 'user',
+          content: `Rapor Tipi: ${reportLabel}
 Hedef Kitle: ${audienceNote}
 Şirket: ${company?.name || 'Bilinmiyor'}
 Sektör: ${company?.sector || 'Belirtilmemiş'}
@@ -176,27 +185,30 @@ Analiz Dönemi: Son ${days} gün
 
 Kanal Metrikleri:
 ${metricsText}`,
-      }],
-    });
+        }],
+      });
 
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+          res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+        }
       }
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
 
-    const final = await stream.finalMessage();
-    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
-    if (req.aiCtx) {
-      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', input_tokens, output_tokens, 'claude-opus-4-7');
-    }
+      const final = await stream.finalMessage();
+      const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+
+      res.write('data: [DONE]\n\n');
+      res.end();
+
+      if (req.aiCtx) {
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', input_tokens, output_tokens, 'claude-opus-4-7');
+      }
+    });
   } catch (err) {
     console.error('Report generate error:', err);
     if (!res.headersSent) {
       res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
-    } else {
+    } else if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
     }
@@ -280,7 +292,7 @@ router.post('/generate-pptx', authMiddleware, checkAiLimit('ai_report'), async (
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const aiResponse = await client.messages.create({
+    const aiResponse = await queueAiRequest(() => client.messages.create({
       model: 'claude-opus-4-7',
       max_tokens: 1200,
       system: `Sen bir dijital pazarlama uzmanısın. Verilen reklam metriklerini analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka metin ekleme:
@@ -312,7 +324,7 @@ Toplam dönüşüm: ${totalConv}
 Ortalama CPA: ₺${Math.round(avgCpa)}
 Ortalama CTR: %${avgCtr.toFixed(2)}`,
       }],
-    });
+    }));
 
     let aiData = { summary: [], recommendations: [], strengths: [], improvements: [] };
     try {

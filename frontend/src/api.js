@@ -23,6 +23,7 @@ export const adminGetCompany = (id) => api.get(`/admin/companies/${id}`).then(r 
 export const adminToggleUser = (id) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data);
 export const adminGetAiUsage = (month) => api.get(`/admin/ai-usage${month ? `?month=${month}` : ''}`).then(r => r.data);
 export const getAiUsageToday = () => api.get('/ai/usage-today').then(r => r.data);
+export const getAiQueueStatus = () => api.get('/ai/queue-status').then(r => r.data);
 
 // ── Şirket Yönetimi ───────────────────────────────────────────────────────────
 export const getCompanyUsers = () => api.get('/company/users').then(r => r.data);

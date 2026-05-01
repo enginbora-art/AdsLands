@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { getCompanyLimit } = require('../middleware/aiLimit');
+const { getQueueStatus } = require('../services/aiQueue');
 
 // GET /api/ai/usage-today
 router.get('/usage-today', authMiddleware, async (req, res) => {
@@ -27,6 +28,11 @@ router.get('/usage-today', authMiddleware, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
+});
+
+// GET /api/ai/queue-status
+router.get('/queue-status', authMiddleware, (req, res) => {
+  res.json(getQueueStatus());
 });
 
 module.exports = router;

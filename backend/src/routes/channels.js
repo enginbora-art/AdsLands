@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
+const { queueAiRequest, getQueueStatus } = require('../services/aiQueue');
 
 const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'];
 
@@ -121,41 +122,52 @@ router.post('/ai-analyze', authMiddleware, checkAiLimit('channel_analysis'), asy
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
+  const { size: queueSize } = getQueueStatus();
+  if (queueSize > 0) {
+    res.write(`data: ${JSON.stringify({ queueStatus: 'queued', size: queueSize })}\n\n`);
+  }
+
   try {
-    const stream = client.messages.stream({
-      model: 'claude-opus-4-7',
-      max_tokens: 1400,
-      system: `Sen deneyimli bir dijital pazarlama uzmanısın. Türkçe yaz. Verilen reklam performans verilerini sektör benchmarklarıyla karşılaştırarak analiz et. Şunları ver:
+    await queueAiRequest(async () => {
+      res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
+
+      const stream = client.messages.stream({
+        model: 'claude-opus-4-7',
+        max_tokens: 1400,
+        system: `Sen deneyimli bir dijital pazarlama uzmanısın. Türkçe yaz. Verilen reklam performans verilerini sektör benchmarklarıyla karşılaştırarak analiz et. Şunları ver:
 1. Genel performans değerlendirmesi (2-3 cümle)
 2. En iyi performans gösteren kanal ve neden
 3. Geliştirilmesi gereken kanal ve somut öneriler
 4. 3 uygulanabilir aksiyon önerisi (öncelik sırasıyla)
 5. Bütçe optimizasyon tavsiyesi
 Teknik jargon kullanma, net ve anlaşılır ol.`,
-      messages: [{
-        role: 'user',
-        content: `Sektör: ${sector || 'Diğer'}\nAnaliz dönemi: Son ${days || 30} gün\n\nKanal Performansı:\n${metricsText}\n\nSektör Benchmarkları:\n${bmText}`,
-      }],
-    });
+        messages: [{
+          role: 'user',
+          content: `Sektör: ${sector || 'Diğer'}\nAnaliz dönemi: Son ${days || 30} gün\n\nKanal Performansı:\n${metricsText}\n\nSektör Benchmarkları:\n${bmText}`,
+        }],
+      });
 
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+          res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+        }
       }
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
 
-    const final = await stream.finalMessage();
-    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
-    if (req.aiCtx) {
-      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'channel_analysis', input_tokens, output_tokens, 'claude-opus-4-7');
-    }
+      const final = await stream.finalMessage();
+      const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+
+      res.write('data: [DONE]\n\n');
+      res.end();
+
+      if (req.aiCtx) {
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'channel_analysis', input_tokens, output_tokens, 'claude-opus-4-7');
+      }
+    });
   } catch (err) {
     console.error('AI analyze error:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'AI analiz başarısız: ' + err.message });
-    } else {
+    } else if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify({ error: 'AI analiz başarısız: ' + err.message })}\n\n`);
       res.end();
     }

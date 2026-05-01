@@ -4,6 +4,7 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
+const { queueAiRequest, getQueueStatus } = require('../services/aiQueue');
 
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads',
@@ -312,28 +313,41 @@ router.get('/kpi-analysis/:brandId', authMiddleware, checkAiLimit('kpi_analysis'
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const { size: queueSize } = getQueueStatus();
+    if (queueSize > 0) {
+      res.write(`data: ${JSON.stringify({ queueStatus: 'queued', size: queueSize })}\n\n`);
+    }
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: 'Sen bir dijital reklam performans analistisin. Ajansın belirlediği KPI hedefleri ile gerçek performans verilerini karşılaştırarak somut ve uygulanabilir öneriler sun. Türkçe yanıt ver. Her kanal için ayrı değerlendir.',
-      messages: [{ role: 'user', content: userPrompt }],
-    });
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+    await queueAiRequest(async () => {
+      res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
+
+      const stream = client.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system: 'Sen bir dijital reklam performans analistisin. Ajansın belirlediği KPI hedefleri ile gerçek performans verilerini karşılaştırarak somut ve uygulanabilir öneriler sun. Türkçe yanıt ver. Her kanal için ayrı değerlendir.',
+        messages: [{ role: 'user', content: userPrompt }],
+      });
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+        }
       }
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
 
-    const final = await stream.finalMessage();
-    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
-    if (req.aiCtx) {
-      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'kpi_analysis', input_tokens, output_tokens, 'claude-sonnet-4-6');
-    }
+      const final = await stream.finalMessage();
+      const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+
+      res.write('data: [DONE]\n\n');
+      res.end();
+
+      if (req.aiCtx) {
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'kpi_analysis', input_tokens, output_tokens, 'claude-sonnet-4-6');
+      }
+    });
   } catch (err) {
     console.error('[KPI Analysis] Hata:', err.message);
     if (!res.headersSent) {

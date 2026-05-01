@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getChannelData, getAiUsageToday } from '../api';
+import { getChannelData, getAiUsageToday, getAiQueueStatus } from '../api';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, PieChart, Pie, Cell,
@@ -293,6 +293,10 @@ export default function Channels({ onNav }) {
   const [aiUsage, setAiUsage] = useState(null);
   const [limitReached, setLimitReached] = useState(false);
 
+  const [aiStatus, setAiStatus]   = useState('idle');   // 'idle' | 'queued' | 'processing'
+  const [kpiStatus, setKpiStatus] = useState('idle');
+  const [queueInfo, setQueueInfo] = useState({ size: 0, pending: 0 });
+
   const brandName   = selectedBrand?.company_name || selectedBrand?.name;
   const brandId     = isAgency ? selectedBrand?.id : undefined;
   const kpiBrandId  = isAgency ? selectedBrand?.id : user?.company_id;
@@ -311,6 +315,15 @@ export default function Channels({ onNav }) {
   useEffect(() => {
     getAiUsageToday().then(setAiUsage).catch(() => {});
   }, []);
+
+  // Poll queue status while an AI request is in flight
+  useEffect(() => {
+    if (!aiLoading && !kpiLoading) return;
+    const id = setInterval(() => {
+      getAiQueueStatus().then(setQueueInfo).catch(() => {});
+    }, 3000);
+    return () => clearInterval(id);
+  }, [aiLoading, kpiLoading]);
 
   if (needsBrand) return (
     <div className="fade-in">
@@ -422,6 +435,7 @@ export default function Channels({ onNav }) {
       return { platform: PLATFORM_LABELS[i.platform]||i.platform, roas: bm.roas, ctr: bm.ctr };
     });
 
+    setAiStatus('queued');
     setAiLoading(true); setAiText(''); setAiError('');
     setTimeout(() => aiRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
 
@@ -450,17 +464,28 @@ export default function Channels({ onNav }) {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          if (payload === '[DONE]') { setAiLoading(false); getAiUsageToday().then(setAiUsage).catch(() => {}); return; }
-          try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setAiText(p => p + text); } catch {}
+          if (payload === '[DONE]') {
+            setAiLoading(false); setAiStatus('idle');
+            getAiUsageToday().then(setAiUsage).catch(() => {});
+            return;
+          }
+          try {
+            const { text, error, queueStatus, size } = JSON.parse(payload);
+            if (error) throw new Error(error);
+            if (queueStatus === 'queued') { setAiStatus('queued'); setQueueInfo(q => ({ ...q, size: size ?? q.size })); }
+            if (queueStatus === 'processing') setAiStatus('processing');
+            if (text) setAiText(p => p + text);
+          } catch {}
         }
       }
     } catch (err) {
       setAiError(err.message || 'AI analiz başarısız.');
-    } finally { setAiLoading(false); }
+    } finally { setAiLoading(false); setAiStatus('idle'); }
   };
 
   const runKpiAnalysis = async () => {
     setKpiPanelOpen(true);
+    setKpiStatus('queued');
     setKpiText(''); setKpiError(''); setKpiLoading(true);
     setTimeout(() => kpiRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     try {
@@ -485,13 +510,23 @@ export default function Channels({ onNav }) {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          if (payload === '[DONE]') { setKpiLoading(false); getAiUsageToday().then(setAiUsage).catch(() => {}); return; }
-          try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setKpiText(p => p + text); } catch {}
+          if (payload === '[DONE]') {
+            setKpiLoading(false); setKpiStatus('idle');
+            getAiUsageToday().then(setAiUsage).catch(() => {});
+            return;
+          }
+          try {
+            const { text, error, queueStatus, size } = JSON.parse(payload);
+            if (error) throw new Error(error);
+            if (queueStatus === 'queued') { setKpiStatus('queued'); setQueueInfo(q => ({ ...q, size: size ?? q.size })); }
+            if (queueStatus === 'processing') setKpiStatus('processing');
+            if (text) setKpiText(p => p + text);
+          } catch {}
         }
       }
     } catch (err) {
       setKpiError(err.message || 'KPI analiz başarısız.');
-    } finally { setKpiLoading(false); }
+    } finally { setKpiLoading(false); setKpiStatus('idle'); }
   };
 
   const saveAiReport = () => {
@@ -759,7 +794,18 @@ export default function Channels({ onNav }) {
                 )}
                 {aiLoading && !aiText && (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>
-                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>Analiz hazırlanıyor...
+                    {aiStatus === 'queued' ? (
+                      <>
+                        <span style={{ marginRight: 8 }}>⏳</span>
+                        Sırada bekleniyor...
+                        {queueInfo.size > 0 && <span style={{ color: 'var(--text3)', marginLeft: 4 }}>({queueInfo.size} istek önünüzde)</span>}
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>
+                        🔄 Analiz yapılıyor...
+                      </>
+                    )}
                   </div>
                 )}
                 {aiError && (
@@ -802,7 +848,18 @@ export default function Channels({ onNav }) {
               <div className="card-body">
                 {kpiLoading && !kpiText && (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>
-                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>KPI analizi hazırlanıyor...
+                    {kpiStatus === 'queued' ? (
+                      <>
+                        <span style={{ marginRight: 8 }}>⏳</span>
+                        Sırada bekleniyor...
+                        {queueInfo.size > 0 && <span style={{ color: 'var(--text3)', marginLeft: 4 }}>({queueInfo.size} istek önünüzde)</span>}
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>
+                        🔄 KPI analizi yapılıyor...
+                      </>
+                    )}
                   </div>
                 )}
                 {kpiError && (
