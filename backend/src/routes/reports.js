@@ -332,7 +332,8 @@ Ortalama ROAS: ${Number(avgRoas).toFixed(2)}x
 Toplam dönüşüm: ${totalConv}
 Ortalama CPA: ₺${Math.round(avgCpa)}
 Ortalama CTR: %${avgCtr.toFixed(2)}`,
-      }]);
+      }]
+      });
       if (req.aiCtx && resp.usage) {
         const processMs = Date.now() - startedAt;
         logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', resp.usage.input_tokens || 0, resp.usage.output_tokens || 0, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
