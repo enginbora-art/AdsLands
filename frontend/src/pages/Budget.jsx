@@ -12,8 +12,6 @@ const ALL_PLATFORMS = [
   { platform: 'tiktok',     label: 'TikTok Ads',  color: '#69C9D0' },
   { platform: 'linkedin',   label: 'LinkedIn Ads', color: '#0A66C2' },
   { platform: 'adform',     label: 'Adform',      color: '#FF6B00' },
-  { platform: 'appsflyer',  label: 'AppsFlyer',   color: '#00B4E6' },
-  { platform: 'adjust',     label: 'Adjust',      color: '#00B2FF' },
   { platform: 'other',      label: 'Diğer',       color: '#6B7280' },
 ];
 const PLATFORM_MAP = Object.fromEntries(ALL_PLATFORMS.map(p => [p.platform, p]));
