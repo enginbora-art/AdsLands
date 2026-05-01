@@ -1,4 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const AuthContext = createContext(null);
 
@@ -8,10 +11,20 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) {
+    const token = localStorage.getItem('token');
+    if (stored && token) {
       try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem('user'); }
+      // Oturum açık — /me ile taze veri çek (is_managed_by_agency gibi alanlar için)
+      axios.get(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(({ data }) => {
+          localStorage.setItem('user', JSON.stringify(data));
+          setUser(data);
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const saveAuth = (token, userData) => {

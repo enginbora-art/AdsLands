@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
+const auth = require('../middleware/auth');
 const { ALL_PERMISSIONS } = require('../constants');
 
 async function buildToken(userId) {
@@ -43,6 +44,46 @@ async function buildToken(userId) {
     { expiresIn: '7d' }
   );
 }
+
+// GET /api/auth/me — mevcut kullanıcı bilgilerini tazele
+router.get('/me', auth, async (req, res) => {
+  try {
+    const { rows: [user] } = await pool.query(
+      `SELECT u.id, u.email, u.full_name, u.company_id, u.is_company_admin, u.is_platform_admin,
+              c.name AS company_name, c.type AS company_type,
+              r.permissions AS role_permissions,
+              EXISTS(
+                SELECT 1 FROM connections WHERE brand_company_id = u.company_id
+              ) AS is_managed_by_agency
+       FROM users u
+       LEFT JOIN companies c ON u.company_id = c.id
+       LEFT JOIN roles r ON u.role_id = r.id
+       WHERE u.id = $1`,
+      [req.user.user_id]
+    );
+    if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+
+    const permissions = (user.is_company_admin || user.is_platform_admin)
+      ? ALL_PERMISSIONS
+      : (user.role_permissions || []);
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || null,
+      company_id: user.company_id,
+      company_name: user.company_name,
+      company_type: user.company_type,
+      is_company_admin: user.is_company_admin,
+      is_platform_admin: user.is_platform_admin,
+      is_managed_by_agency: user.is_managed_by_agency,
+      permissions,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
