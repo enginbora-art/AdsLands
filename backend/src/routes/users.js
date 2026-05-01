@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 
@@ -41,6 +42,35 @@ router.patch('/users/me', authMiddleware, async (req, res) => {
     const { buildToken } = require('./auth');
     const newJwt = await buildToken(req.user.user_id);
     res.json({ token: newJwt });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// PATCH /api/users/me/password
+router.patch('/users/me/password', authMiddleware, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Mevcut ve yeni şifre zorunludur.' });
+  }
+  if (newPassword.length < 8 || !/\d/.test(newPassword)) {
+    return res.status(400).json({ error: 'Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.' });
+  }
+  try {
+    const { rows: [user] } = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.user_id]
+    );
+    if (!user || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+      return res.status(400).json({ error: 'Mevcut şifreniz hatalı.' });
+    }
+    const password_hash = await bcrypt.hash(newPassword, 12);
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [password_hash, req.user.user_id]
+    );
+    res.json({ message: 'Şifreniz güncellendi.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });

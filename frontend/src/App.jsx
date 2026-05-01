@@ -22,6 +22,8 @@ import Subscription from './pages/Subscription';
 import PaymentResult from './pages/PaymentResult';
 import Login from './pages/Login';
 import SetupPassword from './pages/SetupPassword';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import './index.css';
 
 const PAGES = {
@@ -143,6 +145,17 @@ function AppInner() {
   const setupMatch = path.match(/^\/setup\/(.+)$/);
   if (setupMatch) {
     return <SetupPassword token={setupMatch[1]} onDone={() => { window.history.pushState({}, '', '/dashboard'); }} />;
+  }
+
+  // Forgot password page
+  if (path === '/forgot-password') {
+    return <ForgotPassword onBack={() => { window.history.pushState({}, '', '/'); }} />;
+  }
+
+  // Reset password page
+  if (path === '/reset-password') {
+    const resetToken = new URLSearchParams(window.location.search).get('token') || '';
+    return <ResetPassword token={resetToken} onDone={() => { window.history.pushState({}, '', '/'); }} />;
   }
 
   if (loading) return <div className="loading">Yükleniyor...</div>;

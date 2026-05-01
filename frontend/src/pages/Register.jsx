@@ -65,7 +65,7 @@ export default function Register({ onSwitch }) {
           </div>
           <div style={styles.field}>
             <label style={styles.label}>Şifre</label>
-            <input className="sinput" type="password" placeholder="En az 6 karakter" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
+            <input className="sinput" type="password" placeholder="En az 8 karakter, 1 rakam" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
           </div>
 
           {error && <div style={styles.error}>{error}</div>}

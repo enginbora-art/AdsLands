@@ -14,6 +14,9 @@ export const register = (data) => api.post('/auth/register', data).then(r => r.d
 export const getSetup = (token) => api.get(`/auth/setup/${token}`).then(r => r.data);
 export const completeSetup = (data) => api.post('/auth/setup', data).then(r => r.data);
 export const getInvitation = (token) => api.get(`/auth/invite/${token}`).then(r => r.data);
+export const forgotPassword = (email) => api.post('/auth/forgot-password', { email }).then(r => r.data);
+export const resetPassword = (token, newPassword) => api.post('/auth/reset-password', { token, newPassword }).then(r => r.data);
+export const changePassword = (currentPassword, newPassword) => api.patch('/users/me/password', { currentPassword, newPassword }).then(r => r.data);
 
 // ── Platform Admin ────────────────────────────────────────────────────────────
 export const adminGetCompanies = () => api.get('/admin/companies').then(r => r.data);

@@ -179,8 +179,8 @@ router.post('/setup', async (req, res) => {
   if (!token || !password) {
     return res.status(400).json({ error: 'Token ve şifre zorunludur.' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Şifre en az 6 karakter olmalıdır.' });
+  if (password.length < 8 || !/\d/.test(password)) {
+    return res.status(400).json({ error: 'Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.' });
   }
 
   const { full_name, company_name: bodyCompanyName } = req.body;
@@ -272,6 +272,105 @@ router.post('/setup', async (req, res) => {
     return res.status(404).json({ error: 'Geçersiz veya süresi dolmuş bağlantı.' });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'E-posta zorunludur.' });
+
+  // Her durumda aynı mesajı dön — kullanıcı enumeration önlemi
+  const SUCCESS_MSG = 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.';
+
+  try {
+    const { rows: [user] } = await pool.query(
+      'SELECT id FROM users WHERE email = $1 AND is_active = true',
+      [email]
+    );
+    if (!user) return res.json({ message: SUCCESS_MSG });
+
+    const { v4: uuidv4 } = require('uuid');
+    const { Resend } = require('resend');
+
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 saat
+
+    // Önceki süresi dolmamış token'ları iptal et
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = true
+       WHERE user_id = $1 AND used = false AND expires_at > NOW()`,
+      [user.id]
+    );
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [user.id, token, expiresAt]
+    );
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+      to: email,
+      subject: 'AdsLands - Şifre Sıfırlama',
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0B1219;color:#F0F5F3;padding:40px;border-radius:12px;">
+          <div style="margin-bottom:28px;"><span style="font-size:20px;font-weight:700;">Ads<span style="color:#00BFA6;">Lands</span></span></div>
+          <h2 style="font-size:22px;font-weight:700;margin:0 0 12px;">Şifre Sıfırlama</h2>
+          <p style="color:#94A8B3;line-height:1.6;margin:0 0 24px;">
+            Şifrenizi sıfırlamak için aşağıdaki linke tıklayın.<br/>
+            <span style="color:#5A7080;font-size:13px;">Bu link 1 saat geçerlidir.</span>
+          </p>
+          <a href="${resetLink}" style="display:inline-block;padding:13px 28px;background:#00BFA6;color:#0B1219;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+            Şifremi Sıfırla
+          </a>
+          <p style="margin-top:32px;font-size:12px;color:#5A7080;">Bu isteği siz yapmadıysanız bu e-postayı görmezden gelebilirsiniz.</p>
+        </div>
+      `,
+    });
+
+    res.json({ message: SUCCESS_MSG });
+  } catch (err) {
+    console.error('[Auth] forgot-password hatası:', err.message);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'Token ve yeni şifre zorunludur.' });
+  }
+  if (newPassword.length < 8 || !/\d/.test(newPassword)) {
+    return res.status(400).json({ error: 'Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.' });
+  }
+
+  try {
+    const { rows: [prt] } = await pool.query(
+      `SELECT * FROM password_reset_tokens
+       WHERE token = $1 AND used = false AND expires_at > NOW()`,
+      [token]
+    );
+    if (!prt) {
+      return res.status(400).json({ error: 'Geçersiz veya süresi dolmuş link.' });
+    }
+
+    const password_hash = await bcrypt.hash(newPassword, 12);
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [password_hash, prt.user_id]
+    );
+    await pool.query(
+      'UPDATE password_reset_tokens SET used = true WHERE id = $1',
+      [prt.id]
+    );
+
+    res.json({ message: 'Şifreniz başarıyla güncellendi.' });
+  } catch (err) {
+    console.error('[Auth] reset-password hatası:', err.message);
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
 });

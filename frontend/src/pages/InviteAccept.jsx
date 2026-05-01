@@ -30,7 +30,7 @@ export default function InviteAccept({ token, onDone }) {
     e.preventDefault();
     if (!form.role) return setError('Lütfen hesap tipini seçin.');
     if (!form.company_name.trim()) return setError('Şirket adı zorunludur.');
-    if (form.password.length < 6) return setError('Şifre en az 6 karakter olmalıdır.');
+    if (form.password.length < 8 || !/\d/.test(form.password)) return setError('Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.');
     if (form.password !== form.password2) return setError('Şifreler eşleşmiyor.');
     setSubmitting(true);
     setError('');

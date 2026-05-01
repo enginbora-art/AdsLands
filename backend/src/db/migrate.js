@@ -492,6 +492,21 @@ async function migrate() {
         CHECK (plan IN ('starter','growth','scale','brand_direct','brand_basic','brand_pro','brand_enterprise'));
     `);
 
+    // ── Şifre sıfırlama token'ları ────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token      VARCHAR(255) UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used       BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS prt_token_idx ON password_reset_tokens (token);
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

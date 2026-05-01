@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { updateProfile, getSettings, updateCompanySector, getNotificationPrefs, saveNotificationPrefs } from '../api';
+import { updateProfile, getSettings, updateCompanySector, getNotificationPrefs, saveNotificationPrefs, changePassword } from '../api';
 import { parseJwt } from '../utils';
 
 const NOTIF_DEFAULTS = {
@@ -33,6 +33,10 @@ export default function Settings() {
   const [sector, setSector]           = useState('');
   const [sectorState, setSectorState] = useState('idle');
   const [sectorError, setSectorError] = useState('');
+
+  const [pwForm, setPwForm]       = useState({ current: '', next: '', confirm: '' });
+  const [pwState, setPwState]     = useState('idle');
+  const [pwError, setPwError]     = useState('');
 
   const isAgency = user?.company_type === 'agency';
   const isBrand  = user?.company_type === 'brand';
@@ -106,6 +110,26 @@ export default function Settings() {
     } catch (err) {
       setSectorError(err?.response?.data?.error || 'Kaydetme başarısız.');
       setSectorState('error');
+    }
+  };
+
+  const handlePasswordSave = async () => {
+    setPwError('');
+    if (!pwForm.current) { setPwError('Mevcut şifre zorunludur.'); return; }
+    if (pwForm.next !== pwForm.confirm) { setPwError('Yeni şifreler eşleşmiyor.'); return; }
+    if (pwForm.next.length < 8 || !/\d/.test(pwForm.next)) {
+      setPwError('Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.');
+      return;
+    }
+    setPwState('saving');
+    try {
+      await changePassword(pwForm.current, pwForm.next);
+      setPwState('saved');
+      setPwForm({ current: '', next: '', confirm: '' });
+      setTimeout(() => setPwState('idle'), 2500);
+    } catch (err) {
+      setPwError(err?.response?.data?.error || 'Şifre güncellenemedi.');
+      setPwState('error');
     }
   };
 
@@ -231,6 +255,45 @@ export default function Settings() {
               </div>
             </div>
           )}
+
+          {/* Şifre Değiştir kartı */}
+          <div className="card">
+            <div className="card-header"><div className="card-title">Şifre Değiştir</div></div>
+            <div className="card-body">
+              {[
+                { key: 'current', label: 'Mevcut Şifre',    placeholder: '••••••••' },
+                { key: 'next',    label: 'Yeni Şifre',       placeholder: 'En az 8 karakter, 1 rakam' },
+                { key: 'confirm', label: 'Yeni Şifre Tekrar', placeholder: 'Şifrenizi tekrar girin' },
+              ].map(({ key, label, placeholder }) => (
+                <div key={key} style={{ marginBottom: 16 }}>
+                  <div style={labelStyle}>{label}</div>
+                  <input
+                    className="sinput"
+                    type="password"
+                    placeholder={placeholder}
+                    value={pwForm[key]}
+                    onChange={e => { setPwForm({ ...pwForm, [key]: e.target.value }); setPwState('idle'); setPwError(''); }}
+                  />
+                </div>
+              ))}
+              {pwError && (
+                <div style={{ background: 'var(--coral-dim)', color: 'var(--coral)', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>
+                  {pwError}
+                </div>
+              )}
+              {pwState === 'saved' && (
+                <div style={{ background: 'rgba(0,191,166,0.12)', color: 'var(--teal)', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12, fontWeight: 600 }}>
+                  ✓ Şifreniz güncellendi
+                </div>
+              )}
+              <button
+                onClick={handlePasswordSave}
+                disabled={pwState === 'saving'}
+                style={saveBtnStyle(pwState)}>
+                {pwState === 'saving' ? 'Kaydediliyor...' : pwState === 'saved' ? '✓ Kaydedildi' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
 
         </div>
       </div>

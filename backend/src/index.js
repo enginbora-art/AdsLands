@@ -32,7 +32,26 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Güvenlik başlıkları ───────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false })); // CSP frontend'e bırakıldı
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      imgSrc:     ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://api.adslands.com", "https://accounts.google.com"],
+      fontSrc:    ["'self'", "https:"],
+      objectSrc:  ["'none'"],
+      // Sipay 3DS: tarayıcı form POST ile Sipay'a yönlendiriliyor (iframe değil)
+      formAction: ["'self'", "https://provisioning.sipay.com.tr", "https://dummypos.sipay.com.tr", "https://app.sipay.com.tr"],
+      frameAncestors: ["'self'"],
+    },
+  },
+  frameguard:     { action: 'sameorigin' },
+  hsts:           { maxAge: 31536000, includeSubDomains: true, preload: true },
+  noSniff:        true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
 app.disable('x-powered-by');
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -45,8 +64,12 @@ const authLimiter = rateLimit({
   skip: (req) => process.env.NODE_ENV === 'test',
 });
 
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://adslands.com', 'https://www.adslands.com']
+  : ['https://adslands.com', 'https://www.adslands.com', 'http://localhost:5173'];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://adslands-frontend.onrender.com', 'https://adslands.com', 'https://www.adslands.com'],
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -55,6 +78,12 @@ app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// ── API Cache-Control (static asset'lere uygulanmaz) ─────────────────────────
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/admin', adminRoutes);

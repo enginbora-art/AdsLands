@@ -22,7 +22,7 @@ export default function SetupPassword({ token, onDone }) {
     e.preventDefault();
     if (!form.full_name.trim()) return setError('Ad Soyad zorunludur.');
     if (form.password !== form.confirm) return setError('Şifreler eşleşmiyor.');
-    if (form.password.length < 6) return setError('Şifre en az 6 karakter olmalıdır.');
+    if (form.password.length < 8 || !/\d/.test(form.password)) return setError('Şifre en az 8 karakter olmalı ve en az 1 rakam içermelidir.');
     setError('');
     setSubmitting(true);
     try {

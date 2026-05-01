@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { login } from '../api';
 import { useAuth } from '../context/AuthContext';
+import ForgotPassword from './ForgotPassword';
 
 export default function Login() {
   const { saveAuth } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [form, setForm]         = useState({ email: '', password: '' });
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+
+  if (showForgot) {
+    return <ForgotPassword onBack={() => setShowForgot(false)} />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,6 +71,12 @@ export default function Login() {
           <button type="submit" style={styles.btn} disabled={loading}>
             {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </button>
+
+          <div style={{ textAlign: 'right', marginTop: 12 }}>
+            <span style={styles.link} onClick={() => setShowForgot(true)}>
+              Şifremi Unuttum
+            </span>
+          </div>
         </form>
 
       </div>
