@@ -9,6 +9,7 @@ const { startCronJobs } = require('./cron');
 const routes = require('./routes');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
+const adminReportsRoutes = require('./routes/adminReports');
 const usersRoutes = require('./routes/users');
 const companyRoutes = require('./routes/company');
 const invitationRoutes = require('./routes/invitations');
@@ -41,6 +42,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/reports', adminReportsRoutes);
 app.use('/api', usersRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/invitations', invitationRoutes);

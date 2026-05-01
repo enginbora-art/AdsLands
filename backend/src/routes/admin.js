@@ -57,6 +57,7 @@ router.get('/companies', platformAdmin, async (req, res) => {
              s.cancel_at_period_end,
              s.current_period_start,
              s.current_period_end,
+             s.amount        AS monthly_amount,
              CASE
                WHEN s.id IS NOT NULL AND s.status = 'active' AND NOT s.cancel_at_period_end
                  THEN 'active'
@@ -84,7 +85,7 @@ router.get('/companies', platformAdmin, async (req, res) => {
       ) s ON true
       WHERE c.type != 'admin'
       GROUP BY c.id, s.id, s.plan, s.status, s.interval, s.cancel_at_period_end,
-               s.current_period_start, s.current_period_end
+               s.current_period_start, s.current_period_end, s.amount
       ORDER BY c.created_at DESC
     `);
 

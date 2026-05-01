@@ -22,6 +22,14 @@ export const adminUpdateCompany = (id, data) => api.patch(`/admin/companies/${id
 export const adminGetCompany = (id) => api.get(`/admin/companies/${id}`).then(r => r.data);
 export const adminToggleUser = (id) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data);
 export const adminGetAiUsage      = (month) => api.get(`/admin/ai-usage${month ? `?month=${month}` : ''}`).then(r => r.data);
+export const adminExportReport    = async (month) => {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/reports/export?month=${month}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Export başarısız.');
+  return res.blob();
+};
 export const adminGetAiQueue      = ()      => api.get('/admin/ai-queue').then(r => r.data);
 export const adminClearAiQueue    = ()      => api.post('/admin/ai-queue/clear').then(r => r.data);
 export const adminSetAiConcurrency = (n)   => api.post('/admin/ai-queue/concurrency', { concurrency: n }).then(r => r.data);

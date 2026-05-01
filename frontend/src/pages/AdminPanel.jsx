@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency, adminExportReport } from '../api';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
@@ -10,10 +10,10 @@ const SECTORS = [
 ];
 
 const PLAN_LABELS = {
-  starter: 'Starter',
-  growth: 'Growth',
-  scale: 'Scale',
-  brand_direct: 'Direkt',
+  starter: 'Basic',
+  growth: 'Pro',
+  scale: 'Enterprise',
+  brand_direct: 'Marka Direkt',
 };
 
 const inp = {
@@ -25,21 +25,29 @@ const fieldLabel = {
   textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, fontWeight: 600,
 };
 
-function PlanBadge({ status, plan, cancelAtPeriodEnd }) {
+function PlanBadge({ status, plan, cancelAtPeriodEnd, periodEnd }) {
+  const dateLabel = (status === 'active' || status === 'cancelling') && periodEnd
+    ? new Date(periodEnd).toLocaleDateString('tr-TR') + "'ya kadar"
+    : null;
+
   if (status === 'active') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ background: 'rgba(0,191,166,0.12)', color: 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
-          Pro {plan ? `· ${PLAN_LABELS[plan] || plan}` : ''}
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+        <span style={{ background: 'rgba(0,191,166,0.12)', color: 'var(--teal)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+          {PLAN_LABELS[plan] || plan || 'Aktif'}
         </span>
-      </span>
+        {dateLabel && <span style={{ fontSize: 10, color: 'var(--text3)', paddingLeft: 2 }}>{dateLabel}</span>}
+      </div>
     );
   }
   if (status === 'cancelling') {
     return (
-      <span style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
-        İptal Süreci
-      </span>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+        <span style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+          İptal Süreci
+        </span>
+        {dateLabel && <span style={{ fontSize: 10, color: 'var(--text3)', paddingLeft: 2 }}>{dateLabel}</span>}
+      </div>
     );
   }
   if (status === 'trial') {
@@ -208,7 +216,7 @@ function CompanyRow({ c, indent = false, onUpdate }) {
       <td>
         {indent
           ? <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>
-          : <PlanBadge status={c.plan_status} plan={c.plan} cancelAtPeriodEnd={c.cancel_at_period_end} />
+          : <PlanBadge status={c.plan_status} plan={c.plan} cancelAtPeriodEnd={c.cancel_at_period_end} periodEnd={c.current_period_end} />
         }
       </td>
       <td><ActivityCell months={c.months_active} /></td>
@@ -248,7 +256,7 @@ function AgencyGroup({ agency, onUpdate }) {
         <td style={{ fontSize: 12, color: agency.admin_email ? 'var(--text2)' : 'var(--text3)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {agency.admin_email || 'Admin yok'}
         </td>
-        <td><PlanBadge status={agency.plan_status} plan={agency.plan} cancelAtPeriodEnd={agency.cancel_at_period_end} /></td>
+        <td><PlanBadge status={agency.plan_status} plan={agency.plan} cancelAtPeriodEnd={agency.cancel_at_period_end} periodEnd={agency.current_period_end} /></td>
         <td><ActivityCell months={agency.months_active} /></td>
         <td style={{ color: 'var(--text2)', fontSize: 12 }}>{agency.user_count}</td>
         <td style={{ color: 'var(--text3)', fontSize: 12 }}>{fmt(agency.created_at)}</td>
@@ -573,13 +581,47 @@ function AiUsageTab() {
   );
 }
 
+const now0 = new Date();
+const defaultMonth = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
+
+const PLAN_FILTER_OPTIONS = [
+  { key: 'all',          label: 'Tümü' },
+  { key: 'starter',      label: 'Basic' },
+  { key: 'growth',       label: 'Pro' },
+  { key: 'scale',        label: 'Enterprise' },
+  { key: 'brand_direct', label: 'Marka Direkt' },
+  { key: 'trial',        label: 'Trial' },
+  { key: 'pasif',        label: 'Pasif' },
+];
+
+function matchesPlan(c, planFilter) {
+  if (planFilter === 'all') return true;
+  if (planFilter === 'trial') return c.plan_status === 'trial';
+  if (planFilter === 'pasif') return c.plan_status === 'inactive' || c.plan_status === 'cancelled' || !c.plan_status;
+  return c.plan === planFilter;
+}
+
+function getSortFn(sortBy) {
+  const planRank = { scale: 4, growth: 3, brand_direct: 2, starter: 1 };
+  switch (sortBy) {
+    case 'activity': return (a, b) => (parseInt(b.months_active) || 0) - (parseInt(a.months_active) || 0);
+    case 'plan':     return (a, b) => (planRank[b.plan] || 0) - (planRank[a.plan] || 0);
+    case 'revenue':  return (a, b) => (Number(b.monthly_amount) || 0) - (Number(a.monthly_amount) || 0);
+    default:         return (a, b) => new Date(b.created_at) - new Date(a.created_at);
+  }
+}
+
 export default function AdminPanel({ onLogout }) {
   const [data, setData] = useState({ agencies: [], independent_brands: [] });
   const [tab, setTab] = useState('companies');
   const [filter, setFilter] = useState('all');
+  const [planFilter, setPlanFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date');
   const [showCreate, setShowCreate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [exportMonth, setExportMonth] = useState(defaultMonth);
+  const [exporting, setExporting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -591,11 +633,26 @@ export default function AdminPanel({ onLogout }) {
 
   useEffect(() => { load(); }, []);
 
-  const allCompanies = [
-    ...data.agencies,
-    ...data.agencies.flatMap(a => a.brands || []),
-    ...data.independent_brands,
-  ];
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const blob = await adminExportReport(exportMonth);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AdsLands_Rapor_${exportMonth.replace('-', '_')}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export hatası:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const sortFn = getSortFn(sortBy);
+  const filteredAgencies = data.agencies.filter(a => matchesPlan(a, planFilter)).sort(sortFn);
+  const filteredBrands   = data.independent_brands.filter(b => matchesPlan(b, planFilter)).sort(sortFn);
 
   const totalAgencies = data.agencies.length;
   const totalBrands = data.agencies.reduce((s, a) => s + (a.brands?.length || 0), 0) + data.independent_brands.length;
@@ -627,7 +684,13 @@ export default function AdminPanel({ onLogout }) {
             </div>
             <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px' }}>Platform Yönetimi</div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="month" value={exportMonth} onChange={e => setExportMonth(e.target.value)}
+              style={{ padding: '7px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 7, color: 'var(--text1)', fontSize: 13 }} />
+            <button onClick={handleExport} disabled={exporting}
+              style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--teal)', borderRadius: 8, color: 'var(--teal)', fontWeight: 600, fontSize: 13, cursor: exporting ? 'default' : 'pointer', opacity: exporting ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+              {exporting ? '⏳ İndiriliyor...' : '↓ Excel İndir'}
+            </button>
             <button onClick={() => setShowCreate(true)}
               style={{ padding: '8px 18px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               + Şirket Ekle
@@ -680,6 +743,30 @@ export default function AdminPanel({ onLogout }) {
           ))}
         </div>
 
+        {/* Plan filtresi + Sıralama */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', marginRight: 4 }}>Plan:</span>
+          {PLAN_FILTER_OPTIONS.map(({ key, label }) => (
+            <button key={key} onClick={() => setPlanFilter(key)}
+              style={{ padding: '4px 11px', borderRadius: 5, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                background: planFilter === key ? 'rgba(0,191,166,0.2)' : 'var(--bg2)',
+                color: planFilter === key ? 'var(--teal)' : 'var(--text3)',
+                outline: planFilter === key ? '1px solid rgba(0,191,166,0.4)' : 'none' }}>
+              {label}
+            </button>
+          ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase' }}>Sırala:</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding: '4px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>
+              <option value="date">Kayıt Tarihi</option>
+              <option value="activity">Aktiflik</option>
+              <option value="plan">Plan</option>
+              <option value="revenue">Gelir</option>
+            </select>
+          </div>
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
         ) : (
@@ -698,33 +785,33 @@ export default function AdminPanel({ onLogout }) {
                 </tr>
               </thead>
               <tbody>
-                {filter === 'all' && data.agencies.length === 0 && data.independent_brands.length === 0 && (
+                {filter === 'all' && filteredAgencies.length === 0 && filteredBrands.length === 0 && (
                   <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Şirket bulunamadı.</td></tr>
                 )}
 
                 {/* Ajans + bağlı markalar */}
-                {filter !== 'brand' && data.agencies.map(agency => (
+                {filter !== 'brand' && filteredAgencies.map(agency => (
                   <AgencyGroup key={agency.id} agency={agency} onUpdate={load} />
                 ))}
 
                 {/* Bağımsız markalar (all view) */}
-                {filter === 'all' && data.independent_brands.length > 0 && (
+                {filter === 'all' && filteredBrands.length > 0 && (
                   <>
-                    {data.agencies.length > 0 && (
+                    {filteredAgencies.length > 0 && (
                       <tr>
                         <td colSpan={8} style={{ padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text3)', background: 'var(--bg)', borderTop: '1px solid var(--border2)' }}>
                           Bağımsız Markalar
                         </td>
                       </tr>
                     )}
-                    {data.independent_brands.map(brand => (
+                    {filteredBrands.map(brand => (
                       <CompanyRow key={brand.id} c={brand} onUpdate={load} />
                     ))}
                   </>
                 )}
 
                 {/* Ajans filtresi — boş durum */}
-                {filter === 'agency' && data.agencies.length === 0 && (
+                {filter === 'agency' && filteredAgencies.length === 0 && (
                   <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Ajans bulunamadı.</td></tr>
                 )}
 
@@ -732,8 +819,8 @@ export default function AdminPanel({ onLogout }) {
                 {filter === 'brand' && (() => {
                   const allBrands = [
                     ...data.agencies.flatMap(a => a.brands || []),
-                    ...data.independent_brands,
-                  ];
+                    ...filteredBrands,
+                  ].filter(b => matchesPlan(b, planFilter)).sort(sortFn);
                   if (allBrands.length === 0) {
                     return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Marka bulunamadı.</td></tr>;
                   }
