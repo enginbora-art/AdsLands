@@ -263,16 +263,17 @@ router.get('/kpi-analysis/:brandId', authMiddleware, checkAiLimit('kpi_analysis'
 
     // Son 30 günlük gerçek performans verilerini çek
     const { rows: metrics } = await pool.query(
-      `SELECT platform,
-              SUM(spend)::float           AS total_spend,
-              AVG(roas)::float            AS avg_roas,
-              SUM(impressions)::bigint    AS total_impressions,
-              SUM(clicks)::bigint         AS total_clicks,
-              SUM(conversions)::bigint    AS total_conversions
-       FROM integration_metrics
-       WHERE company_id = $1
-         AND date >= NOW() - INTERVAL '30 days'
-       GROUP BY platform`,
+      `SELECT i.platform,
+              SUM(m.spend)::float              AS total_spend,
+              AVG(NULLIF(m.roas, 0))::float    AS avg_roas,
+              SUM(m.impressions)::bigint       AS total_impressions,
+              SUM(m.clicks)::bigint            AS total_clicks,
+              SUM(m.conversions)::bigint       AS total_conversions
+       FROM ad_metrics m
+       JOIN integrations i ON i.id = m.integration_id
+       WHERE i.company_id = $1
+         AND m.date >= NOW() - INTERVAL '30 days'
+       GROUP BY i.platform`,
       [brandId]
     );
 

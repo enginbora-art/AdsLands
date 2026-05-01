@@ -4,7 +4,7 @@ import { useSelectedBrand } from '../context/BrandContext';
 import { getChannelData, getAiUsageToday, getAiQueueStatus } from '../api';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, PieChart, Pie, Cell,
+  Legend, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine,
 } from 'recharts';
 
 // ── Sabitler ──────────────────────────────────────────────────────────────────
@@ -155,6 +155,34 @@ function InlineEmptyState({ connectedPlatforms, onConnect, platformList = SPEND_
         })}
       </div>
     </div>
+  );
+}
+
+// Tablo hücresinde inline hedef badge'i: "3.2x / H:4.0 🔴"
+function KpiBadge({ actual, target, unit = '', lowerIsBetter = false }) {
+  if (target == null || actual == null) return null;
+  const ok = lowerIsBetter ? actual <= target : actual >= target;
+  return (
+    <span style={{ fontSize: 10, marginLeft: 5, color: ok ? '#10B981' : '#EF4444', fontWeight: 600, whiteSpace: 'nowrap' }}>
+      H:{Number(target).toFixed(unit === '₺' ? 0 : 1)}{unit} {ok ? '✅' : '🔴'}
+    </span>
+  );
+}
+
+// KPI özet tablosu hücresi: "3.2x ← 4.0x · %80"
+function KpiCell({ actual, target, fmt, lowerIsBetter = false }) {
+  if (target == null) return <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>;
+  if (actual == null || actual === 0) return (
+    <span style={{ color: 'var(--text3)', fontSize: 12 }}>— / H:{fmt ? fmt(target) : target}</span>
+  );
+  const pct = Math.round(lowerIsBetter ? (target / actual) * 100 : (actual / target) * 100);
+  const color = pct >= 100 ? '#10B981' : pct >= 80 ? '#F59E0B' : '#EF4444';
+  return (
+    <span style={{ fontSize: 12 }}>
+      <span style={{ color }}>{fmt ? fmt(actual) : actual}</span>
+      <span style={{ color: 'var(--text3)', marginLeft: 4 }}>/ H:{fmt ? fmt(target) : target}</span>
+      <span style={{ marginLeft: 5, fontSize: 11, fontWeight: 700, color }}>{pct >= 100 ? '✅' : '🔴'} %{pct}</span>
+    </span>
   );
 }
 
@@ -402,6 +430,10 @@ export default function Channels({ onNav }) {
   }));
   const bestChannel  = scored.length ? scored.reduce((a, b) => a.efficiency > b.efficiency ? a : b) : null;
   const worstChannel = scored.length > 1 ? scored.reduce((a, b) => a.efficiency < b.efficiency ? a : b) : null;
+
+  // KPI hedefleri (bu ay bütçe planından)
+  const kpiTargets    = data?.kpi_targets || {};
+  const hasKpiTargets = Object.keys(kpiTargets).length > 0;
 
   // Grafik verisi
   const activePlatforms = [...new Set((data?.dailyMetrics || []).map(m => m.platform))];
@@ -672,9 +704,10 @@ export default function Channels({ onNav }) {
               </thead>
               <tbody>
                 {scored.sort((a,b) => b.efficiency - a.efficiency).map(i => {
-                  const isBest  = i.id === bestChannel?.id;
-                  const isWorst = scored.length > 1 && i.id === worstChannel?.id;
+                  const isBest   = i.id === bestChannel?.id;
+                  const isWorst  = scored.length > 1 && i.id === worstChannel?.id;
                   const effColor = i.efficiency >= 70 ? '#10B981' : i.efficiency >= 45 ? '#F59E0B' : '#EF4444';
+                  const kpi      = kpiTargets[i.platform];
                   return (
                     <tr key={i.id} style={{ background: isBest ? 'rgba(16,185,129,0.04)' : isWorst ? 'rgba(245,158,11,0.04)' : 'transparent' }}>
                       <td>
@@ -683,9 +716,18 @@ export default function Channels({ onNav }) {
                         {isWorst && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(245,158,11,0.15)', color: '#F59E0B', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>GELİŞTİR</span>}
                       </td>
                       <td style={{ fontFamily: 'var(--mono)' }}>{fmtTL(i.total_spend)}</td>
-                      <td style={{ color: parseFloat(i.avg_roas) >= i.bm.roas ? '#10B981' : '#F59E0B', fontWeight: 600 }}>{Number(i.avg_roas).toFixed(2)}x</td>
-                      <td style={{ fontFamily: 'var(--mono)' }}>{i.cpa ? fmtTL(i.cpa) : '—'}</td>
-                      <td>{fmtPct(i.ctr)}</td>
+                      <td>
+                        <span style={{ color: parseFloat(i.avg_roas) >= i.bm.roas ? '#10B981' : '#F59E0B', fontWeight: 600 }}>{Number(i.avg_roas).toFixed(2)}x</span>
+                        {kpi?.kpi_roas != null && <KpiBadge actual={parseFloat(i.avg_roas)} target={kpi.kpi_roas} unit="x" />}
+                      </td>
+                      <td style={{ fontFamily: 'var(--mono)' }}>
+                        {i.cpa ? fmtTL(i.cpa) : '—'}
+                        {kpi?.kpi_cpa != null && i.cpa && <KpiBadge actual={i.cpa} target={kpi.kpi_cpa} unit="₺" lowerIsBetter />}
+                      </td>
+                      <td>
+                        {fmtPct(i.ctr)}
+                        {kpi?.kpi_ctr != null && <KpiBadge actual={i.ctr} target={kpi.kpi_ctr} unit="%" />}
+                      </td>
                       <td>{fmtN(i.total_conversions)}</td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -740,6 +782,11 @@ export default function Channels({ onNav }) {
                 {activePlatforms.filter(p => SPEND_PLATFORMS.includes(p)).map(p => (
                   <Line key={p} type="monotone" dataKey={`${p}_roas`} stroke={PLATFORM_COLORS[p]||'#888'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="4 2" />
                 ))}
+                {activePlatforms.filter(p => SPEND_PLATFORMS.includes(p) && kpiTargets[p]?.kpi_roas != null).map(p => (
+                  <ReferenceLine key={`kpi-roas-${p}`} y={kpiTargets[p].kpi_roas}
+                    stroke={PLATFORM_COLORS[p]||'#888'} strokeDasharray="6 3" strokeOpacity={0.5} strokeWidth={1.5}
+                    label={{ value: `↑ H:${kpiTargets[p].kpi_roas}x`, position: 'insideTopRight', fontSize: 9, fill: PLATFORM_COLORS[p]||'#888' }} />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -749,7 +796,7 @@ export default function Channels({ onNav }) {
         <SectionCard title="Bütçe Verimliliği" subtitle="Kanal bazında harcama dağılımı">
           {loading ? <SkeletonBar height={180} /> : pieData.length === 0 ? (
             <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
-          ) : (
+          ) : (<>
             <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <ResponsiveContainer width={200} height={200}>
                 <PieChart>
@@ -789,7 +836,43 @@ export default function Channels({ onNav }) {
                 )}
               </div>
             </div>
-          )}
+
+            {/* KPI hedef karşılaştırma tablosu */}
+            {hasKpiTargets && scored.some(i => kpiTargets[i.platform]) && (
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--border2)', paddingTop: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>
+                  Bu Ay KPI Hedef Karşılaştırması
+                </div>
+                <table className="cmp-table">
+                  <thead>
+                    <tr>
+                      <th>Platform</th>
+                      <th>ROAS</th>
+                      <th>CPA</th>
+                      <th>CTR</th>
+                      <th>İmpresyon</th>
+                      <th>Dönüşüm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scored.filter(i => kpiTargets[i.platform]).map(i => {
+                      const kpi = kpiTargets[i.platform];
+                      return (
+                        <tr key={i.id}>
+                          <td style={{ color: PLATFORM_COLORS[i.platform], fontWeight: 700 }}>{PLATFORM_LABELS[i.platform]}</td>
+                          <td><KpiCell actual={parseFloat(i.avg_roas)} target={kpi.kpi_roas} fmt={v => `${v.toFixed(2)}x`} /></td>
+                          <td><KpiCell actual={i.cpa} target={kpi.kpi_cpa} fmt={v => fmtTL(v)} lowerIsBetter /></td>
+                          <td><KpiCell actual={i.ctr} target={kpi.kpi_ctr} fmt={v => fmtPct(v)} /></td>
+                          <td><KpiCell actual={parseInt(i.total_impressions)} target={kpi.kpi_impression} fmt={v => fmtN(v)} /></td>
+                          <td><KpiCell actual={parseInt(i.total_conversions)} target={kpi.kpi_conversion} fmt={v => fmtN(v)} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>)}
         </SectionCard>
 
         {/* ── BÖLÜM 5: AI Kanal Analizi ──────────────────────────────────── */}

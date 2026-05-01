@@ -84,12 +84,35 @@ router.get('/', authMiddleware, async (req, res) => {
         AND a.detected_at >= CURRENT_DATE - ($2 || ' days')::interval
     `, [companyId, days]);
 
+    // Bu ayın KPI hedefleri — platform filtresi bağımsız, her zaman tümü gelir
+    const now = new Date();
+    const { rows: kpiRows } = await pool.query(`
+      SELECT bc.platform,
+             bc.kpi_roas::float, bc.kpi_cpa::float, bc.kpi_ctr::float,
+             bc.kpi_impression::int, bc.kpi_conversion::int
+      FROM budget_channels bc
+      JOIN budgets b ON b.id = bc.budget_id
+      WHERE b.company_id = $1
+        AND b.month = $2 AND b.year = $3
+        AND (bc.kpi_roas IS NOT NULL OR bc.kpi_cpa IS NOT NULL OR bc.kpi_ctr IS NOT NULL
+             OR bc.kpi_impression IS NOT NULL OR bc.kpi_conversion IS NOT NULL)
+    `, [companyId, now.getMonth() + 1, now.getFullYear()]);
+
+    const kpi_targets = Object.fromEntries(kpiRows.map(r => [r.platform, {
+      kpi_roas:       r.kpi_roas,
+      kpi_cpa:        r.kpi_cpa,
+      kpi_ctr:        r.kpi_ctr,
+      kpi_impression: r.kpi_impression,
+      kpi_conversion: r.kpi_conversion,
+    }]));
+
     res.json({
       sector: company?.sector || null,
       integrations,
       prevIntegrations,
       dailyMetrics,
       anomalyDates: anomalyRows.map(r => r.date),
+      kpi_targets,
     });
   } catch (err) {
     console.error(err);
