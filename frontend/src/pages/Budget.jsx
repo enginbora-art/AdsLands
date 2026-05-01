@@ -328,7 +328,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
                   <div key={i} style={{ border: '1px solid var(--border2)', borderRadius: 8, padding: '8px 10px', background: 'var(--bg)' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: ch.kpiOpen ? 10 : 0 }}>
                       <select
-                        style={{ ...ms.select, color: info ? info.color : 'var(--text3)', fontWeight: info ? 600 : 400 }}
+                        style={{ ...ms.select, color: info ? 'var(--teal)' : 'var(--text3)', fontWeight: info ? 600 : 400 }}
                         value={ch.platform}
                         onChange={e => updateChannel(i, 'platform', e.target.value)}
                       >
