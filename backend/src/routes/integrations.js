@@ -17,6 +17,7 @@ const { validateToken: validateAppsflyer, getAppName: getAppsflyerName } = requi
 const { validateToken: validateAdjust, getAppName: getAdjustName } = require('../services/adjustService');
 const { validateCredentials: validateAdform, getAccountName: getAdformName } = require('../services/adformService');
 const { getLinkedinAuthUrl, exchangeToken: exchangeLinkedinToken, getAdAccounts: getLinkedinAccounts, getAccountName: getLinkedinName } = require('../services/linkedinService');
+const { encrypt, decrypt } = require('../services/tokenEncryption');
 
 // ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
 function nameSimilarity(a, b) {
@@ -125,7 +126,7 @@ router.get('/google/callback', async (req, res) => {
          token_expiry  = EXCLUDED.token_expiry,
          is_active     = true
        RETURNING *`,
-      [companyId, platform, tokens.access_token, tokens.refresh_token || null,
+      [companyId, platform, encrypt(tokens.access_token), encrypt(tokens.refresh_token || null),
        accountId, tokens.expiry_date ? new Date(tokens.expiry_date) : null]
     );
 
@@ -207,13 +208,13 @@ router.get('/google/data', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Hesap ID bulunamadı. Lütfen yeniden bağlanın.' });
     }
     const tokens = {
-      access_token: integration.access_token,
-      refresh_token: integration.refresh_token,
-      expiry_date: integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
     };
     const data = platform === 'google_analytics'
-      ? await getAnalyticsData(tokens, integration.account_id)
-      : await getAdsData(tokens, integration.account_id);
+      ? await getAnalyticsData(tokens, integration.account_id, integration.id)
+      : await getAdsData(tokens, integration.account_id, integration.id);
     res.json({ platform, account_id: integration.account_id, data });
   } catch (err) {
     console.error('Google data hatası:', err);
@@ -290,7 +291,7 @@ router.post('/appsflyer/connect', authMiddleware, async (req, res) => {
              account_id = COALESCE(EXCLUDED.account_id, integrations.account_id),
              is_active = true
        RETURNING *`,
-      [companyId, api_token, app_id || null]
+      [companyId, encrypt(api_token), app_id || null]
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
@@ -346,7 +347,7 @@ router.post('/adjust/connect', authMiddleware, async (req, res) => {
              account_id = EXCLUDED.account_id,
              is_active = true
        RETURNING *`,
-      [companyId, api_token, app_token]
+      [companyId, encrypt(api_token), app_token]
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
@@ -404,7 +405,7 @@ router.post('/adform/connect', authMiddleware, async (req, res) => {
              extra        = EXCLUDED.extra,
              is_active    = true
        RETURNING *`,
-      [companyId, token, tracking_id || null, JSON.stringify({ username, password })]
+      [companyId, encrypt(token), tracking_id || null, JSON.stringify({ username, password: encrypt(password) })]
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
@@ -458,7 +459,8 @@ router.get('/linkedin/callback', async (req, res) => {
   }
 
   try {
-    const { access_token } = await exchangeLinkedinToken(code);
+    const { access_token, expires_in } = await exchangeLinkedinToken(code);
+    const tokenExpiry = new Date(Date.now() + (expires_in || 5_184_000) * 1000); // ~60 gün default
 
     const accounts = await getLinkedinAccounts(access_token).catch(() => []);
     const account  = accounts[0] || null;
@@ -466,14 +468,15 @@ router.get('/linkedin/callback', async (req, res) => {
     const accountName = account?.name || (accountId ? await getLinkedinName(access_token, accountId).catch(() => null) : null);
 
     const { rows: [integration] } = await pool.query(
-      `INSERT INTO integrations (company_id, platform, access_token, account_id, is_active)
-       VALUES ($1, 'linkedin', $2, $3, true)
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, token_expiry, is_active)
+       VALUES ($1, 'linkedin', $2, $3, $4, true)
        ON CONFLICT (company_id, platform) DO UPDATE
-         SET access_token = EXCLUDED.access_token,
-             account_id   = COALESCE(EXCLUDED.account_id, integrations.account_id),
-             is_active    = true
+         SET access_token  = EXCLUDED.access_token,
+             account_id    = COALESCE(EXCLUDED.account_id, integrations.account_id),
+             token_expiry  = EXCLUDED.token_expiry,
+             is_active     = true
        RETURNING *`,
-      [companyId, access_token, accountId]
+      [companyId, encrypt(access_token), accountId, tokenExpiry]
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);

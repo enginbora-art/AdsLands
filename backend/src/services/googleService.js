@@ -39,16 +39,30 @@ async function getTokens(code) {
   return tokens;
 }
 
-async function refreshIfNeeded(tokens) {
+async function refreshIfNeeded(tokens, integrationId = null) {
   if (!tokens.expiry_date || tokens.expiry_date > Date.now() + 60_000) return tokens;
   const client = createClient();
   client.setCredentials(tokens);
   const { credentials } = await client.refreshAccessToken();
+
+  if (integrationId && credentials.access_token) {
+    try {
+      const pool = require('../db');
+      const { encrypt } = require('./tokenEncryption');
+      await pool.query(
+        'UPDATE integrations SET access_token = $1, token_expiry = $2 WHERE id = $3',
+        [encrypt(credentials.access_token), credentials.expiry_date ? new Date(credentials.expiry_date) : null, integrationId]
+      );
+    } catch (err) {
+      console.error('[googleService] Token cache güncelleme hatası:', err.message);
+    }
+  }
+
   return credentials;
 }
 
-async function getAnalyticsProperties(tokens) {
-  const fresh = await refreshIfNeeded(tokens);
+async function getAnalyticsProperties(tokens, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
   const client = createClient();
   client.setCredentials(fresh);
   const admin = google.analyticsadmin({ version: 'v1beta', auth: client });
@@ -66,8 +80,8 @@ async function getAnalyticsProperties(tokens) {
   return properties;
 }
 
-async function getAnalyticsData(tokens, propertyId) {
-  const fresh = await refreshIfNeeded(tokens);
+async function getAnalyticsData(tokens, propertyId, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
   const client = createClient();
   client.setCredentials(fresh);
   const dataApi = google.analyticsdata({ version: 'v1beta', auth: client });
@@ -160,8 +174,8 @@ async function listAdsCustomers(tokens) {
   return (data.resourceNames || []).map(n => n.replace('customers/', ''));
 }
 
-async function getAdsData(tokens, customerId) {
-  const fresh = await refreshIfNeeded(tokens);
+async function getAdsData(tokens, customerId, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
   const client = createClient();
   client.setCredentials(fresh);
   const { token } = await client.getAccessToken();
