@@ -284,8 +284,15 @@ export default function Channels({ onNav }) {
   const [aiError, setAiError]       = useState('');
   const aiRef = useRef(null);
 
-  const brandName = selectedBrand?.company_name || selectedBrand?.name;
-  const brandId   = isAgency ? selectedBrand?.id : undefined;
+  const [kpiPanelOpen, setKpiPanelOpen] = useState(false);
+  const [kpiText, setKpiText]           = useState('');
+  const [kpiLoading, setKpiLoading]     = useState(false);
+  const [kpiError, setKpiError]         = useState('');
+  const kpiRef = useRef(null);
+
+  const brandName   = selectedBrand?.company_name || selectedBrand?.name;
+  const brandId     = isAgency ? selectedBrand?.id : undefined;
+  const kpiBrandId  = isAgency ? selectedBrand?.id : user?.company_id;
 
   const load = useCallback(() => {
     if (needsBrand) { setLoading(false); return; }
@@ -439,6 +446,35 @@ export default function Channels({ onNav }) {
     } finally { setAiLoading(false); }
   };
 
+  const runKpiAnalysis = async () => {
+    setKpiPanelOpen(true);
+    setKpiText(''); setKpiError(''); setKpiLoading(true);
+    setTimeout(() => kpiRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/budgets/kpi-analysis/${kpiBrandId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'KPI analiz başarısız.'); }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n'); buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') { setKpiLoading(false); return; }
+          try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setKpiText(p => p + text); } catch {}
+        }
+      }
+    } catch (err) {
+      setKpiError(err.message || 'KPI analiz başarısız.');
+    } finally { setKpiLoading(false); }
+  };
+
   const saveAiReport = () => {
     const blob = new Blob([aiText], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -468,6 +504,11 @@ export default function Channels({ onNav }) {
             {AD_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
           </select>
           {hasAdData && <button onClick={() => exportCsv(adIntegrations, sector)} style={s.exportBtn}>↓ CSV</button>}
+          {kpiBrandId && (
+            <button onClick={runKpiAnalysis} disabled={kpiLoading} style={{ ...s.exportBtn, background: kpiPanelOpen ? 'rgba(139,92,246,0.15)' : 'transparent', borderColor: '#8b5cf6', color: '#a78bfa' }}>
+              🎯 KPI Analizi
+            </button>
+          )}
         </div>
       </div>
 
@@ -711,6 +752,55 @@ export default function Channels({ onNav }) {
             )}
           </SectionCard>
         </div>
+
+        {/* ── BÖLÜM 5b: KPI Analizi ──────────────────────────────────────── */}
+        {kpiPanelOpen && (
+          <div ref={kpiRef}>
+            <div className="card" style={{ marginBottom: 24, border: '1px solid rgba(139,92,246,0.3)' }}>
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div className="card-title">🎯 KPI Analizi</div>
+                  <div className="card-subtitle">Bütçe hedefleri ile gerçek performans karşılaştırması</div>
+                </div>
+                <button onClick={() => setKpiPanelOpen(false)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+              </div>
+              <div className="card-body">
+                {kpiLoading && !kpiText && (
+                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>
+                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>↻</span>KPI analizi hazırlanıyor...
+                  </div>
+                )}
+                {kpiError && (
+                  <div style={{ background: 'rgba(255,107,90,0.1)', border: '1px solid rgba(255,107,90,0.3)', borderRadius: 8, padding: '10px 14px', color: 'var(--coral)', fontSize: 13, marginBottom: 12 }}>
+                    ⚠ {kpiError}
+                    <button onClick={() => setKpiError('')} style={{ marginLeft: 12, background: 'none', border: 'none', color: 'var(--coral)', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                  </div>
+                )}
+                {(kpiText || kpiLoading) && (
+                  <div>
+                    <div style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px', fontSize: 13, lineHeight: 1.8, color: 'var(--text1)', whiteSpace: 'pre-wrap', minHeight: 80 }}>
+                      {kpiText}
+                      {kpiLoading && <span style={{ display: 'inline-block', width: 2, height: 14, background: '#a78bfa', marginLeft: 2, verticalAlign: 'middle', animation: 'blink 1s step-end infinite' }} />}
+                    </div>
+                    {!kpiLoading && kpiText && (
+                      <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                        <button
+                          onClick={() => { const blob = new Blob([kpiText],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`kpi-analizi-${new Date().toISOString().split('T')[0]}.txt`; a.click(); URL.revokeObjectURL(url); }}
+                          style={{ padding: '7px 16px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>
+                          ↓ Raporu Kaydet
+                        </button>
+                        <button onClick={runKpiAnalysis} style={{ padding: '7px 16px', background: 'transparent', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 8, color: '#a78bfa', fontSize: 12, cursor: 'pointer' }}>
+                          Yenile
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── BÖLÜM 6: Kanal Sinerjisi ────────────────────────────────────── */}
         <SectionCard title="Kanal Sinerjisi" subtitle="Attribution özeti">

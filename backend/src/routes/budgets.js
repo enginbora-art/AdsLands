@@ -2,6 +2,13 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const Anthropic = require('@anthropic-ai/sdk');
+
+const PLATFORM_LABELS = {
+  google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads',
+  linkedin: 'LinkedIn Ads', adform: 'Adform', appsflyer: 'AppsFlyer',
+  adjust: 'Adjust', other: 'Diğer',
+};
 
 async function verifyAgencyBrand(agencyCompanyId, brandCompanyId) {
   const { rows } = await pool.query(
@@ -93,7 +100,10 @@ router.get('/', authMiddleware, async (req, res) => {
     if (!budget) return res.json(null);
 
     const { rows: channels } = await pool.query(
-      'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1 ORDER BY created_at',
+      `SELECT platform, amount::float AS amount,
+              kpi_roas::float, kpi_cpa::float, kpi_ctr::float,
+              kpi_impression, kpi_conversion
+       FROM budget_channels WHERE budget_id = $1 ORDER BY created_at`,
       [budget.id]
     );
     res.json({ ...budget, channels });
@@ -162,15 +172,27 @@ router.post('/', authMiddleware, async (req, res) => {
     // Replace budget_channels
     await client.query('DELETE FROM budget_channels WHERE budget_id = $1', [newBudget.id]);
     for (const ch of safeChannels) {
+      const kpi = ch.kpi || {};
       await client.query(
-        'INSERT INTO budget_channels (budget_id, platform, amount) VALUES ($1, $2, $3)',
-        [newBudget.id, ch.platform, toNum(ch.amount)]
+        `INSERT INTO budget_channels (budget_id, platform, amount, kpi_roas, kpi_cpa, kpi_ctr, kpi_impression, kpi_conversion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          newBudget.id, ch.platform, toNum(ch.amount),
+          kpi.roas       != null ? parseFloat(kpi.roas)       : null,
+          kpi.cpa        != null ? parseFloat(kpi.cpa)        : null,
+          kpi.ctr        != null ? parseFloat(kpi.ctr)        : null,
+          kpi.impression != null ? parseInt(kpi.impression)   : null,
+          kpi.conversion != null ? parseInt(kpi.conversion)   : null,
+        ]
       );
     }
 
     // Fetch saved channels to return
     const { rows: savedChannels } = await client.query(
-      'SELECT platform, amount::float AS amount FROM budget_channels WHERE budget_id = $1 ORDER BY created_at',
+      `SELECT platform, amount::float AS amount,
+              kpi_roas::float, kpi_cpa::float, kpi_ctr::float,
+              kpi_impression, kpi_conversion
+       FROM budget_channels WHERE budget_id = $1 ORDER BY created_at`,
       [newBudget.id]
     );
 
@@ -201,6 +223,118 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Sunucu hatası.' });
   } finally {
     client.release();
+  }
+});
+
+// GET /api/budgets/kpi-analysis/:brandId — Claude streaming KPI analizi
+router.get('/kpi-analysis/:brandId', authMiddleware, async (req, res) => {
+  const { brandId } = req.params;
+
+  // Ajans erişim kontrolü
+  if (req.user.company_type === 'agency') {
+    if (!(await verifyAgencyBrand(req.user.company_id, brandId))) {
+      return res.status(403).json({ error: 'Bu markaya erişiminiz yok.' });
+    }
+  } else if (req.user.company_id !== brandId) {
+    return res.status(403).json({ error: 'Erişim reddedildi.' });
+  }
+
+  try {
+    // Aktif ayın bütçe kanallarını ve KPI'larını çek
+    const now = new Date();
+    const { rows: channels } = await pool.query(
+      `SELECT bc.platform, bc.amount::float,
+              bc.kpi_roas::float, bc.kpi_cpa::float, bc.kpi_ctr::float,
+              bc.kpi_impression, bc.kpi_conversion
+       FROM budget_channels bc
+       JOIN budgets b ON b.id = bc.budget_id
+       WHERE b.company_id = $1
+         AND b.month = $2 AND b.year = $3
+         AND (bc.kpi_roas IS NOT NULL OR bc.kpi_cpa IS NOT NULL OR bc.kpi_ctr IS NOT NULL
+              OR bc.kpi_impression IS NOT NULL OR bc.kpi_conversion IS NOT NULL)`,
+      [brandId, now.getMonth() + 1, now.getFullYear()]
+    );
+
+    if (channels.length === 0) {
+      return res.status(404).json({ error: 'Bu marka için KPI girilmiş kanal bulunamadı.' });
+    }
+
+    // Son 30 günlük gerçek performans verilerini çek
+    const { rows: metrics } = await pool.query(
+      `SELECT platform,
+              SUM(spend)::float           AS total_spend,
+              AVG(roas)::float            AS avg_roas,
+              SUM(impressions)::bigint    AS total_impressions,
+              SUM(clicks)::bigint         AS total_clicks,
+              SUM(conversions)::bigint    AS total_conversions
+       FROM integration_metrics
+       WHERE company_id = $1
+         AND date >= NOW() - INTERVAL '30 days'
+       GROUP BY platform`,
+      [brandId]
+    );
+
+    const metricMap = Object.fromEntries(metrics.map(m => [m.platform, m]));
+
+    // Her kanal için prompt verisi hazırla
+    const channelLines = channels.map(ch => {
+      const label = PLATFORM_LABELS[ch.platform] || ch.platform;
+      const real = metricMap[ch.platform];
+      const realCpa = real && parseInt(real.total_conversions) > 0
+        ? (parseFloat(real.total_spend) / parseInt(real.total_conversions)).toFixed(0) : null;
+      const realCtr = real && parseInt(real.total_impressions) > 0
+        ? (parseInt(real.total_clicks) / parseInt(real.total_impressions) * 100).toFixed(2) : null;
+
+      const kpiLines = [
+        ch.kpi_roas        != null ? `  - Hedef ROAS: ${ch.kpi_roas}x` : null,
+        ch.kpi_cpa         != null ? `  - Hedef CPA: ₺${ch.kpi_cpa}` : null,
+        ch.kpi_ctr         != null ? `  - Hedef CTR: %${ch.kpi_ctr}` : null,
+        ch.kpi_impression  != null ? `  - Hedef İmpresyon: ${Number(ch.kpi_impression).toLocaleString('tr-TR')}` : null,
+        ch.kpi_conversion  != null ? `  - Hedef Dönüşüm: ${ch.kpi_conversion}` : null,
+      ].filter(Boolean).join('\n');
+
+      const realLines = real ? [
+        `  - Gerçek Harcama: ₺${parseFloat(real.total_spend).toFixed(0)}`,
+        real.avg_roas       ? `  - Gerçek ROAS: ${parseFloat(real.avg_roas).toFixed(2)}x` : null,
+        realCtr             ? `  - Gerçek CTR: %${realCtr}` : null,
+        realCpa             ? `  - Gerçek CPA: ₺${realCpa}` : null,
+        real.total_impressions ? `  - Gerçek İmpresyon: ${Number(real.total_impressions).toLocaleString('tr-TR')}` : null,
+        real.total_conversions ? `  - Gerçek Dönüşüm: ${real.total_conversions}` : null,
+      ].filter(Boolean).join('\n') : '  - Gerçek veri yok (entegrasyon bağlı değil veya veri yok)';
+
+      return `### ${label} (Bütçe: ₺${ch.amount?.toLocaleString?.('tr-TR') ?? ch.amount})\nKPI Hedefleri:\n${kpiLines}\nGerçek Performans (son 30 gün):\n${realLines}`;
+    }).join('\n\n');
+
+    const userPrompt = `${channelLines}\n\nBu verilere göre her kanal için:\n1) Hangi KPI'lar tutturuldu, hangisi kaçırıldı\n2) Neden kaçırıldı (varsa yorum)\n3) Ne yapılmalı (somut 1-2 öneri)\nSonunda genel bütçe optimizasyon tavsiyesi ver.`;
+
+    // SSE stream başlat
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const stream = await client.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: 'Sen bir dijital reklam performans analistisin. Ajansın belirlediği KPI hedefleri ile gerçek performans verilerini karşılaştırarak somut ve uygulanabilir öneriler sun. Türkçe yanıt ver. Her kanal için ayrı değerlendir.',
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+      }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    console.error('[KPI Analysis] Hata:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

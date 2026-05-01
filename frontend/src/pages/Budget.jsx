@@ -139,12 +139,20 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
       return existing.channels.map(ch => ({
         platform: ch.platform,
         amount: String(Math.round(Number(ch.amount))),
+        kpi: {
+          roas:       ch.kpi_roas       != null ? String(ch.kpi_roas)       : '',
+          cpa:        ch.kpi_cpa        != null ? String(ch.kpi_cpa)        : '',
+          ctr:        ch.kpi_ctr        != null ? String(ch.kpi_ctr)        : '',
+          impression: ch.kpi_impression != null ? String(ch.kpi_impression) : '',
+          conversion: ch.kpi_conversion != null ? String(ch.kpi_conversion) : '',
+        },
+        kpiOpen: !!(ch.kpi_roas || ch.kpi_cpa || ch.kpi_ctr || ch.kpi_impression || ch.kpi_conversion),
       }));
     }
     // backward compat: read old columns
     return LEGACY_CHANNELS
       .filter(lc => Number(existing?.[lc.key]) > 0)
-      .map(lc => ({ platform: lc.platform, amount: String(Math.round(Number(existing[lc.key]))) }));
+      .map(lc => ({ platform: lc.platform, amount: String(Math.round(Number(existing[lc.key]))), kpi: { roas:'',cpa:'',ctr:'',impression:'',conversion:'' }, kpiOpen: false }));
   });
 
   const [saving, setSaving]       = useState(false);
@@ -156,7 +164,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
   const usedPlatforms = channels.map(c => c.platform).filter(Boolean);
   const availableFor  = (current) => ALL_PLATFORMS.filter(p => p.platform === current || !usedPlatforms.includes(p.platform));
 
-  const addChannel    = () => setChannels(p => [...p, { platform: '', amount: '' }]);
+  const addChannel    = () => setChannels(p => [...p, { platform: '', amount: '', kpi: { roas:'',cpa:'',ctr:'',impression:'',conversion:'' }, kpiOpen: false }]);
   const removeChannel = (i) => setChannels(p => p.filter((_, idx) => idx !== i));
   const updateChannel = (i, key, val) => setChannels(p => p.map((ch, idx) => idx === i ? { ...ch, [key]: val } : ch));
 
@@ -177,7 +185,15 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
         total_budget: totalBudgetOverride ?? (parseInt(form.total_budget) || 0),
         channels: channels
           .filter(ch => ch.platform && parseInt(ch.amount) > 0)
-          .map(ch => ({ platform: ch.platform, amount: parseInt(ch.amount) })),
+          .map(ch => {
+            const kpi = {};
+            if (ch.kpi?.roas?.trim())       kpi.roas       = ch.kpi.roas;
+            if (ch.kpi?.cpa?.trim())        kpi.cpa        = ch.kpi.cpa;
+            if (ch.kpi?.ctr?.trim())        kpi.ctr        = ch.kpi.ctr;
+            if (ch.kpi?.impression?.trim()) kpi.impression = ch.kpi.impression;
+            if (ch.kpi?.conversion?.trim()) kpi.conversion = ch.kpi.conversion;
+            return { platform: ch.platform, amount: parseInt(ch.amount), kpi };
+          }),
       };
       if (role === 'agency') payload.brand_id = forceBrandId || form.brand_id;
       onSave(await saveBudgetPlan(payload));
@@ -254,34 +270,60 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {channels.map((ch, i) => {
                 const info = PLATFORM_MAP[ch.platform];
+                const updateKpi = (k, v) => setChannels(p => p.map((c, idx) => idx === i ? { ...c, kpi: { ...c.kpi, [k]: v } } : c));
+                const toggleKpi = () => setChannels(p => p.map((c, idx) => idx === i ? { ...c, kpiOpen: !c.kpiOpen } : c));
                 return (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-                    <select
-                      style={{ ...ms.select, color: info ? info.color : 'var(--text3)', fontWeight: info ? 600 : 400 }}
-                      value={ch.platform}
-                      onChange={e => updateChannel(i, 'platform', e.target.value)}
-                    >
-                      <option value="">— Platform Seç</option>
-                      {availableFor(ch.platform).map(p => (
-                        <option key={p.platform} value={p.platform}>{p.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      style={ms.input}
-                      type="text" inputMode="numeric" placeholder="0"
-                      value={fmtInput(ch.amount)}
-                      onChange={e => updateChannel(i, 'amount', parseRaw(e.target.value))}
-                    />
-                    <button
-                      onClick={() => removeChannel(i)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, padding: '4px', lineHeight: 1 }}
-                      title="Kaldır"
-                    >
-                      🗑
+                  <div key={i} style={{ border: '1px solid var(--border2)', borderRadius: 8, padding: '8px 10px', background: 'var(--bg)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center', marginBottom: ch.kpiOpen ? 10 : 0 }}>
+                      <select
+                        style={{ ...ms.select, color: info ? info.color : 'var(--text3)', fontWeight: info ? 600 : 400 }}
+                        value={ch.platform}
+                        onChange={e => updateChannel(i, 'platform', e.target.value)}
+                      >
+                        <option value="">— Platform Seç</option>
+                        {availableFor(ch.platform).map(p => (
+                          <option key={p.platform} value={p.platform}>{p.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        style={ms.input}
+                        type="text" inputMode="numeric" placeholder="0"
+                        value={fmtInput(ch.amount)}
+                        onChange={e => updateChannel(i, 'amount', parseRaw(e.target.value))}
+                      />
+                      <button
+                        onClick={() => removeChannel(i)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, padding: '4px', lineHeight: 1 }}
+                        title="Kaldır"
+                      >🗑</button>
+                    </div>
+                    <button onClick={toggleKpi} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 11, fontWeight: 600, padding: 0, fontFamily: 'var(--font)' }}>
+                      {ch.kpiOpen ? '▲ KPI hedeflerini gizle' : '+ KPI hedefleri ekle'}
                     </button>
+                    {ch.kpiOpen && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                        {[
+                          { key: 'roas',       label: 'Hedef ROAS',        placeholder: 'örn: 4.0',    step: '0.1' },
+                          { key: 'cpa',        label: 'Hedef CPA (₺)',      placeholder: 'örn: 150',    step: '1' },
+                          { key: 'ctr',        label: 'Hedef CTR (%)',      placeholder: 'örn: 2.5',    step: '0.1' },
+                          { key: 'impression', label: 'Hedef İmpresyon',    placeholder: 'örn: 500000', step: '1000' },
+                          { key: 'conversion', label: 'Hedef Dönüşüm',     placeholder: 'örn: 1000',   step: '1' },
+                        ].map(({ key, label, placeholder, step }) => (
+                          <div key={key}>
+                            <label style={{ ...ms.label, fontSize: 10, marginBottom: 4 }}>{label}</label>
+                            <input
+                              style={{ ...ms.input, fontSize: 12, padding: '6px 10px' }}
+                              type="number" step={step} min="0" placeholder={placeholder}
+                              value={ch.kpi?.[key] || ''}
+                              onChange={e => updateKpi(key, e.target.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

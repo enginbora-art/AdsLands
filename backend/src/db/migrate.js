@@ -448,6 +448,15 @@ async function migrate() {
       );
     `);
 
+    // ── KPI kolonları budget_channels tablosuna ──────────────────────────────
+    await client.query(`
+      ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_roas       DECIMAL;
+      ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_cpa        DECIMAL;
+      ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_ctr        DECIMAL;
+      ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_impression BIGINT;
+      ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_conversion INTEGER;
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`
