@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
+const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads',
@@ -227,7 +228,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // GET /api/budgets/kpi-analysis/:brandId — Claude streaming KPI analizi
-router.get('/kpi-analysis/:brandId', authMiddleware, async (req, res) => {
+router.get('/kpi-analysis/:brandId', authMiddleware, checkAiLimit('kpi_analysis'), async (req, res) => {
   const { brandId } = req.params;
 
   // Ajans erişim kontrolü
@@ -327,6 +328,12 @@ router.get('/kpi-analysis/:brandId', authMiddleware, async (req, res) => {
     }
     res.write('data: [DONE]\n\n');
     res.end();
+
+    const final = await stream.finalMessage();
+    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+    if (req.aiCtx) {
+      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'kpi_analysis', input_tokens, output_tokens, 'claude-sonnet-4-6');
+    }
   } catch (err) {
     console.error('[KPI Analysis] Hata:', err.message);
     if (!res.headersSent) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser, adminGetAiUsage } from '../api';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
@@ -260,8 +260,133 @@ function AgencyGroup({ agency, onUpdate }) {
   );
 }
 
+const FEATURE_LABELS = {
+  channel_analysis: 'Kanal Analizi',
+  ai_report:        'AI Rapor',
+  kpi_analysis:     'KPI Analizi',
+};
+
+function AiUsageTab() {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [month, setMonth] = useState(defaultMonth);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    adminGetAiUsage(month)
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [month]);
+
+  const fmtTry = (v) => `₺${Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtUsd = (v) => `$${Number(v || 0).toFixed(4)}`;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <label style={{ fontSize: 12, color: 'var(--text3)' }}>Ay:</label>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+          style={{ padding: '6px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text1)', fontSize: 13 }} />
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Yükleniyor...</div>
+      ) : !data ? (
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)' }}>Veri alınamadı.</div>
+      ) : (
+        <>
+          {/* Özet kartlar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
+            {[
+              { label: 'Toplam Maliyet (TL)', value: fmtTry(data.total_cost_try), color: '#00BFA6' },
+              { label: 'Toplam Maliyet (USD)', value: fmtUsd(data.total_cost_usd), color: '#60A5FA' },
+              { label: 'Toplam İstek', value: (data.total_requests || 0).toLocaleString('tr-TR'), color: '#A78BFA' },
+              { label: 'Toplam Input Token', value: (data.total_input_tokens || 0).toLocaleString('tr-TR'), color: 'var(--text2)' },
+              { label: 'Toplam Output Token', value: (data.total_output_tokens || 0).toLocaleString('tr-TR'), color: 'var(--text2)' },
+            ].map(c => (
+              <div key={c.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>{c.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Özellik bazında */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, marginBottom: 20 }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border2)', fontSize: 12, fontWeight: 700, color: 'var(--text2)' }}>Özellik Bazında</div>
+            {data.by_feature?.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Bu ay AI kullanımı yok.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg)' }}>
+                    {['Özellik', 'İstek', 'Maliyet (TL)', 'Maliyet (USD)', 'Input Token', 'Output Token'].map(h => (
+                      <th key={h} style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text3)', textAlign: 'left', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.by_feature || []).map(row => (
+                    <tr key={row.feature} style={{ borderTop: '1px solid var(--border2)' }}>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text1)' }}>{FEATURE_LABELS[row.feature] || row.feature}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text2)' }}>{row.requests}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: '#00BFA6', fontWeight: 600 }}>{fmtTry(row.cost_try)}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: '#60A5FA' }}>{fmtUsd(row.cost_usd)}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text3)' }}>{Number(row.input_tokens).toLocaleString('tr-TR')}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text3)' }}>{Number(row.output_tokens).toLocaleString('tr-TR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Şirket bazında */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10 }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border2)', fontSize: 12, fontWeight: 700, color: 'var(--text2)' }}>Şirket Bazında</div>
+            {data.by_company?.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Bu ay AI kullanımı yok.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg)' }}>
+                    {['Şirket', 'Tip', 'İstek', 'Maliyet (TL)', 'Maliyet (USD)'].map(h => (
+                      <th key={h} style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text3)', textAlign: 'left', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.by_company || []).map(row => (
+                    <tr key={row.id} style={{ borderTop: '1px solid var(--border2)' }}>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text1)' }}>{row.company_name}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                          background: row.company_type === 'agency' ? 'rgba(167,139,250,0.15)' : 'rgba(96,165,250,0.15)',
+                          color: row.company_type === 'agency' ? '#A78BFA' : '#60A5FA' }}>
+                          {row.company_type === 'agency' ? 'Ajans' : 'Marka'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text2)' }}>{row.requests}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: '#00BFA6', fontWeight: 600 }}>{fmtTry(row.cost_try)}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, color: '#60A5FA' }}>{fmtUsd(row.cost_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPanel({ onLogout }) {
   const [data, setData] = useState({ agencies: [], independent_brands: [] });
+  const [tab, setTab] = useState('companies');
   const [filter, setFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -331,6 +456,27 @@ export default function AdminPanel({ onLogout }) {
           </div>
         )}
 
+        {/* Ana sekmeler */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border2)', paddingBottom: 0 }}>
+          {[
+            { key: 'companies', label: 'Şirketler' },
+            { key: 'ai',        label: 'AI Kullanımı' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setTab(key)}
+              style={{ padding: '8px 18px', borderRadius: '6px 6px 0 0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: tab === key ? 'var(--bg2)' : 'transparent',
+                color: tab === key ? 'var(--text1)' : 'var(--text3)',
+                borderBottom: tab === key ? '2px solid var(--teal)' : '2px solid transparent' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'ai' ? (
+          <AiUsageTab />
+        ) : (
+          <>
+        {/* Şirket filtre sekmeleri */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {[
             { key: 'all',    label: 'Tümü',  count: totalAll },
@@ -409,6 +555,8 @@ export default function AdminPanel({ onLogout }) {
               </tbody>
             </table>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

@@ -457,6 +457,25 @@ async function migrate() {
       ALTER TABLE budget_channels ADD COLUMN IF NOT EXISTS kpi_conversion INTEGER;
     `);
 
+    // ── AI kullanım logları ───────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_usage_logs (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id      UUID REFERENCES users(id) ON DELETE SET NULL,
+        feature      VARCHAR(50) NOT NULL,
+        input_tokens  INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd     NUMERIC(10,6) NOT NULL DEFAULT 0,
+        cost_try     NUMERIC(10,4) NOT NULL DEFAULT 0,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS ai_usage_logs_company_date
+        ON ai_usage_logs (company_id, created_at);
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

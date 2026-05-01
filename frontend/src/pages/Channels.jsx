@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getChannelData } from '../api';
+import { getChannelData, getAiUsageToday } from '../api';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, PieChart, Pie, Cell,
@@ -290,6 +290,9 @@ export default function Channels({ onNav }) {
   const [kpiError, setKpiError]         = useState('');
   const kpiRef = useRef(null);
 
+  const [aiUsage, setAiUsage] = useState(null);
+  const [limitReached, setLimitReached] = useState(false);
+
   const brandName   = selectedBrand?.company_name || selectedBrand?.name;
   const brandId     = isAgency ? selectedBrand?.id : undefined;
   const kpiBrandId  = isAgency ? selectedBrand?.id : user?.company_id;
@@ -304,6 +307,10 @@ export default function Channels({ onNav }) {
   }, [days, platFilter, brandId, needsBrand]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    getAiUsageToday().then(setAiUsage).catch(() => {});
+  }, []);
 
   if (needsBrand) return (
     <div className="fade-in">
@@ -424,6 +431,12 @@ export default function Channels({ onNav }) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ metrics: aiMetrics, sector, benchmarks, days }),
       });
+      if (res.status === 429) {
+        const e = await res.json().catch(() => ({}));
+        setLimitReached(true);
+        setAiError(e.error || 'Günlük AI kullanım limitinize ulaştınız.');
+        return;
+      }
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'AI analiz başarısız.'); }
 
       const reader = res.body.getReader();
@@ -437,7 +450,7 @@ export default function Channels({ onNav }) {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          if (payload === '[DONE]') { setAiLoading(false); return; }
+          if (payload === '[DONE]') { setAiLoading(false); getAiUsageToday().then(setAiUsage).catch(() => {}); return; }
           try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setAiText(p => p + text); } catch {}
         }
       }
@@ -454,6 +467,12 @@ export default function Channels({ onNav }) {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/budgets/kpi-analysis/${kpiBrandId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
+      if (res.status === 429) {
+        const e = await res.json().catch(() => ({}));
+        setLimitReached(true);
+        setKpiError(e.error || 'Günlük AI kullanım limitinize ulaştınız.');
+        return;
+      }
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'KPI analiz başarısız.'); }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -466,7 +485,7 @@ export default function Channels({ onNav }) {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          if (payload === '[DONE]') { setKpiLoading(false); return; }
+          if (payload === '[DONE]') { setKpiLoading(false); getAiUsageToday().then(setAiUsage).catch(() => {}); return; }
           try { const { text, error } = JSON.parse(payload); if (error) throw new Error(error); if (text) setKpiText(p => p + text); } catch {}
         }
       }
@@ -509,10 +528,25 @@ export default function Channels({ onNav }) {
               🎯 KPI Analizi
             </button>
           )}
+          {aiUsage && (
+            <span style={{ fontSize: 11, color: aiUsage.total >= aiUsage.limit ? 'var(--coral)' : 'var(--text3)', whiteSpace: 'nowrap' }}>
+              Bugün: {aiUsage.total}/{aiUsage.limit} AI
+            </span>
+          )}
         </div>
       </div>
 
       <div className="content">
+
+        {limitReached && (
+          <div style={{ marginBottom: 16, background: 'rgba(255,107,90,0.1)', border: '1px solid rgba(255,107,90,0.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ color: 'var(--coral)' }}>⚠ Günlük AI kullanım limitinize ulaştınız. Planınızı yükseltmek için tıklayın →</span>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 14px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Planı Yükselt</button>
+              <button onClick={() => setLimitReached(false)} style={{ padding: '5px 8px', background: 'transparent', border: '1px solid rgba(255,107,90,0.4)', borderRadius: 6, color: 'var(--coral)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+            </div>
+          </div>
+        )}
 
         {/* ── BÖLÜM 1: Genel Performans ──────────────────────────────────── */}
         {loading ? (

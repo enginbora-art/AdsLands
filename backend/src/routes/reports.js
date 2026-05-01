@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const pptxService = require('../services/pptxService');
+const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 
 async function resolveCompanyId(user, brandId) {
   if (user.company_type === 'agency' && brandId) {
@@ -63,7 +64,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/reports/generate — SSE streaming with Claude
-router.post('/generate', authMiddleware, async (req, res) => {
+router.post('/generate', authMiddleware, checkAiLimit('ai_report'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
@@ -185,6 +186,12 @@ ${metricsText}`,
     }
     res.write('data: [DONE]\n\n');
     res.end();
+
+    const final = await stream.finalMessage();
+    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+    if (req.aiCtx) {
+      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', input_tokens, output_tokens, 'claude-opus-4-7');
+    }
   } catch (err) {
     console.error('Report generate error:', err);
     if (!res.headersSent) {
@@ -204,7 +211,7 @@ router.get('/download/:fileId', (req, res) => {
 });
 
 // POST /api/reports/generate-pptx — visual PPTX report with pptxgenjs
-router.post('/generate-pptx', authMiddleware, async (req, res) => {
+router.post('/generate-pptx', authMiddleware, checkAiLimit('ai_report'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
@@ -343,6 +350,11 @@ Ortalama CTR: %${avgCtr.toFixed(2)}`,
       strengths:       aiData.strengths || [],
       improvements:    aiData.improvements || [],
     });
+
+    if (req.aiCtx && aiResponse.usage) {
+      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report',
+        aiResponse.usage.input_tokens || 0, aiResponse.usage.output_tokens || 0, 'claude-opus-4-7');
+    }
 
     res.json({
       fileId,

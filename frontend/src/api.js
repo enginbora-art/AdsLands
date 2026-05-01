@@ -21,6 +21,8 @@ export const adminCreateCompany = (data) => api.post('/admin/companies', data).t
 export const adminUpdateCompany = (id, data) => api.patch(`/admin/companies/${id}`, data).then(r => r.data);
 export const adminGetCompany = (id) => api.get(`/admin/companies/${id}`).then(r => r.data);
 export const adminToggleUser = (id) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data);
+export const adminGetAiUsage = (month) => api.get(`/admin/ai-usage${month ? `?month=${month}` : ''}`).then(r => r.data);
+export const getAiUsageToday = () => api.get('/ai/usage-today').then(r => r.data);
 
 // ── Şirket Yönetimi ───────────────────────────────────────────────────────────
 export const getCompanyUsers = () => api.get('/company/users').then(r => r.data);

@@ -650,6 +650,7 @@ export default function AiReport({ onNav }) {
       });
 
       const data = await response.json();
+      if (response.status === 429) throw new Error((data.error || 'Günlük AI kullanım limitinize ulaştınız.') + ' Planınızı yükseltmek için Abonelik sayfasını ziyaret edin.');
       if (!response.ok) throw new Error(data.error || 'Rapor oluşturulamadı');
 
       // Ensure at least 6 seconds has passed for animation

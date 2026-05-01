@@ -222,5 +222,61 @@ router.patch('/users/:id/toggle', platformAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/ai-usage?month=2026-05
+router.get('/ai-usage', platformAdmin, async (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const [year, mon] = month.split('-').map(Number);
+    if (!year || !mon) return res.status(400).json({ error: 'Geçersiz ay formatı. YYYY-MM bekleniyor.' });
+
+    const dateParams = [year, mon];
+
+    const { rows: [summary] } = await pool.query(`
+      SELECT
+        COUNT(*)::int                  AS total_requests,
+        COALESCE(SUM(cost_usd),0)::float AS total_cost_usd,
+        COALESCE(SUM(cost_try),0)::float AS total_cost_try,
+        COALESCE(SUM(input_tokens),0)::bigint  AS total_input_tokens,
+        COALESCE(SUM(output_tokens),0)::bigint AS total_output_tokens
+      FROM ai_usage_logs
+      WHERE EXTRACT(YEAR  FROM created_at) = $1
+        AND EXTRACT(MONTH FROM created_at) = $2
+    `, dateParams);
+
+    const { rows: byFeature } = await pool.query(`
+      SELECT feature,
+        COUNT(*)::int                  AS requests,
+        COALESCE(SUM(cost_usd),0)::float AS cost_usd,
+        COALESCE(SUM(cost_try),0)::float AS cost_try,
+        COALESCE(SUM(input_tokens),0)::bigint  AS input_tokens,
+        COALESCE(SUM(output_tokens),0)::bigint AS output_tokens
+      FROM ai_usage_logs
+      WHERE EXTRACT(YEAR  FROM created_at) = $1
+        AND EXTRACT(MONTH FROM created_at) = $2
+      GROUP BY feature
+      ORDER BY cost_usd DESC
+    `, dateParams);
+
+    const { rows: byCompany } = await pool.query(`
+      SELECT
+        c.id, c.name AS company_name, c.type AS company_type,
+        COUNT(al.id)::int               AS requests,
+        COALESCE(SUM(al.cost_usd),0)::float AS cost_usd,
+        COALESCE(SUM(al.cost_try),0)::float AS cost_try
+      FROM ai_usage_logs al
+      JOIN companies c ON c.id = al.company_id
+      WHERE EXTRACT(YEAR  FROM al.created_at) = $1
+        AND EXTRACT(MONTH FROM al.created_at) = $2
+      GROUP BY c.id, c.name, c.type
+      ORDER BY cost_usd DESC
+    `, dateParams);
+
+    res.json({ ...summary, by_feature: byFeature, by_company: byCompany });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 module.exports = router;
 module.exports.sendSetupEmail = sendSetupEmail;

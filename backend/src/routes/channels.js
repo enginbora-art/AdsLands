@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 
 const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'];
 
@@ -96,7 +97,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/channels/ai-analyze — SSE streaming
-router.post('/ai-analyze', authMiddleware, async (req, res) => {
+router.post('/ai-analyze', authMiddleware, checkAiLimit('channel_analysis'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
@@ -144,10 +145,20 @@ Teknik jargon kullanma, net ve anlaşılır ol.`,
     }
     res.write('data: [DONE]\n\n');
     res.end();
+
+    const final = await stream.finalMessage();
+    const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+    if (req.aiCtx) {
+      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'channel_analysis', input_tokens, output_tokens, 'claude-opus-4-7');
+    }
   } catch (err) {
     console.error('AI analyze error:', err);
-    res.write(`data: ${JSON.stringify({ error: 'AI analiz başarısız: ' + err.message })}\n\n`);
-    res.end();
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'AI analiz başarısız: ' + err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: 'AI analiz başarısız: ' + err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 
