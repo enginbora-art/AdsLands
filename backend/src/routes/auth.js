@@ -113,6 +113,7 @@ router.post('/login', async (req, res) => {
     );
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      console.warn('[Auth] Başarısız giriş denemesi:', { email, ip: req.ip, ua: req.headers['user-agent']?.slice(0, 80) });
       return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
     }
     if (!user.is_active) {
@@ -145,11 +146,12 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/setup/:token — token bilgisini getir
 router.get('/setup/:token', async (req, res) => {
   try {
-    // Kullanıcı setup token'ı
+    // Kullanıcı setup token'ı (72 saat içinde geçerli)
     const { rows: [userRow] } = await pool.query(
       `SELECT u.email, c.name AS company_name, c.type AS company_type
        FROM users u LEFT JOIN companies c ON u.company_id = c.id
-       WHERE u.setup_token = $1`,
+       WHERE u.setup_token = $1
+         AND u.created_at >= NOW() - INTERVAL '72 hours'`,
       [req.params.token]
     );
     if (userRow) return res.json(userRow);
@@ -186,9 +188,10 @@ router.post('/setup', async (req, res) => {
   try {
     const password_hash = await bcrypt.hash(password, 12);
 
-    // Platform admin / şirket admin setup akışı (users.setup_token)
+    // Platform admin / şirket admin setup akışı (users.setup_token, 72 saat geçerli)
     const { rows: [found] } = await pool.query(
-      'SELECT * FROM users WHERE setup_token = $1',
+      `SELECT * FROM users WHERE setup_token = $1
+         AND created_at >= NOW() - INTERVAL '72 hours'`,
       [token]
     );
     if (found) {

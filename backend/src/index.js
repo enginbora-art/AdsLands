@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -29,6 +31,20 @@ const aiRoutes         = require('./routes/ai');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ── Güvenlik başlıkları ───────────────────────────────────────────────────────
+app.use(helmet({ contentSecurityPolicy: false })); // CSP frontend'e bırakıldı
+app.disable('x-powered-by');
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 dakika
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla deneme. 15 dakika sonra tekrar deneyin.' },
+  skip: (req) => process.env.NODE_ENV === 'test',
+});
+
 app.use(cors({
   origin: ['http://localhost:5173', 'https://adslands-frontend.onrender.com', 'https://adslands.com', 'https://www.adslands.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -40,7 +56,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/reports', adminReportsRoutes);
 app.use('/api', usersRoutes);

@@ -87,10 +87,11 @@ router.post('/initiate', auth, async (req, res) => {
 // ── POST /api/payments/callback — Sipay 3D return (public) ───────────────────
 router.post('/callback', express.urlencoded({ extended: true }), async (req, res) => {
   const callbackData = Object.keys(req.body).length > 0 ? req.body : req.query;
-  console.log('[Payment] callback body:', JSON.stringify(req.body, null, 2));
-  console.log('[Payment] callback query:', JSON.stringify(req.query, null, 2));
-  console.log('[Payment] callback data (kullanılan):', JSON.stringify(callbackData, null, 2));
-  console.log('[Payment] sipay_status:', callbackData.sipay_status, '| status:', callbackData.status);
+  console.log('[Payment] callback:', {
+    invoice_id: callbackData.invoice_id,
+    status: callbackData.status,
+    sipay_status: callbackData.sipay_status,
+  });
 
   const invoiceId = callbackData.invoice_id;
   if (!invoiceId) {
@@ -284,8 +285,18 @@ router.get('/history', auth, async (req, res) => {
   }
 });
 
-// ── GET /api/payments/invoice/:transactionId ──────────────────────────────────
-router.get('/invoice/:transactionId', auth, async (req, res) => {
+// ── GET /api/payments/invoice/:transactionId — query token destekler (PDF download) ──
+router.get('/invoice/:transactionId', (req, res, next) => {
+  const jwt = require('jsonwebtoken');
+  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  if (!token) return res.status(401).json({ error: 'Oturum açmanız gerekiyor.' });
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token.' });
+  }
+}, async (req, res) => {
   try {
     const { transactionId } = req.params;
 

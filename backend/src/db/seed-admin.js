@@ -19,7 +19,7 @@ async function seedAdmin() {
       "INSERT INTO users (email, password_hash, role, company_name) VALUES ($1, $2, 'admin', $3)",
       [email, password_hash, company_name]
     );
-    console.log('Admin oluşturuldu:', email, '/ Şifre:', password);
+    console.log('Admin oluşturuldu:', email, '(şifre loglara yazılmaz)'); // güvenlik: şifreyi loga yazmıyoruz
     process.exit(0);
   } catch (err) {
     console.error('Hata:', err.message);
