@@ -5,10 +5,13 @@ const pool = require('../db');
 const { platformAdmin } = require('../middleware/auth');
 
 const PLAN_LABELS = {
-  starter: 'Basic',
-  growth: 'Pro',
-  scale: 'Enterprise',
-  brand_direct: 'Marka Direkt',
+  starter:          'Ajans Basic',
+  growth:           'Ajans Pro',
+  scale:            'Ajans Enterprise',
+  brand_direct:     'Marka Direkt',
+  brand_basic:      'Marka Basic',
+  brand_pro:        'Marka Pro',
+  brand_enterprise: 'Marka Enterprise',
 };
 
 const PLAN_STATUS_LABELS = {

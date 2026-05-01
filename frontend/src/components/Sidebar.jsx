@@ -97,9 +97,15 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
-// Hangi menü hangi minimum plana kilitli (ajans planları için)
-const PLAN_RANK = { starter: 1, growth: 2, scale: 3 };
-const PLAN_LABELS = { starter: 'Basic', growth: 'Pro', scale: 'Enterprise' };
+// Hangi menü hangi minimum plana kilitli (ajans ve marka planları aynı rank yapısını paylaşır)
+const PLAN_RANK = {
+  starter: 1, growth: 2, scale: 3,
+  brand_basic: 1, brand_pro: 2, brand_enterprise: 3,
+};
+const PLAN_LABELS = {
+  starter: 'Basic', growth: 'Pro', scale: 'Enterprise',
+  brand_basic: 'Basic', brand_pro: 'Pro', brand_enterprise: 'Enterprise',
+};
 const ITEM_MIN_PLAN = {
   anomalies: 'growth',
   benchmark: 'growth',

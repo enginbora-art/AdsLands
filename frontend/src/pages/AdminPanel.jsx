@@ -10,10 +10,13 @@ const SECTORS = [
 ];
 
 const PLAN_LABELS = {
-  starter: 'Basic',
-  growth: 'Pro',
-  scale: 'Enterprise',
-  brand_direct: 'Marka Direkt',
+  starter:          'Basic',
+  growth:           'Pro',
+  scale:            'Enterprise',
+  brand_direct:     'Marka Direkt',
+  brand_basic:      'Basic',
+  brand_pro:        'Pro',
+  brand_enterprise: 'Enterprise',
 };
 
 const inp = {
@@ -585,13 +588,16 @@ const now0 = new Date();
 const defaultMonth = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
 
 const PLAN_FILTER_OPTIONS = [
-  { key: 'all',          label: 'Tümü' },
-  { key: 'starter',      label: 'Basic' },
-  { key: 'growth',       label: 'Pro' },
-  { key: 'scale',        label: 'Enterprise' },
-  { key: 'brand_direct', label: 'Marka Direkt' },
-  { key: 'trial',        label: 'Trial' },
-  { key: 'pasif',        label: 'Pasif' },
+  { key: 'all',              label: 'Tümü' },
+  { key: 'starter',          label: 'Ajans Basic' },
+  { key: 'growth',           label: 'Ajans Pro' },
+  { key: 'scale',            label: 'Ajans Enterprise' },
+  { key: 'brand_basic',      label: 'Marka Basic' },
+  { key: 'brand_pro',        label: 'Marka Pro' },
+  { key: 'brand_enterprise', label: 'Marka Enterprise' },
+  { key: 'brand_direct',     label: 'Marka Direkt' },
+  { key: 'trial',            label: 'Trial' },
+  { key: 'pasif',            label: 'Pasif' },
 ];
 
 function matchesPlan(c, planFilter) {

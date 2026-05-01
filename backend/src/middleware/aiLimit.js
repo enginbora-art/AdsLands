@@ -1,12 +1,15 @@
 const pool = require('../db');
 
 const PLAN_DAILY_LIMITS = {
-  starter:      5,
-  growth:       20,
-  scale:        100,
-  brand_direct: 10,
-  trial:        3,
-  none:         3,
+  starter:          5,
+  growth:           20,
+  scale:            100,
+  brand_direct:     10,
+  brand_basic:      5,
+  brand_pro:        20,
+  brand_enterprise: 100,
+  trial:            3,
+  none:             3,
 };
 
 // $/M tokens per model

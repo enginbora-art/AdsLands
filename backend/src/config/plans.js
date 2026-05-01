@@ -31,6 +31,30 @@ const PLANS = {
     type:    'brand',
     features: ['Tüm entegrasyonlar', 'AI Raporlar', 'TV Medya Planı', 'Ajans bağlantısı', 'Email destek'],
   },
+  brand_basic: {
+    monthly: 20000,
+    yearly:  16000,
+    label:   'Basic',
+    desc:    'Marka hesabı',
+    type:    'brand',
+    features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları'],
+  },
+  brand_pro: {
+    monthly: 45000,
+    yearly:  36000,
+    label:   'Pro',
+    desc:    'Marka hesabı',
+    type:    'brand',
+    features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları', 'Anomali uyarıları', 'Benchmark'],
+  },
+  brand_enterprise: {
+    monthly: 70000,
+    yearly:  56000,
+    label:   'Enterprise',
+    desc:    'Marka hesabı',
+    type:    'brand',
+    features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları', 'Anomali uyarıları', 'Benchmark', 'TV Medya Planı ve İzleme'],
+  },
 };
 
 function getAmount(plan, interval) {

@@ -485,6 +485,13 @@ async function migrate() {
       ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS status     VARCHAR(20) DEFAULT 'completed';
     `);
 
+    // Genişletilmiş plan listesi: brand_basic / brand_pro / brand_enterprise
+    await client.query(`
+      ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
+      ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
+        CHECK (plan IN ('starter','growth','scale','brand_direct','brand_basic','brand_pro','brand_enterprise'));
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

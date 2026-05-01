@@ -7,10 +7,13 @@ const INVOICE_DIR = path.join(__dirname, '../../uploads/invoices');
 const KDV_RATE    = 0.20;
 
 const PLAN_LABELS = {
-  starter:      'Ajans Starter',
-  growth:       'Ajans Growth',
-  scale:        'Ajans Scale',
-  brand_direct: 'Marka Direkt',
+  starter:          'Ajans Basic',
+  growth:           'Ajans Pro',
+  scale:            'Ajans Enterprise',
+  brand_direct:     'Marka Direkt',
+  brand_basic:      'Marka Basic',
+  brand_pro:        'Marka Pro',
+  brand_enterprise: 'Marka Enterprise',
 };
 
 async function nextInvoiceNumber() {
