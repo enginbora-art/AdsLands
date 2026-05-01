@@ -1,6 +1,7 @@
 const pool = require('../db');
 const getPlatformService = require('./platforms');
 const { detectAndHandle } = require('./anomalyDetector');
+const { validateAndNormalize } = require('./metricNormalizer');
 
 async function saveMetric(integrationId, metric) {
   await pool.query(
@@ -22,8 +23,13 @@ async function seedHistoricalMetrics(integration) {
     const date = new Date();
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    const metric = svc.generateMetric(dateStr, seed);
-    await saveMetric(integration.id, metric);
+    try {
+      const raw = svc.generateMetric(dateStr, seed);
+      const metric = validateAndNormalize(integration.platform, raw);
+      await saveMetric(integration.id, metric);
+    } catch (err) {
+      console.error(`[Normalizer] Hata (${integration.platform}, ${dateStr}):`, err.message);
+    }
   }
 }
 
@@ -39,11 +45,12 @@ async function fetchYesterdayMetrics() {
       const dateStr = yesterday.toISOString().split('T')[0];
 
       const svc = getPlatformService(integration.platform);
-      const metric = await svc.fetchDailyMetrics(integration, dateStr);
+      const raw = await svc.fetchDailyMetrics(integration, dateStr);
+      const metric = validateAndNormalize(integration.platform, raw);
       await saveMetric(integration.id, metric);
       await detectAndHandle(integration);
     } catch (err) {
-      console.error(`Metrik çekme hatası (${integration.platform}):`, err.message);
+      console.error(`[Normalizer] Hata (${integration.platform}):`, err.message);
     }
   }
 
@@ -61,11 +68,12 @@ async function fetchTodayMetrics(companyId) {
     try {
       const today = new Date().toISOString().split('T')[0];
       const svc = getPlatformService(integration.platform);
-      const metric = await svc.fetchDailyMetrics(integration, today);
+      const raw = await svc.fetchDailyMetrics(integration, today);
+      const metric = validateAndNormalize(integration.platform, raw);
       await saveMetric(integration.id, metric);
       await detectAndHandle(integration, true);
     } catch (err) {
-      console.error(`Gün içi metrik hatası (${integration.platform}):`, err.message);
+      console.error(`[Normalizer] Hata (${integration.platform}):`, err.message);
     }
   }
 
