@@ -12,7 +12,6 @@ const ALL_PLATFORMS = [
   { platform: 'tiktok',     label: 'TikTok Ads',  color: '#69C9D0' },
   { platform: 'linkedin',   label: 'LinkedIn Ads', color: '#0A66C2' },
   { platform: 'adform',     label: 'Adform',      color: '#FF6B00' },
-  { platform: 'other',      label: 'Diğer',       color: '#6B7280' },
 ];
 const PLATFORM_MAP = Object.fromEntries(ALL_PLATFORMS.map(p => [p.platform, p]));
 
@@ -30,31 +29,31 @@ const CHANNEL_KPIS = {
 
 // Varsayılan label / placeholder / step
 const KPI_DEFAULTS = {
-  roas:       { label: 'Hedef ROAS',        placeholder: 'Hedef ROAS (örn: 4.0)',               step: '0.1' },
-  cpa:        { label: 'Hedef CPA (₺)',      placeholder: 'Hedef CPA - TL (örn: 150)',           step: '1'   },
-  ctr:        { label: 'Hedef CTR (%)',      placeholder: 'Hedef CTR - % (örn: 2.5)',            step: '0.1' },
-  impression: { label: 'Hedef İmpresyon',   placeholder: 'Hedef İmpresyon (örn: 500.000)',       step: '1000'},
-  conversion: { label: 'Hedef Dönüşüm',     placeholder: 'Hedef Dönüşüm Sayısı (örn: 1.000)',  step: '1'   },
+  roas:       { label: 'Hedef ROAS',        placeholder: '4.0',    step: '0.1' },
+  cpa:        { label: 'Hedef CPA (₺)',      placeholder: '150',    step: '1'   },
+  ctr:        { label: 'Hedef CTR (%)',      placeholder: '2.5',    step: '0.1' },
+  impression: { label: 'Hedef İmpresyon',   placeholder: '500000', step: '1000'},
+  conversion: { label: 'Hedef Dönüşüm',     placeholder: '1000',   step: '1'   },
 };
 
 // Platform bazında label / placeholder override'ları
 const KPI_OVERRIDES = {
   appsflyer: {
-    cpa:        { placeholder: 'Hedef Kullanıcı Edinme Maliyeti - TL (örn: 50)' },
-    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: 'Hedef Install / Aktivasyon Sayısı (örn: 10.000)' },
-    roas:       { placeholder: 'Hedef ROAS (örn: 2.0)' },
+    cpa:        { placeholder: '50' },
+    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: '10000' },
+    roas:       { placeholder: '2.0' },
   },
   adjust: {
-    cpa:        { placeholder: 'Hedef Kullanıcı Edinme Maliyeti - TL (örn: 50)' },
-    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: 'Hedef Install / Aktivasyon Sayısı (örn: 10.000)' },
+    cpa:        { placeholder: '50' },
+    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: '10000' },
   },
   adform: {
-    ctr:        { placeholder: 'Hedef CTR - % (örn: 0.1)' },
-    impression: { placeholder: 'Hedef İmpresyon (örn: 1.000.000)' },
-    cpa:        { placeholder: 'Hedef CPA - TL (örn: 200)' },
+    ctr:        { placeholder: '0.1' },
+    impression: { placeholder: '1000000' },
+    cpa:        { placeholder: '200' },
   },
   google_analytics: {
-    conversion: { label: 'Hedef Dönüşüm / Goal Tamamlama', placeholder: 'Hedef Dönüşüm / Goal Tamamlama (örn: 500)' },
+    conversion: { label: 'Hedef Dönüşüm / Goal Tamamlama', placeholder: '500' },
   },
 };
 
