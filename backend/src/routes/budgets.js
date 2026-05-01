@@ -322,7 +322,7 @@ router.get('/kpi-analysis/:brandId', authMiddleware, checkAiLimit('kpi_analysis'
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    await queueAiRequest(async () => {
+    await queueAiRequest(async ({ waitMs, startedAt }) => {
       res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
 
       const stream = client.messages.stream({
@@ -340,19 +340,27 @@ router.get('/kpi-analysis/:brandId', authMiddleware, checkAiLimit('kpi_analysis'
 
       const final = await stream.finalMessage();
       const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+      const processMs = Date.now() - startedAt;
 
       res.write('data: [DONE]\n\n');
       res.end();
 
       if (req.aiCtx) {
-        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'kpi_analysis', input_tokens, output_tokens, 'claude-sonnet-4-6');
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'kpi_analysis', input_tokens, output_tokens, 'claude-sonnet-4-6', { waitMs, processMs, status: 'completed' });
       }
-    });
+    }, { companyId: req.user.company_id, companyName: req.user.company_name, feature: 'kpi_analysis' });
   } catch (err) {
+    if (err?.code === 'QUEUE_CLEARED') {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      }
+      return;
+    }
     console.error('[KPI Analysis] Hata:', err.message);
     if (!res.headersSent) {
       res.status(500).json({ error: err.message });
-    } else {
+    } else if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       res.end();
     }

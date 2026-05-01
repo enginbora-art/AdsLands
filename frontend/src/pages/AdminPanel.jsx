@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser, adminGetAiUsage } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminToggleUser, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency } from '../api';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
@@ -266,6 +266,194 @@ const FEATURE_LABELS = {
   kpi_analysis:     'KPI Analizi',
 };
 
+function QueueMonitor() {
+  const [data, setData]             = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [tick, setTick]             = useState(0);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing]     = useState(false);
+  const [settingConcurrency, setSettingConcurrency] = useState(false);
+  const [actionMsg, setActionMsg]   = useState('');
+
+  // Poll every 5 seconds
+  useEffect(() => {
+    const poll = () => adminGetAiQueue().then(d => { setData(d); setLastUpdated(Date.now()); }).catch(() => {});
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Live 1-second tick for elapsed counters
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const flash = (msg) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), 5000); };
+
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      const r = await adminClearAiQueue();
+      flash(`✓ ${r.message}`);
+      setConfirmClear(false);
+      adminGetAiQueue().then(d => { setData(d); setLastUpdated(Date.now()); }).catch(() => {});
+    } catch { flash('Queue temizlenemedi.'); }
+    finally { setClearing(false); }
+  };
+
+  const handleConcurrency = async (n) => {
+    setSettingConcurrency(true);
+    try {
+      const r = await adminSetAiConcurrency(n);
+      flash(`✓ ${r.message}`);
+      adminGetAiQueue().then(d => { setData(d); setLastUpdated(Date.now()); }).catch(() => {});
+    } catch { flash('Kapasite güncellenemedi.'); }
+    finally { setSettingConcurrency(false); }
+  };
+
+  if (!data) return <div style={{ textAlign: 'center', padding: 32, color: 'var(--text3)', fontSize: 13 }}>Queue bilgisi yükleniyor...</div>;
+
+  const { queue, last_1h, active_requests } = data;
+  const waiting     = queue.waiting;
+  const fillPct     = queue.concurrency > 0 ? Math.round(queue.processing / queue.concurrency * 100) : 0;
+  const waitColor   = waiting >= 8 ? '#EF4444' : waiting >= 3 ? '#F59E0B' : '#10B981';
+  const secAgo      = lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1000) : '—';
+
+  return (
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 20px', marginBottom: 24 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: waitColor, display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>Queue Durumu</span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Son güncelleme: {secAgo}sn önce</span>
+      </div>
+
+      {/* Critical alert */}
+      {waiting >= 8 && (
+        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13, color: '#EF4444' }}>
+          🔴 Queue yoğunluğu kritik seviyede — {waiting} istek bekliyor
+        </div>
+      )}
+
+      {/* Stats grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'Bekleyen',  value: waiting,        color: waitColor },
+          { label: 'İşlenen',   value: queue.processing, color: '#60A5FA' },
+          { label: 'Kapasite',  value: queue.concurrency, color: 'var(--text2)' },
+          { label: 'Doluluk',   value: `%${fillPct}`,  color: fillPct >= 80 ? '#F59E0B' : 'var(--teal)' },
+        ].map(c => (
+          <div key={c.label} style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Last 1h */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Son 1 Saat</div>
+        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Toplam İstek',   value: last_1h.total_requests },
+            { label: 'Ort. Bekleme',   value: `${last_1h.avg_wait_time_ms}ms` },
+            { label: 'Ort. İşlem',     value: `${last_1h.avg_process_time_ms}ms` },
+            { label: 'Hata',           value: last_1h.errors, color: last_1h.errors > 0 ? 'var(--coral)' : undefined },
+          ].map(s => (
+            <div key={s.label}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: s.color || 'var(--text1)' }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Active requests */}
+      {active_requests.length > 0 && (
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 8, marginBottom: 14, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border2)', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase' }}>
+            Aktif İşlemler ({active_requests.length})
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Şirket', 'Özellik', 'Başlangıç', 'Geçen Süre'].map(h => (
+                  <th key={h} style={{ padding: '6px 12px', fontSize: 10, color: 'var(--text3)', textAlign: 'left', fontWeight: 600, textTransform: 'uppercase', background: 'var(--bg2)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {active_requests.map((r, i) => {
+                const elapsed = r.elapsed_seconds + (lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1000) : 0);
+                const stuck   = elapsed > 60;
+                return (
+                  <tr key={i} style={{ borderTop: '1px solid var(--border2)' }}>
+                    <td style={{ padding: '7px 12px', fontSize: 13, color: 'var(--text1)' }}>{r.company_name}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 12, color: 'var(--text3)' }}>{FEATURE_LABELS[r.feature] || r.feature}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 12, color: 'var(--text3)' }}>{new Date(r.started_at).toLocaleTimeString('tr-TR')}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 13, fontWeight: 700, color: stuck ? 'var(--coral)' : 'var(--teal)' }}>
+                      {elapsed}s{stuck ? ' ⚠' : ''}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Action message */}
+      {actionMsg && (
+        <div style={{ background: 'rgba(0,191,166,0.1)', border: '1px solid rgba(0,191,166,0.3)', borderRadius: 8, padding: '7px 12px', marginBottom: 12, fontSize: 13, color: 'var(--teal)' }}>{actionMsg}</div>
+      )}
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {!confirmClear ? (
+          <button onClick={() => setConfirmClear(true)} disabled={waiting === 0}
+            style={{ padding: '6px 14px', background: 'transparent', border: `1px solid ${waiting > 0 ? 'rgba(255,107,90,0.5)' : 'var(--border2)'}`, borderRadius: 7, color: waiting > 0 ? 'var(--coral)' : 'var(--text3)', fontSize: 12, cursor: waiting > 0 ? 'pointer' : 'default' }}>
+            Queue'yu Temizle
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)' }}>{waiting} istek iptal edilecek. Emin misiniz?</span>
+            <button onClick={handleClear} disabled={clearing}
+              style={{ padding: '5px 12px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              {clearing ? 'Temizleniyor...' : 'Evet, Temizle'}
+            </button>
+            <button onClick={() => setConfirmClear(false)}
+              style={{ padding: '5px 10px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>
+              İptal
+            </button>
+          </div>
+        )}
+
+        <div>
+          {queue.concurrency < 10 ? (
+            <button onClick={() => handleConcurrency(10)} disabled={settingConcurrency}
+              style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 7, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>
+              {settingConcurrency ? 'Güncelleniyor...' : 'Kapasiteyi Artır (→10)'}
+            </button>
+          ) : (
+            <button onClick={() => handleConcurrency(5)} disabled={settingConcurrency}
+              style={{ padding: '6px 14px', background: 'transparent', border: '1px solid rgba(251,191,36,0.4)', borderRadius: 7, color: '#F59E0B', fontSize: 12, cursor: 'pointer' }}>
+              {settingConcurrency ? 'Güncelleniyor...' : 'Kapasiteyi Azalt (→5)'}
+            </button>
+          )}
+          {queue.concurrency >= 10 && (
+            <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 3 }}>
+              ⚠ Yüksek kapasite Anthropic rate limitine takılma riskini artırır
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AiUsageTab() {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -286,6 +474,7 @@ function AiUsageTab() {
 
   return (
     <div>
+      <QueueMonitor />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <label style={{ fontSize: 12, color: 'var(--text3)' }}>Ay:</label>
         <input type="month" value={month} onChange={e => setMonth(e.target.value)}

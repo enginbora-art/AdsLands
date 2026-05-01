@@ -60,16 +60,18 @@ function checkAiLimit(feature) {
   };
 }
 
-async function logAiUsage(companyId, userId, feature, inputTokens, outputTokens, model) {
+async function logAiUsage(companyId, userId, feature, inputTokens, outputTokens, model, timing = {}) {
   try {
     const usdRate = parseFloat(process.env.USDTRY_RATE) || 38;
     const rates = MODEL_RATES[model] || MODEL_RATES['claude-sonnet-4-6'];
     const costUsd = (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
     const costTry = costUsd * usdRate;
+    const { waitMs = null, processMs = null, status = 'completed' } = timing;
     await pool.query(
-      `INSERT INTO ai_usage_logs (company_id, user_id, feature, input_tokens, output_tokens, cost_usd, cost_try)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [companyId, userId, feature, inputTokens, outputTokens, costUsd, costTry]
+      `INSERT INTO ai_usage_logs
+         (company_id, user_id, feature, input_tokens, output_tokens, cost_usd, cost_try, wait_ms, process_ms, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [companyId, userId, feature, inputTokens, outputTokens, costUsd, costTry, waitMs, processMs, status]
     );
   } catch (err) {
     console.error('[logAiUsage]', err.message);

@@ -128,7 +128,7 @@ router.post('/ai-analyze', authMiddleware, checkAiLimit('channel_analysis'), asy
   }
 
   try {
-    await queueAiRequest(async () => {
+    await queueAiRequest(async ({ waitMs, startedAt }) => {
       res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
 
       const stream = client.messages.stream({
@@ -155,15 +155,23 @@ Teknik jargon kullanma, net ve anlaşılır ol.`,
 
       const final = await stream.finalMessage();
       const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+      const processMs = Date.now() - startedAt;
 
       res.write('data: [DONE]\n\n');
       res.end();
 
       if (req.aiCtx) {
-        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'channel_analysis', input_tokens, output_tokens, 'claude-opus-4-7');
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'channel_analysis', input_tokens, output_tokens, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
       }
-    });
+    }, { companyId: req.user.company_id, companyName: req.user.company_name, feature: 'channel_analysis' });
   } catch (err) {
+    if (err?.code === 'QUEUE_CLEARED') {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      }
+      return;
+    }
     console.error('AI analyze error:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'AI analiz başarısız: ' + err.message });

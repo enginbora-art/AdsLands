@@ -460,20 +460,29 @@ async function migrate() {
     // ── AI kullanım logları ───────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS ai_usage_logs (
-        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-        user_id      UUID REFERENCES users(id) ON DELETE SET NULL,
-        feature      VARCHAR(50) NOT NULL,
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+        feature       VARCHAR(50) NOT NULL,
         input_tokens  INTEGER NOT NULL DEFAULT 0,
         output_tokens INTEGER NOT NULL DEFAULT 0,
-        cost_usd     NUMERIC(10,6) NOT NULL DEFAULT 0,
-        cost_try     NUMERIC(10,4) NOT NULL DEFAULT 0,
-        created_at   TIMESTAMPTZ DEFAULT NOW()
+        cost_usd      NUMERIC(10,6) NOT NULL DEFAULT 0,
+        cost_try      NUMERIC(10,4) NOT NULL DEFAULT 0,
+        wait_ms       INTEGER,
+        process_ms    INTEGER,
+        status        VARCHAR(20) DEFAULT 'completed',
+        created_at    TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS ai_usage_logs_company_date
         ON ai_usage_logs (company_id, created_at);
+    `);
+    // timing columns for existing tables (idempotent)
+    await client.query(`
+      ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS wait_ms    INTEGER;
+      ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS process_ms INTEGER;
+      ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS status     VARCHAR(20) DEFAULT 'completed';
     `);
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────

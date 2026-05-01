@@ -168,7 +168,7 @@ Rakamları kullan. Net ol. Tekrar yapma.`;
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    await queueAiRequest(async () => {
+    await queueAiRequest(async ({ waitMs, startedAt }) => {
       res.write(`data: ${JSON.stringify({ queueStatus: 'processing' })}\n\n`);
 
       const stream = client.messages.stream({
@@ -196,15 +196,23 @@ ${metricsText}`,
 
       const final = await stream.finalMessage();
       const { input_tokens = 0, output_tokens = 0 } = final.usage || {};
+      const processMs = Date.now() - startedAt;
 
       res.write('data: [DONE]\n\n');
       res.end();
 
       if (req.aiCtx) {
-        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', input_tokens, output_tokens, 'claude-opus-4-7');
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', input_tokens, output_tokens, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
       }
-    });
+    }, { companyId: req.user.company_id, companyName: req.user.company_name, feature: 'ai_report' });
   } catch (err) {
+    if (err?.code === 'QUEUE_CLEARED') {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      }
+      return;
+    }
     console.error('Report generate error:', err);
     if (!res.headersSent) {
       res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
@@ -292,7 +300,8 @@ router.post('/generate-pptx', authMiddleware, checkAiLimit('ai_report'), async (
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const aiResponse = await queueAiRequest(() => client.messages.create({
+    const aiResponse = await queueAiRequest(async ({ waitMs, startedAt }) => {
+      const resp = await client.messages.create({
       model: 'claude-opus-4-7',
       max_tokens: 1200,
       system: `Sen bir dijital pazarlama uzmanısın. Verilen reklam metriklerini analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka metin ekleme:
@@ -323,8 +332,13 @@ Ortalama ROAS: ${Number(avgRoas).toFixed(2)}x
 Toplam dönüşüm: ${totalConv}
 Ortalama CPA: ₺${Math.round(avgCpa)}
 Ortalama CTR: %${avgCtr.toFixed(2)}`,
-      }],
-    }));
+      }]);
+      if (req.aiCtx && resp.usage) {
+        const processMs = Date.now() - startedAt;
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report', resp.usage.input_tokens || 0, resp.usage.output_tokens || 0, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
+      }
+      return resp;
+    }, { companyId: req.user.company_id, companyName: req.user.company_name, feature: 'ai_report' });
 
     let aiData = { summary: [], recommendations: [], strengths: [], improvements: [] };
     try {
@@ -363,11 +377,6 @@ Ortalama CTR: %${avgCtr.toFixed(2)}`,
       improvements:    aiData.improvements || [],
     });
 
-    if (req.aiCtx && aiResponse.usage) {
-      logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'ai_report',
-        aiResponse.usage.input_tokens || 0, aiResponse.usage.output_tokens || 0, 'claude-opus-4-7');
-    }
-
     res.json({
       fileId,
       downloadUrl: `/api/reports/download/${fileId}`,
@@ -376,6 +385,9 @@ Ortalama CTR: %${avgCtr.toFixed(2)}`,
       metrics,
     });
   } catch (err) {
+    if (err?.code === 'QUEUE_CLEARED') {
+      return res.status(503).json({ error: err.message });
+    }
     console.error('generate-pptx error:', err);
     res.status(err.status || 500).json({ error: err.message || 'Rapor oluşturulamadı.' });
   }

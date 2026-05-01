@@ -222,6 +222,78 @@ router.patch('/users/:id/toggle', platformAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/ai-queue — canlı queue durumu
+router.get('/ai-queue', platformAdmin, async (req, res) => {
+  try {
+    const { getQueueStatus, getActiveRequests } = require('../services/aiQueue');
+    const status     = getQueueStatus();
+    const activeReqs = getActiveRequests();
+
+    const { rows: [stats] } = await pool.query(`
+      SELECT
+        COUNT(*)::int                         AS total_requests,
+        COALESCE(AVG(wait_ms), 0)::int        AS avg_wait_time_ms,
+        COALESCE(AVG(process_ms), 0)::int     AS avg_process_time_ms,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END)::int AS errors
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '1 hour'
+    `);
+
+    const now = Date.now();
+    res.json({
+      queue: {
+        waiting:     status.size,
+        processing:  status.pending,
+        concurrency: status.concurrency,
+      },
+      last_1h: {
+        total_requests:      stats?.total_requests      || 0,
+        avg_wait_time_ms:    stats?.avg_wait_time_ms    || 0,
+        avg_process_time_ms: stats?.avg_process_time_ms || 0,
+        errors:              stats?.errors              || 0,
+      },
+      active_requests: activeReqs.map(r => ({
+        company_name:    r.companyName || 'Bilinmiyor',
+        feature:         r.feature,
+        started_at:      new Date(r.startedAt).toISOString(),
+        elapsed_seconds: Math.floor((now - r.startedAt) / 1000),
+        wait_ms:         r.waitMs || 0,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// POST /api/admin/ai-queue/clear — bekleyen tüm istekleri iptal et
+router.post('/ai-queue/clear', platformAdmin, (req, res) => {
+  try {
+    const { clearQueue } = require('../services/aiQueue');
+    const count = clearQueue();
+    res.json({ cleared: count, message: `${count} istek iptal edildi.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
+// POST /api/admin/ai-queue/concurrency — concurrency'yi güncelle
+router.post('/ai-queue/concurrency', platformAdmin, (req, res) => {
+  try {
+    const { concurrency } = req.body;
+    if (!concurrency || concurrency < 1 || concurrency > 20) {
+      return res.status(400).json({ error: 'Geçersiz değer (1–20 arası).' });
+    }
+    const { setConcurrency } = require('../services/aiQueue');
+    setConcurrency(parseInt(concurrency));
+    res.json({ concurrency: parseInt(concurrency), message: `Kapasite ${concurrency} olarak güncellendi.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sunucu hatası.' });
+  }
+});
+
 // GET /api/admin/ai-usage?month=2026-05
 router.get('/ai-usage', platformAdmin, async (req, res) => {
   try {
