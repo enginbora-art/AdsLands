@@ -5,31 +5,51 @@ import { initiatePayment } from '../api';
 const PLANS_AGENCY = [
   {
     key: 'starter',
-    label: 'Ajans Starter',
-    desc: '0-10 marka',
+    label: 'Basic',
+    desc: '0-5 marka',
     monthly: 1000,
     yearly: 800,
     color: '#0d9488',
-    features: ['10 marka', 'Tüm entegrasyonlar', 'AI Raporlar', 'Email destek'],
+    features: [
+      'Tüm entegrasyonlar',
+      'Bütçe planlama',
+      'Kanal analizi',
+      'AI raporları',
+    ],
   },
   {
     key: 'growth',
-    label: 'Ajans Growth',
-    desc: '11-20 marka',
+    label: 'Pro',
+    desc: '5-10 marka',
     monthly: 1500,
     yearly: 1200,
     color: '#3b82f6',
     popular: true,
-    features: ['20 marka', 'Tüm entegrasyonlar', 'AI Raporlar', 'Öncelikli destek', 'TV Medya Planı'],
+    features: [
+      'Tüm entegrasyonlar',
+      'Bütçe planlama',
+      'Kanal analizi',
+      'AI raporları',
+      'Anomali uyarıları',
+      'Benchmark',
+    ],
   },
   {
     key: 'scale',
-    label: 'Ajans Scale',
-    desc: '21+ marka',
+    label: 'Enterprise',
+    desc: '10+ marka',
     monthly: 2000,
     yearly: 1600,
     color: '#8b5cf6',
-    features: ['Sınırsız marka', 'Tüm entegrasyonlar', 'AI Raporlar', '7/24 destek', 'TV Medya Planı', 'Özel entegrasyon'],
+    features: [
+      'Tüm entegrasyonlar',
+      'Bütçe planlama',
+      'Kanal analizi',
+      'AI raporları',
+      'Anomali uyarıları',
+      'Benchmark',
+      'TV Medya Planı ve İzleme',
+    ],
   },
 ];
 
@@ -179,11 +199,8 @@ export default function Pricing({ onNav }) {
 
       {/* Başlık */}
       <div style={{ textAlign: 'center', marginBottom: 44 }}>
-        <h1 style={{ fontFamily: 'var(--font)', fontSize: 30, color: '#f1f5f9', margin: '0 0 10px' }}>
-          Fiyatlandırma
-        </h1>
-        <p style={{ color: '#94a3b8', fontSize: 15, margin: '0 0 28px' }}>
-          {companyType === 'brand' ? 'Markanızın büyümesini hızlandırın.' : 'Ajansınız için doğru planı seçin.'}
+        <p style={{ fontFamily: 'var(--font)', fontSize: 30, fontWeight: 700, color: '#f1f5f9', margin: '0 0 28px' }}>
+          {companyType === 'brand' ? 'Markanızın büyümesini hızlandırın.' : 'Ajansınız için en doğru planı seçin.'}
         </p>
 
         {/* Monthly / Yearly toggle */}
