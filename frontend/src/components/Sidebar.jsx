@@ -74,9 +74,6 @@ const BRAND_NAV = [
     { id: 'anomalies', label: 'Anomaliler', perm: 'anomalier' },
     { id: 'benchmark', label: 'Benchmark',  perm: 'benchmark' },
   ]},
-  { label: 'Bağlantılar', items: [
-    { id: 'connections', label: 'Bağlantılar', perm: null },
-  ]},
   { label: 'Yönetim', items: [
     { id: 'integrations',  label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
     { id: 'users',         label: 'Kullanıcılar',   perm: 'kullanici_yonetimi' },
