@@ -50,11 +50,17 @@ router.get('/me', auth, async (req, res) => {
   try {
     const { rows: [user] } = await pool.query(
       `SELECT u.id, u.email, u.full_name, u.company_id, u.is_company_admin, u.is_platform_admin,
-              c.name AS company_name, c.type AS company_type,
+              c.name AS company_name, c.type AS company_type, c.trial_ends_at,
               r.permissions AS role_permissions,
               EXISTS(
                 SELECT 1 FROM connections WHERE brand_company_id = u.company_id
-              ) AS is_managed_by_agency
+              ) AS is_managed_by_agency,
+              (SELECT s.plan FROM subscriptions s
+               WHERE s.company_id = u.company_id AND s.status = 'active'
+               ORDER BY s.created_at DESC LIMIT 1) AS subscription_plan,
+              (SELECT s.cancel_at_period_end FROM subscriptions s
+               WHERE s.company_id = u.company_id AND s.status = 'active'
+               ORDER BY s.created_at DESC LIMIT 1) AS subscription_cancelling
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id
        LEFT JOIN roles r ON u.role_id = r.id
@@ -67,6 +73,8 @@ router.get('/me', auth, async (req, res) => {
       ? ALL_PERMISSIONS
       : (user.role_permissions || []);
 
+    const onTrial = user.trial_ends_at && new Date(user.trial_ends_at) > new Date();
+
     res.json({
       id: user.id,
       email: user.email,
@@ -77,6 +85,9 @@ router.get('/me', auth, async (req, res) => {
       is_company_admin: user.is_company_admin,
       is_platform_admin: user.is_platform_admin,
       is_managed_by_agency: user.is_managed_by_agency,
+      subscription_plan: user.subscription_plan || null,
+      subscription_cancelling: user.subscription_cancelling || false,
+      on_trial: onTrial,
       permissions,
     });
   } catch (err) {

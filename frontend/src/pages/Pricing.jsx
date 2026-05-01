@@ -7,8 +7,8 @@ const PLANS_AGENCY = [
     key: 'starter',
     label: 'Basic',
     desc: '0-5 marka',
-    monthly: 1000,
-    yearly: 800,
+    monthly: 20000,
+    yearly: 16000,
     color: '#0d9488',
     features: [
       'Tüm entegrasyonlar',
@@ -21,8 +21,8 @@ const PLANS_AGENCY = [
     key: 'growth',
     label: 'Pro',
     desc: '5-10 marka',
-    monthly: 1500,
-    yearly: 1200,
+    monthly: 45000,
+    yearly: 36000,
     color: '#3b82f6',
     popular: true,
     features: [
@@ -38,8 +38,8 @@ const PLANS_AGENCY = [
     key: 'scale',
     label: 'Enterprise',
     desc: '10+ marka',
-    monthly: 2000,
-    yearly: 1600,
+    monthly: 70000,
+    yearly: 56000,
     color: '#8b5cf6',
     features: [
       'Tüm entegrasyonlar',
@@ -239,6 +239,7 @@ export default function Pricing({ onNav }) {
               border: `2px solid ${plan.popular ? plan.color : '#1e2535'}`,
               borderRadius: 16, padding: '28px 24px',
               position: 'relative',
+              display: 'flex', flexDirection: 'column',
               transition: 'transform .2s, box-shadow .2s',
             }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 40px ${plan.color}22`; }}
@@ -254,14 +255,14 @@ export default function Pricing({ onNav }) {
               <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>{plan.desc}</div>
 
               <div style={{ marginBottom: 24 }}>
-                <span style={{ fontSize: 34, fontWeight: 800, color: plan.color }}>₺{price}</span>
+                <span style={{ fontSize: 34, fontWeight: 800, color: plan.color }}>₺{price.toLocaleString('tr-TR')}</span>
                 <span style={{ fontSize: 13, color: '#64748b' }}>/{interval === 'yearly' ? 'ay*' : 'ay'}</span>
                 {interval === 'yearly' && (
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>*Yıllık ₺{price * 12} olarak faturalandırılır</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>*Yıllık ₺{(price * 12).toLocaleString('tr-TR')} olarak faturalandırılır</div>
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 28, flex: 1 }}>
                 {plan.features.map((f, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cbd5e1' }}>
                     <span style={{ color: plan.color, fontSize: 15, flexShrink: 0 }}>✓</span>
@@ -273,11 +274,12 @@ export default function Pricing({ onNav }) {
               <button
                 onClick={() => setSelectedPlan(plan)}
                 style={{
-                  width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+                  width: '100%', padding: '12px 0', borderRadius: 10,
                   background: plan.popular ? plan.color : 'transparent',
                   border: `2px solid ${plan.color}`,
                   color: plan.popular ? '#fff' : plan.color,
                   fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'all .2s',
+                  marginTop: 'auto',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background = plan.color; e.currentTarget.style.color = '#fff'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = plan.popular ? plan.color : 'transparent'; e.currentTarget.style.color = plan.popular ? '#fff' : plan.color; }}

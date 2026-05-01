@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 
@@ -96,14 +97,63 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
+// Hangi menü hangi minimum plana kilitli (ajans planları için)
+const PLAN_RANK = { starter: 1, growth: 2, scale: 3 };
+const PLAN_LABELS = { starter: 'Basic', growth: 'Pro', scale: 'Enterprise' };
+const ITEM_MIN_PLAN = {
+  anomalies: 'growth',
+  benchmark: 'growth',
+  tv:        'scale',
+  tvplan:    'scale',
+};
+
+function UpgradeModal({ item, requiredPlan, onClose, onUpgrade }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 14, padding: '28px 28px 24px', width: '100%', maxWidth: 380, textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text1)', marginBottom: 8 }}>{item.label}</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 24 }}>
+          Bu özellik <strong style={{ color: 'var(--text2)' }}>{PLAN_LABELS[requiredPlan]}</strong> planında mevcut değil.<br />
+          Planınızı yükseltmek için tıklayın.
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: '10px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text3)', fontSize: 13, cursor: 'pointer' }}>
+            Kapat
+          </button>
+          <button onClick={onUpgrade}
+            style={{ flex: 1, padding: '10px 0', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            Planı Yükselt
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
   const { user, hasPermission } = useAuth();
   const { selectedBrand, setSelectedBrand } = useSelectedBrand();
+  const [lockedItem, setLockedItem] = useState(null);
   const isAgency = user?.company_type === 'agency';
 
   const navConfig = isAgency
     ? (selectedBrand ? AGENCY_BRAND_NAV : AGENCY_BASE_NAV)
     : BRAND_NAV;
+
+  // Plan erişim kontrolü — trial ve enterprise her şeye açık
+  const getPlanLock = (itemId) => {
+    const required = ITEM_MIN_PLAN[itemId];
+    if (!required) return null;
+    if (user?.on_trial || user?.is_platform_admin) return null;
+    const userPlan = user?.subscription_plan;
+    if (!userPlan) return required; // abonelik yok → kilitli
+    const userRank = PLAN_RANK[userPlan] ?? 0;
+    const reqRank = PLAN_RANK[required] ?? 0;
+    return userRank >= reqRank ? null : required;
+  };
 
   const handleClearBrand = () => {
     setSelectedBrand(null);
@@ -128,6 +178,15 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
 
   return (
     <>
+      {lockedItem && (
+        <UpgradeModal
+          item={lockedItem.item}
+          requiredPlan={lockedItem.requiredPlan}
+          onClose={() => setLockedItem(null)}
+          onUpgrade={() => { setLockedItem(null); handleNav('pricing'); }}
+        />
+      )}
+
       {/* Mobile backdrop */}
       <div className={`sidebar-backdrop${open ? ' visible' : ''}`} onClick={onClose} />
 
@@ -168,28 +227,34 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
             return (
               <div key={section.label} className="nav-section">
                 <div className="nav-section-label">{section.label}</div>
-                {visibleItems.map(item => (
-                  <button
-                    key={item.id}
-                    className={`nav-item${active === item.id ? ' active' : ''}`}
-                    onClick={() => handleNav(item.id)}
-                    title={item.label}
-                  >
-                    <Icon id={item.id} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                    {item.badge && (
-                      <span style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: '2px 5px',
-                        borderRadius: 3,
-                        background: item.badgeLive ? 'rgba(255,107,90,0.18)' : 'rgba(0,191,166,0.15)',
-                        color: item.badgeLive ? 'var(--coral)' : 'var(--teal)',
-                        letterSpacing: '0.4px',
-                      }}>{item.badge}</span>
-                    )}
-                  </button>
-                ))}
+                {visibleItems.map(item => {
+                  const lockedByPlan = getPlanLock(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      className={`nav-item${active === item.id && !lockedByPlan ? ' active' : ''}`}
+                      onClick={() => lockedByPlan
+                        ? setLockedItem({ item, requiredPlan: lockedByPlan })
+                        : handleNav(item.id)
+                      }
+                      title={item.label}
+                      style={lockedByPlan ? { opacity: 0.45, cursor: 'pointer' } : undefined}
+                    >
+                      <Icon id={item.id} />
+                      <span style={{ flex: 1, color: lockedByPlan ? 'var(--text3)' : undefined }}>{item.label}</span>
+                      {lockedByPlan ? (
+                        <span style={{ fontSize: 11 }}>🔒</span>
+                      ) : item.badge ? (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                          background: item.badgeLive ? 'rgba(255,107,90,0.18)' : 'rgba(0,191,166,0.15)',
+                          color: item.badgeLive ? 'var(--coral)' : 'var(--teal)',
+                          letterSpacing: '0.4px',
+                        }}>{item.badge}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
