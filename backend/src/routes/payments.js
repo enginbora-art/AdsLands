@@ -101,16 +101,18 @@ router.post('/callback', express.urlencoded({ extended: true }), async (req, res
   // Sipay checkstatus API ile doğrula
   let verifiedStatus;
   try {
-    const checkRes  = await sipay.checkStatus(invoiceId);
-    const apiStatus = String(checkRes?.data?.sipay_status ?? checkRes?.sipay_status ?? '0');
-    const cbStatus  = String(callbackData.sipay_status ?? '0');
-    console.log('[Payment] checkstatus sipay_status:', apiStatus, '| callback sipay_status:', cbStatus);
+    const checkResponse = await sipay.checkStatus(invoiceId);
+    console.log('[Payment] checkstatus:', checkResponse.data.status_code, checkResponse.data.transaction_status);
 
-    if (apiStatus !== cbStatus) {
-      console.warn('[Payment] checkstatus uyuşmazlığı — güvenlik reddi');
-      return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=mismatch`);
+    const isVerified =
+      checkResponse.data.status_code === 100 &&
+      checkResponse.data.transaction_status === 'Completed';
+
+    if (!isVerified) {
+      console.log('[Payment] checkstatus doğrulama başarısız:', checkResponse.data);
+      return res.redirect(`${FRONTEND_URL}/payment/result?status=failed&reason=checkstatus`);
     }
-    verifiedStatus = apiStatus === '1' ? 'success' : 'failed';
+    verifiedStatus = 'success';
   } catch (err) {
     console.error('[Payment] checkstatus hatası, callback status\'e güveniliyor:', err.message);
     verifiedStatus = (String(callbackData.sipay_status) === '1' || String(callbackData.status) === '1') ? 'success' : 'failed';
