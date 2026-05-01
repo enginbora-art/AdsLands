@@ -18,6 +18,58 @@ const ALL_PLATFORMS = [
 ];
 const PLATFORM_MAP = Object.fromEntries(ALL_PLATFORMS.map(p => [p.platform, p]));
 
+// Hangi platform hangi KPI alanlarını destekler
+const CHANNEL_KPIS = {
+  google_ads:       ['roas', 'cpa', 'ctr', 'impression', 'conversion'],
+  meta:             ['roas', 'cpa', 'ctr', 'impression', 'conversion'],
+  tiktok:           ['cpa', 'ctr', 'impression', 'conversion'],
+  linkedin:         ['cpa', 'ctr', 'impression', 'conversion'],
+  appsflyer:        ['cpa', 'conversion', 'roas'],
+  adjust:           ['cpa', 'conversion'],
+  adform:           ['ctr', 'impression', 'cpa'],
+  google_analytics: ['conversion'],
+};
+
+// Varsayılan label / placeholder / step
+const KPI_DEFAULTS = {
+  roas:       { label: 'Hedef ROAS',        placeholder: 'Hedef ROAS (örn: 4.0)',               step: '0.1' },
+  cpa:        { label: 'Hedef CPA (₺)',      placeholder: 'Hedef CPA - TL (örn: 150)',           step: '1'   },
+  ctr:        { label: 'Hedef CTR (%)',      placeholder: 'Hedef CTR - % (örn: 2.5)',            step: '0.1' },
+  impression: { label: 'Hedef İmpresyon',   placeholder: 'Hedef İmpresyon (örn: 500.000)',       step: '1000'},
+  conversion: { label: 'Hedef Dönüşüm',     placeholder: 'Hedef Dönüşüm Sayısı (örn: 1.000)',  step: '1'   },
+};
+
+// Platform bazında label / placeholder override'ları
+const KPI_OVERRIDES = {
+  appsflyer: {
+    cpa:        { placeholder: 'Hedef Kullanıcı Edinme Maliyeti - TL (örn: 50)' },
+    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: 'Hedef Install / Aktivasyon Sayısı (örn: 10.000)' },
+    roas:       { placeholder: 'Hedef ROAS (örn: 2.0)' },
+  },
+  adjust: {
+    cpa:        { placeholder: 'Hedef Kullanıcı Edinme Maliyeti - TL (örn: 50)' },
+    conversion: { label: 'Hedef Install / Aktivasyon', placeholder: 'Hedef Install / Aktivasyon Sayısı (örn: 10.000)' },
+  },
+  adform: {
+    ctr:        { placeholder: 'Hedef CTR - % (örn: 0.1)' },
+    impression: { placeholder: 'Hedef İmpresyon (örn: 1.000.000)' },
+    cpa:        { placeholder: 'Hedef CPA - TL (örn: 200)' },
+  },
+  google_analytics: {
+    conversion: { label: 'Hedef Dönüşüm / Goal Tamamlama', placeholder: 'Hedef Dönüşüm / Goal Tamamlama (örn: 500)' },
+  },
+};
+
+// Seçili platforma göre gösterilecek KPI alanlarını döndür
+function getKpiFields(platform) {
+  const keys = CHANNEL_KPIS[platform] || Object.keys(KPI_DEFAULTS);
+  return keys.map(key => ({
+    key,
+    ...KPI_DEFAULTS[key],
+    ...(KPI_OVERRIDES[platform]?.[key] || {}),
+  }));
+}
+
 // Legacy columns for backward-compat display of old budget records
 const LEGACY_CHANNELS = [
   { key: 'google_ads_budget', platform: 'google_ads' },
@@ -305,13 +357,7 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
                     </button>
                     {ch.kpiOpen && (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                        {[
-                          { key: 'roas',       label: 'Hedef ROAS',        placeholder: 'örn: 4.0',    step: '0.1' },
-                          { key: 'cpa',        label: 'Hedef CPA (₺)',      placeholder: 'örn: 150',    step: '1' },
-                          { key: 'ctr',        label: 'Hedef CTR (%)',      placeholder: 'örn: 2.5',    step: '0.1' },
-                          { key: 'impression', label: 'Hedef İmpresyon',    placeholder: 'örn: 500000', step: '1000' },
-                          { key: 'conversion', label: 'Hedef Dönüşüm',     placeholder: 'örn: 1000',   step: '1' },
-                        ].map(({ key, label, placeholder, step }) => (
+                        {getKpiFields(ch.platform).map(({ key, label, placeholder, step }) => (
                           <div key={key}>
                             <label style={{ ...ms.label, fontSize: 10, marginBottom: 4 }}>{label}</label>
                             <input
