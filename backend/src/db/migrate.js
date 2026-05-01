@@ -507,6 +507,11 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS prt_token_idx ON password_reset_tokens (token);
     `);
 
+    // ── Gün içi metrik güncellemesi için updated_at ───────────────────────────
+    await client.query(`
+      ALTER TABLE ad_metrics ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`

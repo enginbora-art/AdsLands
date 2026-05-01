@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard } from '../api';
+import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard, getLastUpdated, refreshMetrics } from '../api';
 import InviteModal from '../components/InviteModal';
 
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
@@ -130,22 +130,37 @@ function AgencySummary() {
 }
 
 // ── Marka dashboard içeriği ────────────────────────────────────────────────────
-function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite, onNav }) {
+function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite, onNav, lastUpdated, onRefresh, refreshing }) {
   const { summary, integrations, today_spend, budget, anomalies } = data;
+
+  const updatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <div className="fade-in">
       <div className="topbar">
         <div className="topbar-title">{title}</div>
-        {!isAgency && (
-          <div className="topbar-right">
+        <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {updatedLabel && (
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 500 }}>
+              Son güncelleme: {updatedLabel}
+            </span>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: refreshing ? 'not-allowed' : 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: refreshing ? 'var(--text3)' : 'var(--text1)', opacity: refreshing ? 0.6 : 1, fontFamily: 'var(--font)' }}>
+            {refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}
+          </button>
+          {!isAgency && (
             <button
               style={{ padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'transparent', color: 'var(--teal)' }}
               onClick={() => setShowInvite(true)}>
               + Ajans Davet Et
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       <div className="content">
@@ -273,6 +288,8 @@ const EMPTY_BRAND_DATA = {
   budget: null,
 };
 
+const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
 // ── Ana export ────────────────────────────────────────────────────────────────
 export default function Dashboard({ onNav }) {
   const { user } = useAuth();
@@ -281,6 +298,9 @@ export default function Dashboard({ onNav }) {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const pollRef = useRef(null);
   const isAgency = user?.company_type === 'agency';
 
   useEffect(() => {
@@ -310,6 +330,34 @@ export default function Dashboard({ onNav }) {
       })
       .finally(() => setLoading(false));
   }, [isAgency, selectedBrand?.id]);
+
+  // Fetch last-updated timestamp + poll every 5 minutes
+  const fetchLastUpdated = useCallback(() => {
+    getLastUpdated()
+      .then(d => setLastUpdated(d.last_updated))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (isAgency && !selectedBrand) return;
+    fetchLastUpdated();
+    pollRef.current = setInterval(fetchLastUpdated, POLL_INTERVAL);
+    return () => clearInterval(pollRef.current);
+  }, [isAgency, selectedBrand?.id, fetchLastUpdated]);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshMetrics();
+      // Re-fetch last-updated after a brief delay to let the backend finish
+      setTimeout(fetchLastUpdated, 3000);
+    } catch (err) {
+      console.error('Refresh hatası:', err?.response?.data?.error || err.message);
+    } finally {
+      setTimeout(() => setRefreshing(false), 3000);
+    }
+  }, [refreshing, fetchLastUpdated]);
 
   // Agency, marka seçilmemiş → özet kartlar
   if (isAgency && !selectedBrand) return <AgencySummary />;
@@ -352,6 +400,9 @@ export default function Dashboard({ onNav }) {
       showInvite={showInvite}
       setShowInvite={setShowInvite}
       onNav={onNav}
+      lastUpdated={lastUpdated}
+      onRefresh={handleRefresh}
+      refreshing={refreshing}
     />
   );
 }

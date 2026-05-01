@@ -179,3 +179,7 @@ export const updateTvPlanItem  = (planId, itemId, data) => api.patch(`/tv/plans/
 export const deleteTvPlanItem  = (planId, itemId) => api.delete(`/tv/plans/${planId}/items/${itemId}`).then(r => r.data);
 export const getTvPlanSummary  = (planId) => api.get(`/tv/plans/${planId}/summary`).then(r => r.data);
 export const tvEarlyAccess     = (data) => api.post('/tv/early-access', data).then(r => r.data);
+
+// ── Metrik Güncellemesi ───────────────────────────────────────────────────────
+export const getLastUpdated = () => api.get('/metrics/last-updated').then(r => r.data);
+export const refreshMetrics = () => api.post('/metrics/refresh').then(r => r.data);

@@ -27,6 +27,7 @@ const benchmarkRoutes  = require('./routes/benchmark');
 const tvRoutes         = require('./routes/tv');
 const paymentsRoutes   = require('./routes/payments');
 const aiRoutes         = require('./routes/ai');
+const metricsRoutes    = require('./routes/metrics');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -103,6 +104,7 @@ app.use('/api/benchmark', benchmarkRoutes);
 app.use('/api/tv',        tvRoutes);
 app.use('/api/payments',  paymentsRoutes);
 app.use('/api/ai',        aiRoutes);
+app.use('/api/metrics',   metricsRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

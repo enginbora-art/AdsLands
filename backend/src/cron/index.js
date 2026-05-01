@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const pool = require('../db');
-const { fetchYesterdayMetrics } = require('../services/metricsFetcher');
+const { fetchYesterdayMetrics, fetchTodayMetrics } = require('../services/metricsFetcher');
 
 function startCronJobs() {
   // Her gece 02:00'de metrikleri çek ve anomali kontrolü yap
@@ -68,7 +68,17 @@ function startCronJobs() {
     }
   }, { timezone: 'Europe/Istanbul' });
 
-  console.log('⏰ Cron jobs aktif (02:00 metrik çekimi, 09:00 trial uyarı)');
+  // 07:00-23:00 arası her 2 saatte bir gün içi metrik güncellemesi
+  cron.schedule('0 7-23/2 * * *', async () => {
+    console.log('⏰ Cron: gün içi metrik güncelleme başladı...');
+    try {
+      await fetchTodayMetrics();
+    } catch (err) {
+      console.error('Gün içi cron hatası:', err.message);
+    }
+  }, { timezone: 'Europe/Istanbul' });
+
+  console.log('⏰ Cron jobs aktif (02:00 gece sync, 09:00 trial uyarı, 07-23/2h gün içi)');
 }
 
 module.exports = { startCronJobs };

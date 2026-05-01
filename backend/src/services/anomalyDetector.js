@@ -120,7 +120,7 @@ async function sendAnomalyEmail(integration, actualSpend, expectedSpend, platfor
   }
 }
 
-async function detectAndHandle(integration) {
+async function detectAndHandle(integration, isIntraday = false) {
   const { rows: metrics } = await pool.query(
     `SELECT spend, date FROM ad_metrics
      WHERE integration_id = $1
@@ -133,13 +133,20 @@ async function detectAndHandle(integration) {
   const [latest, ...history] = metrics;
   const avgSpend = history.reduce((s, r) => s + parseFloat(r.spend), 0) / history.length;
 
-  // Read company settings to get the configured threshold
+  let checkSpend = parseFloat(latest.spend);
+  if (isIntraday) {
+    // Project current partial-day spend to full-day equivalent
+    const currentHour = new Date().getHours();
+    const dayProgress = Math.max(currentHour / 24, 1 / 24);
+    checkSpend = checkSpend / dayProgress;
+  }
+
   const settings = await getSettings(integration.company_id);
   const threshold = 1 + (settings.budget_delta / 100);
 
-  if (avgSpend === 0 || parseFloat(latest.spend) <= avgSpend * threshold) return;
+  if (avgSpend === 0 || checkSpend <= avgSpend * threshold) return;
 
-  const actualSpend   = parseFloat(latest.spend);
+  const actualSpend   = isIntraday ? checkSpend : parseFloat(latest.spend);
   const platformLabel = PLATFORM_LABELS[integration.platform] || integration.platform;
   console.log(`⚠️  Anomali (eşik %${settings.budget_delta}): ${platformLabel} — ₺${actualSpend} (ort: ₺${avgSpend.toFixed(0)})`);
 
