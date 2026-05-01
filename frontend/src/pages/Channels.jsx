@@ -19,12 +19,23 @@ const PLATFORM_COLORS = {
   adform: '#E84B37', appsflyer: '#00B2FF', adjust: '#888888',
 };
 
-// Harcama bazlı reklam platformları (google_analytics hariç)
-const AD_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'linkedin', 'adform', 'appsflyer', 'adjust'];
+// Reklam harcaması olan platformlar (attribution araçları dahil değil)
+const SPEND_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'linkedin', 'adform'];
 
-// InlineEmptyState'te gösterilecek platformlar
+// Tüm desteklenen platformlar (AI analizi ve sinerjisi için)
+const ALL_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'linkedin', 'adform', 'appsflyer', 'adjust', 'google_analytics'];
+
+// Harcama bölümleri boş state listesi — sadece 5 reklam platformu
+const SPEND_PLATFORMS_LIST = [
+  { key: 'google_ads', label: 'Google Ads',   icon: 'G',  color: '#4285F4' },
+  { key: 'meta',       label: 'Meta Ads',      icon: 'M',  color: '#1877F2' },
+  { key: 'tiktok',     label: 'TikTok Ads',    icon: 'T',  color: '#555555' },
+  { key: 'linkedin',   label: 'LinkedIn Ads',  icon: 'in', color: '#0A66C2' },
+  { key: 'adform',     label: 'Adform',        icon: 'AF', color: '#E84B37' },
+];
+
+// Attribution/AI bölümleri boş state listesi — tüm platformlar
 const ALL_PLATFORMS_LIST = [
-  { key: 'google_analytics', label: 'Google Analytics', icon: 'GA', color: '#E37400' },
   { key: 'google_ads',       label: 'Google Ads',        icon: 'G',  color: '#4285F4' },
   { key: 'meta',             label: 'Meta Ads',           icon: 'M',  color: '#1877F2' },
   { key: 'tiktok',           label: 'TikTok Ads',         icon: 'T',  color: '#555555' },
@@ -32,6 +43,7 @@ const ALL_PLATFORMS_LIST = [
   { key: 'adform',           label: 'Adform',             icon: 'AF', color: '#E84B37' },
   { key: 'appsflyer',        label: 'AppsFlyer',          icon: 'AF', color: '#00B2FF' },
   { key: 'adjust',           label: 'Adjust',             icon: 'AJ', color: '#888888' },
+  { key: 'google_analytics', label: 'Google Analytics',   icon: 'GA', color: '#E37400' },
 ];
 
 const BENCHMARKS = {
@@ -121,12 +133,12 @@ function SkeletonSection({ rows = 3 }) {
   );
 }
 
-function InlineEmptyState({ connectedPlatforms, onConnect }) {
+function InlineEmptyState({ connectedPlatforms, onConnect, platformList = SPEND_PLATFORMS_LIST }) {
   return (
     <div style={{ background: 'var(--bg)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 10, padding: '18px 20px' }}>
       <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Bu bölüm için reklam verisi gerekli</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-        {ALL_PLATFORMS_LIST.map(p => {
+        {platformList.map(p => {
           const connected = connectedPlatforms.includes(p.key);
           return (
             <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg2)', borderRadius: 8, border: connected ? '1px solid rgba(16,185,129,0.2)' : '1px solid var(--border2)' }}>
@@ -187,7 +199,7 @@ function SynergyInfo({ connectedPlatforms, onConnect }) {
   const lowerFunnelPlatforms = ['google_ads'];
   const hasUpper = connectedPlatforms.some(p => upperFunnelPlatforms.includes(p));
   const hasLower = connectedPlatforms.some(p => lowerFunnelPlatforms.includes(p));
-  const adCount  = connectedPlatforms.filter(p => AD_PLATFORMS.includes(p)).length;
+  const adCount  = connectedPlatforms.filter(p => SPEND_PLATFORMS.includes(p)).length;
 
   return (
     <div>
@@ -343,9 +355,12 @@ export default function Channels({ onNav }) {
   // ── Türetilmiş veri ───────────────────────────────────────────────────────
   const allIntegrations = data?.integrations || [];
   const gaIntegration   = allIntegrations.find(i => i.platform === 'google_analytics');
-  const adIntegrations  = allIntegrations.filter(i => AD_PLATFORMS.includes(i.platform));
+  // Sadece reklam harcaması olan platformlar (attribution araçları hariç)
+  const adIntegrations  = allIntegrations.filter(i => SPEND_PLATFORMS.includes(i.platform));
+  // Attribution + AI bölümleri için tüm entegrasyonlar
+  const allAdIntegrations = allIntegrations.filter(i => ALL_PLATFORMS.includes(i.platform));
   const connectedKeys   = allIntegrations.map(i => i.platform);
-  const hasAnyData      = allIntegrations.length > 0;
+  const hasAnyData      = allAdIntegrations.length > 0;
   const hasAdData       = adIntegrations.some(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_impressions) > 0);
   const sector          = data?.sector || 'Diğer';
 
@@ -370,9 +385,9 @@ export default function Channels({ onNav }) {
 
   // Önceki dönem
   const prev       = data?.prevIntegrations || [];
-  const prevSpend  = prev.filter(i => AD_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseFloat(i.total_spend), 0);
-  const prevConv   = prev.filter(i => AD_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
-  const prevRoasV  = prev.filter(i => AD_PLATFORMS.includes(i.platform) && parseFloat(i.avg_roas) > 0);
+  const prevSpend  = prev.filter(i => SPEND_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseFloat(i.total_spend), 0);
+  const prevConv   = prev.filter(i => SPEND_PLATFORMS.includes(i.platform)).reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
+  const prevRoasV  = prev.filter(i => SPEND_PLATFORMS.includes(i.platform) && parseFloat(i.avg_roas) > 0);
   const prevRoas   = prevRoasV.length ? prevRoasV.reduce((s, i) => s + parseFloat(i.avg_roas), 0) / prevRoasV.length : 0;
 
   const sectorBm  = BENCHMARKS[sector] || BENCHMARKS['Diğer'];
@@ -412,11 +427,11 @@ export default function Channels({ onNav }) {
   })();
 
   // Kanal sinerjisi — 2+ reklam platformu mu?
-  const adPlatformCount = connectedKeys.filter(p => AD_PLATFORMS.includes(p)).length;
+  const adPlatformCount = connectedKeys.filter(p => SPEND_PLATFORMS.includes(p)).length;
 
   // ── AI Analiz ─────────────────────────────────────────────────────────────
   const runAi = async () => {
-    const aiMetrics = allIntegrations
+    const aiMetrics = allAdIntegrations
       .filter(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_clicks) > 0 || parseInt(i.total_conversions) > 0)
       .map(i => ({
         platform: PLATFORM_LABELS[i.platform] || i.platform,
@@ -555,7 +570,7 @@ export default function Channels({ onNav }) {
           </div>
           <select value={platFilter} onChange={e => setPlatFilter(e.target.value)} style={s.select}>
             <option value="all">Tüm Kanallar</option>
-            {AD_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
+            {SPEND_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
           </select>
           {hasAdData && <button onClick={() => exportCsv(adIntegrations, sector)} style={s.exportBtn}>↓ CSV</button>}
           {kpiBrandId && (
@@ -702,7 +717,7 @@ export default function Channels({ onNav }) {
                   formatter={(v, name) => [fmtTL(v), PLATFORM_LABELS[name.replace('_spend','')] || name]}
                   labelFormatter={l => l} />
                 <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => PLATFORM_LABELS[v.replace('_spend','')] || v} />
-                {activePlatforms.filter(p => AD_PLATFORMS.includes(p)).map(p => (
+                {activePlatforms.filter(p => SPEND_PLATFORMS.includes(p)).map(p => (
                   <Line key={p} type="monotone" dataKey={`${p}_spend`} stroke={PLATFORM_COLORS[p]||'#888'} strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 4 }} />
                 ))}
               </LineChart>
@@ -722,7 +737,7 @@ export default function Channels({ onNav }) {
                 <Tooltip contentStyle={{ background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 12 }}
                   formatter={(v, name) => [`${Number(v).toFixed(2)}x`, PLATFORM_LABELS[name.replace('_roas','')] || name]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => PLATFORM_LABELS[v.replace('_roas','')] || v} />
-                {activePlatforms.filter(p => AD_PLATFORMS.includes(p)).map(p => (
+                {activePlatforms.filter(p => SPEND_PLATFORMS.includes(p)).map(p => (
                   <Line key={p} type="monotone" dataKey={`${p}_roas`} stroke={PLATFORM_COLORS[p]||'#888'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="4 2" />
                 ))}
               </LineChart>
@@ -781,7 +796,7 @@ export default function Channels({ onNav }) {
         <div ref={aiRef}>
           <SectionCard title="AI Kanal Analizi" subtitle="Claude ile derinlemesine analiz">
             {loading ? <SkeletonBar height={60} /> : !hasAnyData ? (
-              <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} />
+              <InlineEmptyState connectedPlatforms={connectedKeys} onConnect={goToIntegrations} platformList={ALL_PLATFORMS_LIST} />
             ) : (
               <>
                 {!aiText && !aiLoading && !aiError && (
