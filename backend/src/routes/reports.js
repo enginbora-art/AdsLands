@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/auth');
 const pptxService = require('../services/pptxService');
 const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 const { queueAiRequest, getQueueStatus } = require('../services/aiQueue');
+const requireActiveSubscription = require('../middleware/requireActiveSubscription');
 
 async function resolveCompanyId(user, brandId) {
   if (user.company_type === 'agency' && brandId) {
@@ -65,7 +66,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/reports/generate — SSE streaming with Claude
-router.post('/generate', authMiddleware, checkAiLimit('ai_report'), async (req, res) => {
+router.post('/generate', authMiddleware, requireActiveSubscription, checkAiLimit('ai_report'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
@@ -231,7 +232,7 @@ router.get('/download/:fileId', (req, res) => {
 });
 
 // POST /api/reports/generate-pptx — visual PPTX report with pptxgenjs
-router.post('/generate-pptx', authMiddleware, checkAiLimit('ai_report'), async (req, res) => {
+router.post('/generate-pptx', authMiddleware, requireActiveSubscription, checkAiLimit('ai_report'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }

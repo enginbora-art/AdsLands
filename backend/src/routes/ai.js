@@ -4,13 +4,17 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { getCompanyLimit } = require('../middleware/aiLimit');
 const { getQueueStatus } = require('../services/aiQueue');
+const { checkCompanyActive } = require('../services/subscriptionService');
 
 // GET /api/ai/usage-today
 router.get('/usage-today', authMiddleware, async (req, res) => {
   try {
     const companyId = req.user.company_id;
 
-    const { plan, limit } = await getCompanyLimit(companyId);
+    const [{ plan, limit }, has_access] = await Promise.all([
+      getCompanyLimit(companyId),
+      checkCompanyActive(companyId).catch(() => true),
+    ]);
 
     const { rows } = await pool.query(
       `SELECT feature, COUNT(*)::int AS count
@@ -23,7 +27,7 @@ router.get('/usage-today', authMiddleware, async (req, res) => {
     const by_feature = Object.fromEntries(rows.map(r => [r.feature, r.count]));
     const total = rows.reduce((s, r) => s + r.count, 0);
 
-    res.json({ total, limit, plan, by_feature });
+    res.json({ total, limit, plan, by_feature, has_access });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatası.' });

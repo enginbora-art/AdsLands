@@ -1,6 +1,7 @@
 const { Resend } = require('resend');
 const pool = require('../db');
 const getPlatformService = require('./platforms');
+const { checkCompanyActive } = require('./subscriptionService');
 
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads',
@@ -121,6 +122,12 @@ async function sendAnomalyEmail(integration, actualSpend, expectedSpend, platfor
 }
 
 async function detectAndHandle(integration, isIntraday = false) {
+  const active = await checkCompanyActive(integration.company_id).catch(() => true);
+  if (!active) {
+    console.log(`[Anomali] Atlandı — pasif şirket: ${integration.company_id} ${integration.platform}`);
+    return;
+  }
+
   const { rows: metrics } = await pool.query(
     `SELECT spend, date FROM ad_metrics
      WHERE integration_id = $1

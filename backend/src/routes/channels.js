@@ -4,6 +4,7 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 const { queueAiRequest, getQueueStatus } = require('../services/aiQueue');
+const requireActiveSubscription = require('../middleware/requireActiveSubscription');
 
 const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'];
 
@@ -121,7 +122,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/channels/ai-analyze — SSE streaming
-router.post('/ai-analyze', authMiddleware, checkAiLimit('channel_analysis'), async (req, res) => {
+router.post('/ai-analyze', authMiddleware, requireActiveSubscription, checkAiLimit('channel_analysis'), async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }

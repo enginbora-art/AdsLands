@@ -4,6 +4,7 @@ const { detectAndHandle } = require('./anomalyDetector');
 const { validateAndNormalize } = require('./metricNormalizer');
 const { decryptIntegration } = require('./tokenEncryption');
 const { callWithRetry } = require('./platformQueue');
+const { ACTIVE_INTEGRATIONS_SQL } = require('./subscriptionService');
 
 async function saveMetric(integrationId, metric) {
   await pool.query(
@@ -37,9 +38,7 @@ async function seedHistoricalMetrics(integration) {
 }
 
 async function fetchYesterdayMetrics() {
-  const integrations = await pool.query(
-    "SELECT * FROM integrations WHERE is_active = true"
-  );
+  const integrations = await pool.query(ACTIVE_INTEGRATIONS_SQL(false));
 
   for (const integration of integrations.rows) {
     try {
@@ -57,15 +56,14 @@ async function fetchYesterdayMetrics() {
     }
   }
 
-  console.log(`✅ ${integrations.rows.length} entegrasyon için metrikler güncellendi.`);
+  console.log(`✅ ${integrations.rows.length} aktif entegrasyon için metrikler güncellendi.`);
 }
 
 async function fetchTodayMetrics(companyId) {
-  const query = companyId
-    ? 'SELECT * FROM integrations WHERE is_active = true AND company_id = $1'
-    : 'SELECT * FROM integrations WHERE is_active = true';
-  const params = companyId ? [companyId] : [];
-  const integrations = await pool.query(query, params);
+  const integrations = await pool.query(
+    ACTIVE_INTEGRATIONS_SQL(!!companyId),
+    companyId ? [companyId] : []
+  );
 
   for (const integration of integrations.rows) {
     try {
@@ -81,7 +79,7 @@ async function fetchTodayMetrics(companyId) {
     }
   }
 
-  console.log(`✅ ${integrations.rows.length} entegrasyon için gün içi metrikler güncellendi.`);
+  console.log(`✅ ${integrations.rows.length} aktif entegrasyon için gün içi metrikler güncellendi.`);
 }
 
 module.exports = { fetchYesterdayMetrics, fetchTodayMetrics, seedHistoricalMetrics, saveMetric };

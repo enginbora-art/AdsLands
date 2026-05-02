@@ -675,6 +675,7 @@ export default function Channels({ onNav }) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ metrics: aiMetrics, sector, benchmarks, days }),
       });
+      if (res.status === 403) { setLimitReached('subscription'); setAiError('Bu özellik için aktif abonelik gereklidir.'); return; }
       if (res.status === 429) { const e = await res.json().catch(() => ({})); setLimitReached(true); setAiError(e.error || 'Günlük AI kullanım limitinize ulaştınız.'); return; }
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'AI analiz başarısız.'); }
       const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
@@ -706,6 +707,7 @@ export default function Channels({ onNav }) {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/budgets/kpi-analysis/${kpiBrandId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
+      if (res.status === 403) { setLimitReached('subscription'); setKpiError('Bu özellik için aktif abonelik gereklidir.'); return; }
       if (res.status === 429) { const e = await res.json().catch(() => ({})); setLimitReached(true); setKpiError(e.error || 'Günlük AI kullanım limitinize ulaştınız.'); return; }
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'KPI analiz başarısız.'); }
       const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
@@ -766,10 +768,9 @@ export default function Channels({ onNav }) {
               🎯 KPI Analizi
             </button>
           )}
-          {aiUsage && (
-            <span style={{ fontSize: 11, color: aiUsage.total >= aiUsage.limit ? 'var(--coral)' : 'var(--text3)', whiteSpace: 'nowrap' }}>
-              Bugün: {aiUsage.total}/{aiUsage.limit} AI
-            </span>
+          {aiUsage && (aiUsage.has_access === false
+            ? <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 12px', background: 'var(--teal)', border: 'none', borderRadius: 6, color: '#0B1219', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>Abonelik Başlat</button>
+            : <span style={{ fontSize: 11, color: aiUsage.total >= aiUsage.limit ? 'var(--coral)' : 'var(--text3)', whiteSpace: 'nowrap' }}>Bugün: {aiUsage.total}/{aiUsage.limit} AI</span>
           )}
         </div>
       </div>
@@ -778,9 +779,15 @@ export default function Channels({ onNav }) {
         {/* Limit banner */}
         {limitReached && (
           <div style={{ marginBottom: 16, background: 'rgba(255,107,90,0.1)', border: '1px solid rgba(255,107,90,0.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ color: 'var(--coral)' }}>⚠ Günlük AI kullanım limitinize ulaştınız. Planınızı yükseltmek için tıklayın →</span>
+            <span style={{ color: 'var(--coral)' }}>
+              {limitReached === 'subscription'
+                ? '⚠ Bu özellik için aktif abonelik gereklidir. Hemen başlamak için tıklayın →'
+                : '⚠ Günlük AI kullanım limitinize ulaştınız. Planınızı yükseltmek için tıklayın →'}
+            </span>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 14px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Planı Yükselt</button>
+              <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 14px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {limitReached === 'subscription' ? 'Abonelik Başlat' : 'Planı Yükselt'}
+              </button>
               <button onClick={() => setLimitReached(false)} style={{ padding: '5px 8px', background: 'transparent', border: '1px solid rgba(255,107,90,0.4)', borderRadius: 6, color: 'var(--coral)', fontSize: 12, cursor: 'pointer' }}>✕</button>
             </div>
           </div>
