@@ -8,11 +8,12 @@
 
 const path = require('path');
 const BACKEND = path.join(__dirname, '..', 'backend');
+const nm      = (pkg) => path.join(BACKEND, 'node_modules', pkg);
 
-require('dotenv').config({ path: path.join(BACKEND, '.env') });
+require(nm('dotenv')).config({ path: path.join(BACKEND, '.env') });
 
-const bcrypt      = require(path.join(BACKEND, 'node_modules/bcrypt'));
-const { Pool }    = require(path.join(BACKEND, 'node_modules/pg'));
+const bcrypt      = require(nm('bcrypt'));
+const { Pool }    = require(nm('pg'));
 const { randomUUID } = require('crypto');
 
 const DB_URL = process.env.DATABASE_URL;
