@@ -25,9 +25,10 @@ export function SubscriptionProvider({ children }) {
 
     if (!periodEnd) {
       // Subscription kaydı hiç yok:
-      // - Ajans yönetimindeki marka → ajansın aboneliği yok = expired banner göster
-      // - Doğrudan kullanıcı → plan upgrade akışına gider (Sidebar gating)
-      if (user.is_managed_by_agency) {
+      // - Ajans yönetimindeki marka → ajansın aboneliği yok = expired
+      // - Ajans kullanıcısının kendisi → kendi aboneliği yok = expired
+      // - Doğrudan marka (ajansa bağlı değil) → plan upgrade akışı (Sidebar gating)
+      if (user.is_managed_by_agency || user.company_type === 'agency') {
         return { accessState: 'expired', isActive: false, isExpired: true, isFrozen: false, expiredAt: null, frozenAt: null };
       }
       return { accessState: 'none', isActive: false, isExpired: false, isFrozen: false, expiredAt: null, frozenAt: null };

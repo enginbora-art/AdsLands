@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
+import SubscriptionBanner from '../components/SubscriptionBanner';
+import SubscriptionGateModal from '../components/SubscriptionGateModal';
 import {
   getAgencyDashboard, inviteBrand,
   getInvitations, getSentInvitations, acceptInvitation, rejectInvitation, sendInvitation,
@@ -317,8 +320,9 @@ function SentTab({ items }) {
 }
 
 // ── Ana component ─────────────────────────────────────────────────────────────
-export default function Agency({ onSelectBrand }) {
+export default function Agency({ onSelectBrand, onNav }) {
   const { user } = useAuth();
+  const { isActive } = useSubscription();
   const [tab, setTab] = useState('brands');
   const [clients, setClients] = useState([]);
   const [incoming, setIncoming] = useState([]);
@@ -326,6 +330,7 @@ export default function Agency({ onSelectBrand }) {
   const [brandsLoading, setBrandsLoading] = useState(true);
   const [connLoading, setConnLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
+  const [gateModal, setGateModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 5000); };
@@ -364,6 +369,7 @@ export default function Agency({ onSelectBrand }) {
 
   return (
     <div className="fade-in">
+      {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} onNav={onNav} />}
       {showInvite && (
         <InviteModal
           onClose={() => setShowInvite(false)}
@@ -379,7 +385,7 @@ export default function Agency({ onSelectBrand }) {
       <div className="topbar">
         <div className="topbar-title">Markalar</div>
         <div className="topbar-right">
-          <button onClick={() => setShowInvite(true)}
+          <button onClick={() => { if (!isActive) { setGateModal(true); return; } setShowInvite(true); }}
             style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219' }}>
             + Marka Davet Et
           </button>
@@ -387,6 +393,7 @@ export default function Agency({ onSelectBrand }) {
       </div>
 
       <div className="content">
+        <SubscriptionBanner onNav={onNav} />
         {successMsg && (
           <div style={{ background: 'rgba(0,191,166,0.1)', border: '1px solid rgba(0,191,166,0.3)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--teal)', fontWeight: 600, marginBottom: 16 }}>
             ✓ {successMsg}
@@ -411,7 +418,7 @@ export default function Agency({ onSelectBrand }) {
             clients={clients}
             loading={brandsLoading}
             onSelectBrand={onSelectBrand}
-            onInvite={() => setShowInvite(true)}
+            onInvite={() => { if (!isActive) { setGateModal(true); return; } setShowInvite(true); }}
           />
         )}
         {tab === 'incoming' && !connLoading && (

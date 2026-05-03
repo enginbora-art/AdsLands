@@ -214,7 +214,7 @@ function AppInner() {
   const Page = PAGES[active] || Dashboard;
 
   const mainContent = (() => {
-    if (active === 'agency') return <Agency key="agency" onSelectBrand={handleSelectBrand} />;
+    if (active === 'agency') return <Agency key="agency" onSelectBrand={handleSelectBrand} onNav={handleNav} />;
     if (sub.isFrozen && DATA_PAGES.has(active)) return <FrozenDataPage onNav={handleNav} expiredAt={sub.expiredAt} />;
     return <Page key={active} onNav={handleNav} />;
   })();

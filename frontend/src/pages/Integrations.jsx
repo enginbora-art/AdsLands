@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
+import { useSubscription } from '../context/SubscriptionContext';
+import SubscriptionGateModal from '../components/SubscriptionGateModal';
 import {
   getIntegrations,
   connectIntegration,
@@ -609,9 +611,10 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Integrations() {
+export default function Integrations({ onNav }) {
   const { user }          = useAuth();
   const { selectedBrand } = useSelectedBrand();
+  const { isActive }      = useSubscription();
   const isAgency          = user?.company_type === 'agency';
   const brandId           = isAgency && selectedBrand ? selectedBrand.id : null;
 
@@ -624,6 +627,7 @@ export default function Integrations() {
   const [disconnecting, setDisconnecting]   = useState(null);
   const [liveLoading, setLiveLoading]       = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [gateModal, setGateModal]           = useState(false);
   const [liveError, setLiveError]           = useState(null);
   const [banner, setBanner]                 = useState(null);
   const [msgBanner, setMsgBanner]           = useState(null);
@@ -690,6 +694,7 @@ export default function Integrations() {
   };
 
   const handleConnect = async (platform) => {
+    if (!isActive) { setGateModal(true); return; }
     if (platform.isApiToken) { setTokenModal(platform); return; }
     setConnecting(platform.id);
     try { await connectIntegration(platform.id, brandId); }
@@ -846,6 +851,7 @@ export default function Integrations() {
   // ── Marka entegrasyonları ─────────────────────────────────────────────────
   return (
     <div style={s.page}>
+      {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} onNav={onNav} />}
       {verifyParams && (
         <VerifyModal
           accountName={verifyParams.accountName}

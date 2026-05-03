@@ -129,7 +129,7 @@ function BudgetIntegrationWarning({ budget, integrations, onNav }) {
 }
 
 // ── Ajans özet dashboard (marka seçilmemiş) ───────────────────────────────────
-function AgencySummary() {
+function AgencySummary({ onNav }) {
   const [summary, setSummary] = useState({
     total_managed_budget: 0,
     total_clients: 0,
@@ -149,6 +149,7 @@ function AgencySummary() {
     <div className="fade-in">
       <div className="topbar"><div className="topbar-title">Dashboard</div></div>
       <div className="content">
+        <SubscriptionBanner onNav={onNav} />
         <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="Toplam Müşteri"      value={loading ? '—' : summary.total_clients}                       sub="Bağlı marka"  accent="#A78BFA" />
           <MetricCard label="Yönetilen Bütçe"     value={loading ? '—' : `₺${fmt(summary.total_managed_budget)}`}    sub="Bu ay toplam" accent="#00C9A7" />
@@ -417,7 +418,7 @@ export default function Dashboard({ onNav }) {
   }, [refreshing, fetchLastUpdated]);
 
   // Agency, marka seçilmemiş → özet kartlar
-  if (isAgency && !selectedBrand) return <AgencySummary />;
+  if (isAgency && !selectedBrand) return <AgencySummary onNav={onNav} />;
 
   const title = isAgency ? (selectedBrand?.name || selectedBrand?.company_name) : 'Dashboard';
 

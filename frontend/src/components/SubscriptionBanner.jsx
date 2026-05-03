@@ -7,30 +7,43 @@ export default function SubscriptionBanner({ onNav }) {
   const { isExpired, isFrozen, expiredAt } = useSubscription();
   const { user } = useAuth();
   const isManagedBrand = user?.is_managed_by_agency;
+  const isAgency = user?.company_type === 'agency';
 
   if (!isExpired && !isFrozen) return null;
 
   const dateStr = fmt(expiredAt);
 
-  // Managed brand: button → yönlendirme metni, aksi hâlde normal buton
-  const ActionSlot = isManagedBrand
-    ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-        Abonelik yenileme için ajansınızla iletişime geçin.
-      </span>
-    : onNav && (
+  const ActionSlot = isAgency
+    ? onNav && (
         <button
           onClick={() => onNav('subscription')}
           style={{
             padding: '7px 16px', borderRadius: 8, fontWeight: 700, fontSize: 12,
             cursor: 'pointer', whiteSpace: 'nowrap',
-            background: isFrozen ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)',
-            border:     isFrozen ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(245,158,11,0.4)',
-            color:      isFrozen ? '#ef4444' : '#f59e0b',
+            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)', color: '#f59e0b',
           }}
         >
-          Aboneliği Yenile
+          Aboneliğe Git →
         </button>
-      );
+      )
+    : isManagedBrand
+      ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+          Abonelik yenileme için ajansınızla iletişime geçin.
+        </span>
+      : onNav && (
+          <button
+            onClick={() => onNav('subscription')}
+            style={{
+              padding: '7px 16px', borderRadius: 8, fontWeight: 700, fontSize: 12,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              background: isFrozen ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)',
+              border:     isFrozen ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(245,158,11,0.4)',
+              color:      isFrozen ? '#ef4444' : '#f59e0b',
+            }}
+          >
+            Aboneliği Yenile
+          </button>
+        );
 
   if (isFrozen) {
     return (
@@ -61,9 +74,11 @@ export default function SubscriptionBanner({ onNav }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 18 }}>⚠️</span>
         <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600 }}>
-          {dateStr
-            ? <>Aboneliğiniz sona erdi — veriler <strong>{dateStr}</strong> itibarıyla dondurulmuştur.</>
-            : 'Aboneliğiniz sona erdi — veriler dondurulmuştur.'}
+          {isAgency
+            ? 'Aboneliğiniz aktif değil — hizmetler durdurulmuştur.'
+            : dateStr
+              ? <>Aboneliğiniz sona erdi — veriler <strong>{dateStr}</strong> itibarıyla dondurulmuştur.</>
+              : 'Aboneliğiniz sona erdi — veriler dondurulmuştur.'}
         </span>
       </div>
       {ActionSlot}
