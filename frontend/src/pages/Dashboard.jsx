@@ -205,9 +205,9 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
                 return (
                   <div
                     key={i.id}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: 16, marginBottom: 8, transition: 'background 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(13,27,42,0.7)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(13,27,42,0.4)'}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(13,27,42,0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: 16, marginBottom: 8, transition: 'background 0.2s' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 30, height: 30, borderRadius: 7, background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800 }}>{icon}</div>

@@ -196,7 +196,7 @@ function BellIcon() {
 }
 
 const s = {
-  header:     { background: 'rgba(6,8,16,0.9)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 1px 0 rgba(0,201,167,0.08)', display: 'flex', alignItems: 'center', zIndex: 9, boxSizing: 'border-box' },
+  header:     { background: 'rgba(10,15,30,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,201,167,0.08)', display: 'flex', alignItems: 'center', zIndex: 9, boxSizing: 'border-box' },
   right:      { display: 'flex', alignItems: 'center', gap: 12 },
   bell:       { position: 'relative', border: 'none', cursor: 'pointer', padding: 7, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.12s, background 0.12s' },
   badge:      { position: 'absolute', top: 3, right: 3, minWidth: 15, height: 15, borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 },
