@@ -3,10 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 
 const SB_NODES = [
-  { color: '#F97316', y: 0.20 },
-  { color: '#4ADE80', y: 0.38 },
-  { color: '#60A5FA', y: 0.56 },
-  { color: '#E879F9', y: 0.74 },
+  { color: '#F97316', y: 0.60 },
+  { color: '#4ADE80', y: 0.68 },
+  { color: '#60A5FA', y: 0.76 },
+  { color: '#E879F9', y: 0.84 },
 ];
 const SB_SPEEDS = [0.0035, 0.0028, 0.0042, 0.0031];
 
@@ -41,7 +41,7 @@ function SidebarCanvas() {
       ctx.clearRect(0, 0, W, H);
 
       const cx = W * 0.88;
-      const cy = H * 0.50;
+      const cy = H * 0.72;
       const nx = 14;
 
       SB_NODES.forEach(({ color, y }, i) => {
