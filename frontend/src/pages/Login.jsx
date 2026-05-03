@@ -180,6 +180,7 @@ export default function Login() {
     try {
       const { token, user } = await login(form);
       saveAuth(token, user);
+      window.location.replace(user.is_platform_admin ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Giriş başarısız.');
     } finally {

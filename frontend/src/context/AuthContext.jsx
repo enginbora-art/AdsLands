@@ -36,7 +36,9 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('selectedBrand');
     setUser(null);
+    window.location.replace('/');
   };
 
   // user.permissions içinde belirli bir izin var mı?
