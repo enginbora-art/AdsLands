@@ -776,7 +776,7 @@ export default function Channels({ onNav }) {
             </button>
           )}
           {aiUsage && (aiUsage.has_access === false
-            ? <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 12px', background: 'var(--teal)', border: 'none', borderRadius: 6, color: '#0B1219', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>Abonelik Başlat</button>
+            ? (!user?.is_managed_by_agency && <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 12px', background: 'var(--teal)', border: 'none', borderRadius: 6, color: '#0B1219', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>Abonelik Başlat</button>)
             : <span style={{ fontSize: 11, color: aiUsage.total >= aiUsage.limit ? 'var(--coral)' : 'var(--text3)', whiteSpace: 'nowrap' }}>Bugün: {aiUsage.total}/{aiUsage.limit} AI</span>
           )}
         </div>
@@ -792,9 +792,11 @@ export default function Channels({ onNav }) {
                 : '⚠ Günlük AI kullanım limitinize ulaştınız. Planınızı yükseltmek için tıklayın →'}
             </span>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 14px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                {limitReached === 'subscription' ? 'Abonelik Başlat' : 'Planı Yükselt'}
-              </button>
+              {!user?.is_managed_by_agency && (
+                <button onClick={() => onNav?.('pricing')} style={{ padding: '5px 14px', background: 'var(--coral)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  {limitReached === 'subscription' ? 'Abonelik Başlat' : 'Planı Yükselt'}
+                </button>
+              )}
               <button onClick={() => setLimitReached(false)} style={{ padding: '5px 8px', background: 'transparent', border: '1px solid rgba(255,107,90,0.4)', borderRadius: 6, color: 'var(--coral)', fontSize: 12, cursor: 'pointer' }}>✕</button>
             </div>
           </div>
