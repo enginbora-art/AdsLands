@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { getSubscription, cancelSubscription, getPaymentHistory, downloadInvoice } from '../api';
 
 const PLAN_LABELS = {
-  starter:      'Ajans Starter',
-  growth:       'Ajans Growth',
-  scale:        'Ajans Scale',
-  brand_direct: 'Marka Direkt',
+  starter:          'Basic',
+  growth:           'Pro',
+  scale:            'Enterprise',
+  brand_basic:      'Basic',
+  brand_pro:        'Pro',
+  brand_enterprise: 'Enterprise',
+  brand_direct:     'Direct',
 };
 
 const STATUS_CFG = {
@@ -16,10 +19,10 @@ const STATUS_CFG = {
 };
 
 const TX_STATUS = {
-  pending:  { label: 'Bekliyor',  color: '#f59e0b' },
-  success:  { label: 'Başarılı',  color: '#10b981' },
-  failed:   { label: 'Başarısız', color: '#ef4444' },
-  refunded: { label: 'İade',      color: '#8b5cf6' },
+  pending:  { label: 'Bekliyor',  color: '#F59E0B' },
+  success:  { label: 'Başarılı',  color: '#00C9A7' },
+  failed:   { label: 'Başarısız', color: '#EF4444' },
+  refunded: { label: 'İade',      color: '#A78BFA' },
 };
 
 const fmt      = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '—';
@@ -284,16 +287,16 @@ export default function Subscription({ onNav }) {
             Yükleniyor...
           </div>
         ) : history.length === 0 ? (
-          <div style={{ background: '#161b27', border: '1px solid #1e2535', borderRadius: 12, padding: '28px 24px', color: '#64748b', fontSize: 13, textAlign: 'center' }}>
+          <div style={{ background: 'rgba(13,27,42,0.6)', border: '1px solid rgba(0,201,167,0.08)', borderRadius: 12, padding: '28px 24px', color: 'var(--text3)', fontSize: 13, textAlign: 'center' }}>
             Bu dönemde ödeme kaydı yok.
           </div>
         ) : (
-          <div style={{ background: '#161b27', border: '1px solid #1e2535', borderRadius: 12, overflow: 'hidden', marginBottom: 0 }}>
+          <div style={{ background: 'rgba(13,27,42,0.6)', border: '1px solid rgba(0,201,167,0.08)', borderRadius: 12, overflow: 'hidden', marginBottom: 0 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e2535' }}>
+                <tr style={{ background: 'rgba(0,201,167,0.05)', borderBottom: '1px solid rgba(0,201,167,0.1)' }}>
                   {['Tarih', 'Plan', 'Tutar', 'Durum', 'İşlem ID', 'Fatura'].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', fontWeight: 600 }}>
+                    <th key={h} style={{ padding: '12px 16px', fontSize: 11, color: 'rgba(0,201,167,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', fontWeight: 600 }}>
                       {h}
                     </th>
                   ))}
@@ -304,21 +307,21 @@ export default function Subscription({ onNav }) {
                   const stCfg = TX_STATUS[tx.status] || TX_STATUS.pending;
                   const invoiceUrl = downloadInvoice(tx.id);
                   return (
-                    <tr key={tx.id} style={{ borderBottom: i < history.length - 1 ? '1px solid #1e2535' : 'none' }}>
-                      <td style={{ padding: '13px 16px', fontSize: 13, color: '#cbd5e1' }}>{fmt(tx.created_at)}</td>
-                      <td style={{ padding: '13px 16px', fontSize: 13, color: '#f1f5f9', fontWeight: 500 }}>
+                    <tr key={tx.id} style={{ borderBottom: i < history.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                      <td style={{ padding: '13px 16px', fontSize: 13, color: 'var(--text2)' }}>{fmt(tx.created_at)}</td>
+                      <td style={{ padding: '13px 16px', fontSize: 13, color: 'var(--text1)', fontWeight: 500 }}>
                         {PLAN_LABELS[tx.plan] || tx.plan || '—'}
-                        {tx.interval && <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>{tx.interval === 'yearly' ? 'Yıllık' : 'Aylık'}</span>}
+                        {tx.interval && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>{tx.interval === 'yearly' ? 'Yıllık' : 'Aylık'}</span>}
                       </td>
-                      <td style={{ padding: '13px 16px', fontSize: 13, color: '#10b981', fontWeight: 600 }}>
+                      <td style={{ padding: '13px 16px', fontSize: 13, color: '#00C9A7', fontWeight: 600 }}>
                         {fmtMoney(tx.amount)}
                       </td>
                       <td style={{ padding: '13px 16px' }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: stCfg.color, background: `${stCfg.color}18`, padding: '3px 10px', borderRadius: 12 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: stCfg.color, background: `${stCfg.color}26`, border: `1px solid ${stCfg.color}4D`, padding: '3px 10px', borderRadius: 12 }}>
                           {stCfg.label}
                         </span>
                       </td>
-                      <td style={{ padding: '13px 16px', fontSize: 11, color: '#475569', fontFamily: 'monospace' }}>
+                      <td style={{ padding: '13px 16px', fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' }}>
                         {(tx.order_id || '').slice(0, 8)}…
                       </td>
                       <td style={{ padding: '13px 16px' }}>
@@ -339,21 +342,21 @@ export default function Subscription({ onNav }) {
               </tbody>
             </table>
             {totalPages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '14px 16px', borderTop: '1px solid #1e2535' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                 <button
                   onClick={() => handlePage(page - 1)}
                   disabled={page <= 1}
-                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid #2d3748', color: page <= 1 ? '#475569' : '#cbd5e1', fontWeight: 600, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}
+                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: page <= 1 ? 'var(--text3)' : 'var(--text2)', fontWeight: 600, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}
                 >
                   ← Önceki
                 </button>
-                <span style={{ fontSize: 12, color: '#64748b' }}>
-                  Sayfa <strong style={{ color: '#f1f5f9' }}>{page}</strong> / {totalPages}
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Sayfa <strong style={{ color: 'var(--text1)' }}>{page}</strong> / {totalPages}
                 </span>
                 <button
                   onClick={() => handlePage(page + 1)}
                   disabled={page >= totalPages}
-                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid #2d3748', color: page >= totalPages ? '#475569' : '#cbd5e1', fontWeight: 600, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}
+                  style={{ padding: '6px 14px', borderRadius: 7, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: page >= totalPages ? 'var(--text3)' : 'var(--text2)', fontWeight: 600, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}
                 >
                   Sonraki →
                 </button>

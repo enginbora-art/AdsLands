@@ -243,8 +243,8 @@ body { font-family: var(--font); color: var(--text1); overflow-x: hidden; }
 .toggle.on { background: var(--teal); }
 .toggle::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: white; position: absolute; top: 3px; left: 3px; transition: left 0.2s; }
 .toggle.on::after { left: 21px; }
-.sinput { width: 100%; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; color: var(--text1); font-size: 13px; font-family: var(--font); outline: none; transition: border-color 0.15s; }
-.sinput:focus { border-color: var(--teal); }
+.sinput { width: 100%; padding: 10px 12px; background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 10px !important; color: white !important; font-size: 13px; font-family: var(--font); outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.sinput:focus { border-color: rgba(0,201,167,0.5) !important; box-shadow: 0 0 0 3px rgba(0,201,167,0.1); }
 
 /* Loading */
 .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--text3); font-size: 14px; }
@@ -260,10 +260,11 @@ body { font-family: var(--font); color: var(--text1); overflow-x: hidden; }
 
 /* Comparison table */
 .cmp-table { width: 100%; border-collapse: collapse; table-layout: auto; }
-.cmp-table th { text-align: left; padding: 10px 16px; font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid rgba(255,255,255,0.08); white-space: nowrap; }
-.cmp-table td { padding: 13px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+.cmp-table thead tr { background: rgba(0,201,167,0.05); }
+.cmp-table th { text-align: left; padding: 10px 16px; font-size: 11px; color: rgba(0,201,167,0.7); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(0,201,167,0.1); white-space: nowrap; }
+.cmp-table td { padding: 13px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
 .cmp-table tr:last-child td { border-bottom: none; }
-.cmp-table tr.hover-row:hover td { background: rgba(255,255,255,0.03); }
+.cmp-table tr.hover-row:hover td, .cmp-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
 .cmp-table .col-num { text-align: right; font-family: var(--mono); }
 .cmp-table th.col-num { text-align: right; font-family: var(--font); }
 .cmp-table .col-center { text-align: center; }

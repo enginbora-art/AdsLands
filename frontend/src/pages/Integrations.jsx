@@ -159,10 +159,11 @@ function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onCo
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
           style={{
-            background: isConnecting ? '#3d4858' : hover ? '#0891b2' : '#06b6d4',
-            color: '#ffffff',
+            background: isConnecting ? 'rgba(0,201,167,0.05)' : hover ? 'rgba(0,201,167,0.1)' : 'transparent',
+            border: '1px solid #00C9A7',
+            color: '#00C9A7',
             fontWeight: 700,
-            borderRadius: 7,
+            borderRadius: 8,
             padding: '8px 0',
             textAlign: 'center',
             cursor: isConnecting ? 'not-allowed' : 'pointer',

@@ -262,7 +262,7 @@ export default function UserManagement() {
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border2)', paddingBottom: 0 }}>
           {['users', 'roles'].map(t => (
             <button key={t} onClick={() => setTab(t)}
-              style={{ padding: '8px 18px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--teal)' : '2px solid transparent', color: tab === t ? 'var(--teal)' : 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: -1 }}>
+              style={{ padding: '8px 18px', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid #00C9A7' : '2px solid transparent', color: tab === t ? '#00C9A7' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: -1 }}>
               {t === 'users' ? 'Kullanıcılar' : 'Roller'}
             </button>
           ))}
@@ -291,7 +291,7 @@ export default function UserManagement() {
                     </td>
                     <td>
                       {u.is_company_admin ? (
-                        <span style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#A78BFA', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Admin</span>
+                        <span style={{ fontSize: 11, background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Admin</span>
                       ) : isAdmin ? (
                         <select
                           value={u.role_id || ''}
@@ -308,7 +308,7 @@ export default function UserManagement() {
                       {u.is_company_admin ? 'Tüm yetkiler' : (u.permissions?.length ? u.permissions.map(p => PERM_LABELS[p] || p).join(', ') : '—')}
                     </td>
                     <td>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: u.is_active ? 'rgba(52,211,153,0.12)' : 'rgba(255,107,90,0.12)', color: u.is_active ? 'var(--success)' : 'var(--coral)' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: u.is_active ? 'rgba(0,201,167,0.15)' : 'rgba(239,68,68,0.15)', color: u.is_active ? '#00C9A7' : '#EF4444', border: `1px solid ${u.is_active ? 'rgba(0,201,167,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                         {u.is_active ? 'Aktif' : 'Pasif'}
                       </span>
                     </td>
