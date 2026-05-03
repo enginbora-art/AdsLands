@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getChannelData, getAiUsageToday, getAiQueueStatus } from '../api';
+import { getChannelData, getAiUsageToday, getAiQueueStatus, getCampaigns, getCampaign } from '../api';
 import { useSubscription } from '../context/SubscriptionContext';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 import SubscriptionGateModal from '../components/SubscriptionGateModal';
@@ -520,6 +520,10 @@ export default function Channels({ onNav }) {
   const [kpiStatus, setKpiStatus]     = useState('idle');
   const [queueInfo, setQueueInfo]     = useState({ size: 0, pending: 0 });
 
+  const [selectedCampaignFilter, setSelectedCampaignFilter] = useState(null);
+  const [campaignsList, setCampaignsList]                   = useState([]);
+  const [campaignDetail, setCampaignDetail]                 = useState(null);
+
   const brandName  = selectedBrand?.company_name || selectedBrand?.name;
   const brandId    = isAgency ? selectedBrand?.id : undefined;
   const kpiBrandId = isAgency ? selectedBrand?.id : user?.company_id;
@@ -535,6 +539,17 @@ export default function Channels({ onNav }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { getAiUsageToday().then(setAiUsage).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (needsBrand) return;
+    const params = isAgency && selectedBrand ? { brand_id: selectedBrand.id, status: 'active' } : { status: 'active' };
+    getCampaigns(params).then(setCampaignsList).catch(() => setCampaignsList([]));
+  }, [needsBrand, isAgency, selectedBrand?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedCampaignFilter) { setCampaignDetail(null); return; }
+    getCampaign(selectedCampaignFilter).then(setCampaignDetail).catch(() => setCampaignDetail(null));
+  }, [selectedCampaignFilter]);
   useEffect(() => {
     if (!aiLoading && !kpiLoading) return;
     const id = setInterval(() => { getAiQueueStatus().then(setQueueInfo).catch(() => {}); }, 3000);
@@ -563,7 +578,14 @@ export default function Channels({ onNav }) {
   const allAdIntegrations = allIntegrations.filter(i => ALL_PLATFORMS.includes(i.platform));
   const connectedKeys    = allIntegrations.map(i => i.platform);
   const hasAnyData       = allAdIntegrations.length > 0;
-  const hasAdData        = adIntegrations.some(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_impressions) > 0);
+
+  // Campaign filter — when a campaign is selected, narrow down to its channels
+  const campaignPlatforms = campaignDetail?.channels?.map(c => c.platform) ?? null;
+  const visibleAd = campaignPlatforms
+    ? adIntegrations.filter(i => campaignPlatforms.includes(i.platform))
+    : adIntegrations;
+
+  const hasAdData = visibleAd.some(i => parseFloat(i.total_spend) > 0 || parseInt(i.total_impressions) > 0);
   const sector           = data?.sector || 'Diğer';
 
   const gaData = gaIntegration ? {
@@ -574,11 +596,11 @@ export default function Channels({ onNav }) {
       ? (parseInt(gaIntegration.total_conversions) / parseInt(gaIntegration.total_impressions) * 100) : 0,
   } : null;
 
-  const totalSpend  = adIntegrations.reduce((s, i) => s + parseFloat(i.total_spend), 0);
-  const totalConv   = adIntegrations.reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
-  const totalClicks = adIntegrations.reduce((s, i) => s + parseInt(i.total_clicks || 0), 0);
-  const totalImp    = adIntegrations.reduce((s, i) => s + parseInt(i.total_impressions || 0), 0);
-  const roasVals    = adIntegrations.filter(i => parseFloat(i.avg_roas) > 0);
+  const totalSpend  = visibleAd.reduce((s, i) => s + parseFloat(i.total_spend), 0);
+  const totalConv   = visibleAd.reduce((s, i) => s + parseInt(i.total_conversions || 0), 0);
+  const totalClicks = visibleAd.reduce((s, i) => s + parseInt(i.total_clicks || 0), 0);
+  const totalImp    = visibleAd.reduce((s, i) => s + parseInt(i.total_impressions || 0), 0);
+  const roasVals    = visibleAd.filter(i => parseFloat(i.avg_roas) > 0);
   const avgRoas     = roasVals.length ? roasVals.reduce((s, i) => s + parseFloat(i.avg_roas), 0) / roasVals.length : 0;
   const avgCtr      = totalImp > 0 ? (totalClicks / totalImp * 100) : 0;
   const avgCpa      = totalConv > 0 ? totalSpend / totalConv : null;
@@ -593,7 +615,7 @@ export default function Channels({ onNav }) {
   const sectorBm  = BENCHMARKS[sector] || BENCHMARKS['Diğer'];
   const bmRoasAvg = (sectorBm.google_roas + sectorBm.meta_roas) / 2;
 
-  const scored = adIntegrations.map(i => ({
+  const scored = visibleAd.map(i => ({
     ...i,
     ctr: calcCtr(i), cpa: calcCpa(i),
     bm: getBenchmark(sector, i.platform),
@@ -609,7 +631,7 @@ export default function Channels({ onNav }) {
   const chartData       = buildChartData(data?.dailyMetrics || [], data?.anomalyDates || []);
   const dailyMetrics    = data?.dailyMetrics || [];
 
-  const pieData = adIntegrations
+  const pieData = visibleAd
     .filter(i => parseFloat(i.total_spend) > 0)
     .map(i => ({ name: PLATFORM_LABELS[i.platform]||i.platform, value: parseFloat(i.total_spend), color: PLATFORM_COLORS[i.platform]||'#888', platform: i.platform }));
 
@@ -756,6 +778,16 @@ export default function Channels({ onNav }) {
       <div className="topbar">
         <div className="topbar-title">{title}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {campaignsList.length > 0 && (
+            <select
+              value={selectedCampaignFilter || ''}
+              onChange={e => setSelectedCampaignFilter(e.target.value || null)}
+              style={{ ...s.select, fontWeight: selectedCampaignFilter ? 600 : 400, borderColor: selectedCampaignFilter ? 'var(--teal)' : 'var(--border2)', color: selectedCampaignFilter ? 'var(--teal)' : 'var(--text2)' }}
+            >
+              <option value="">Tüm Kampanyalar</option>
+              {campaignsList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           <div style={s.filterGroup}>
             {[7, 30, 90].map(d => (
               <button key={d} onClick={() => setDays(d)}
@@ -768,7 +800,7 @@ export default function Channels({ onNav }) {
             <option value="all">Tüm Kanallar</option>
             {SPEND_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
           </select>
-          {hasAdData && <button onClick={() => { if (!isActive) { setGateModal(true); return; } exportCsv(adIntegrations, sector); }} style={s.exportBtn}>↓ CSV</button>}
+          {hasAdData && <button onClick={() => { if (!isActive) { setGateModal(true); return; } exportCsv(visibleAd, sector); }} style={s.exportBtn}>↓ CSV</button>}
           {kpiBrandId && (
             <button onClick={() => { if (!isActive) { setGateModal(true); return; } runKpiAnalysis(); }} disabled={kpiLoading}
               style={{ ...s.exportBtn, background: kpiPanelOpen ? 'rgba(139,92,246,0.15)' : 'transparent', borderColor: '#8b5cf6', color: '#a78bfa' }}>
@@ -817,22 +849,42 @@ export default function Channels({ onNav }) {
         ) : (
           <>
             {hasAdData && (
-              <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 18px', display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', flex: 1 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>Toplam: <strong style={{ color: 'var(--text1)', fontFamily: 'var(--mono)' }}>{fmtTL(totalSpend)}</strong></span>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>Ort. ROAS: <strong style={{ color: avgRoas >= bmRoasAvg ? '#10B981' : '#F59E0B' }}>{avgRoas.toFixed(2)}x</strong></span>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>Dönüşüm: <strong>{fmtN(totalConv)}</strong></span>
-                  {avgCpa && <span style={{ fontSize: 12, color: 'var(--text2)' }}>Ort. CPA: <strong>{fmtTL(avgCpa)}</strong></span>}
-                  <BenchmarkTag label="ROAS" actual={avgRoas} benchmark={bmRoasAvg} unit="x" />
+              <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 18px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', flex: 1 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>Toplam: <strong style={{ color: 'var(--text1)', fontFamily: 'var(--mono)' }}>{fmtTL(totalSpend)}</strong></span>
+                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>Ort. ROAS: <strong style={{ color: avgRoas >= bmRoasAvg ? '#10B981' : '#F59E0B' }}>{avgRoas.toFixed(2)}x</strong></span>
+                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>Dönüşüm: <strong>{fmtN(totalConv)}</strong></span>
+                    {avgCpa && <span style={{ fontSize: 12, color: 'var(--text2)' }}>Ort. CPA: <strong>{fmtTL(avgCpa)}</strong></span>}
+                    <BenchmarkTag label="ROAS" actual={avgRoas} benchmark={bmRoasAvg} unit="x" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <ChangeArrow pct={pctChange(totalSpend, prevSpend)} />
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>harcama · önceki dönem</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <ChangeArrow pct={pctChange(totalSpend, prevSpend)} />
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>harcama · önceki dönem</span>
-                </div>
+                {campaignDetail && (() => {
+                  const campTotal = parseFloat(campaignDetail.total_budget) || 0;
+                  const pct = campTotal > 0 ? Math.min(100, (totalSpend / campTotal) * 100) : 0;
+                  return (
+                    <div style={{ borderTop: '1px solid var(--border2)', paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Kampanya Bütçesi</span>
+                        <span style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
+                          {fmtTL(totalSpend)} / {fmtTL(campTotal)} harcandı
+                          <span style={{ marginLeft: 6, color: pct >= 80 ? '#F59E0B' : '#10B981', fontWeight: 700 }}>%{pct.toFixed(0)}</span>
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--bg)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: pct >= 80 ? '#F59E0B' : '#0d9488', borderRadius: 3, transition: 'width 0.4s' }} />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
-              {adIntegrations.map(integration => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: campaignDetail ? 8 : 24 }}>
+              {visibleAd.map(integration => (
                 <PlatformSpendCard
                   key={integration.id}
                   integration={integration}
@@ -843,6 +895,20 @@ export default function Channels({ onNav }) {
                 />
               ))}
             </div>
+            {campaignDetail && visibleAd.length > 0 && totalSpend > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 24, padding: '6px 0', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text2)' }}>Bu kampanyada:</span>
+                {visibleAd.filter(i => parseFloat(i.total_spend) > 0).map(i => {
+                  const pct = totalSpend > 0 ? Math.round(parseFloat(i.total_spend) / totalSpend * 100) : 0;
+                  return (
+                    <span key={i.platform} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border2)' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: PLATFORM_COLORS[i.platform] || '#888', flexShrink: 0 }} />
+                      {PLATFORM_LABELS[i.platform] || i.platform} <strong>%{pct}</strong>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             {gaData && (
               <div style={{ marginBottom: 24 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#E37400', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
