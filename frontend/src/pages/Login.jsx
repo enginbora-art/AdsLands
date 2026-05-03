@@ -7,23 +7,23 @@ import ForgotPassword from './ForgotPassword';
 // ps = pulse speed (rad/frame), po = pulse phase offset
 
 const NODES = [
-  // Dış halka — r 10-14, merkeze 0.25-0.35 mesafe
-  { x: 0.73, y: 0.31, r: 12, color: '#60A5FA', ps: 0.048, po: 0.0,  cpOff: [ 0.08, -0.06] },
-  { x: 0.27, y: 0.27, r: 14, color: '#F97316', ps: 0.036, po: 1.2,  cpOff: [-0.10,  0.05] },
-  { x: 0.25, y: 0.64, r: 11, color: '#E879F9', ps: 0.052, po: 2.4,  cpOff: [-0.08, -0.10] },
-  { x: 0.74, y: 0.70, r: 13, color: '#4ADE80', ps: 0.040, po: 0.8,  cpOff: [ 0.10,  0.08] },
-  // Orta halka — r 6-8, merkeze 0.15-0.20 mesafe
-  { x: 0.66, y: 0.46, r: 7,  color: '#38BDF8', ps: 0.058, po: 1.5,  cpOff: [ 0.06, -0.10] },
-  { x: 0.53, y: 0.32, r: 8,  color: '#A78BFA', ps: 0.044, po: 0.3,  cpOff: [-0.06,  0.08] },
-  { x: 0.32, y: 0.44, r: 6,  color: '#86EFAC', ps: 0.062, po: 2.0,  cpOff: [ 0.10,  0.06] },
-  { x: 0.40, y: 0.64, r: 7,  color: '#FCA5A5', ps: 0.038, po: 3.1,  cpOff: [-0.08,  0.10] },
-  { x: 0.57, y: 0.64, r: 8,  color: '#F59E0B', ps: 0.046, po: 1.8,  cpOff: [ 0.08, -0.08] },
-  // İç halka — r 3-4, merkeze 0.08-0.12 mesafe
-  { x: 0.59, y: 0.46, r: 4,  color: '#00C9A7', ps: 0.064, po: 0.5,  cpOff: [ 0.04, -0.06] },
-  { x: 0.48, y: 0.41, r: 3,  color: '#F97316', ps: 0.070, po: 2.2,  cpOff: [-0.05,  0.04] },
-  { x: 0.39, y: 0.49, r: 4,  color: '#E879F9', ps: 0.056, po: 1.0,  cpOff: [-0.06, -0.04] },
-  { x: 0.47, y: 0.60, r: 3,  color: '#60A5FA', ps: 0.060, po: 2.8,  cpOff: [ 0.04,  0.06] },
-  { x: 0.59, y: 0.53, r: 4,  color: '#4ADE80', ps: 0.066, po: 0.2,  cpOff: [ 0.06,  0.04] },
+  // Dış halka — r 10-14, köşelere yayılmış (~0.40-0.46 mesafe)
+  { x: 0.84, y: 0.26, r: 12, color: '#60A5FA', ps: 0.048, po: 0.0,  cpOff: [ 0.05,  0.12] },
+  { x: 0.16, y: 0.22, r: 14, color: '#F97316', ps: 0.036, po: 1.2,  cpOff: [-0.10, -0.08] },
+  { x: 0.13, y: 0.72, r: 11, color: '#E879F9', ps: 0.052, po: 2.4,  cpOff: [-0.12,  0.06] },
+  { x: 0.79, y: 0.85, r: 13, color: '#4ADE80', ps: 0.040, po: 0.8,  cpOff: [ 0.08, -0.10] },
+  // Orta halka — r 6-8, kenar ortalara (~0.28-0.34 mesafe)
+  { x: 0.80, y: 0.45, r: 7,  color: '#38BDF8', ps: 0.058, po: 1.5,  cpOff: [ 0.04, -0.12] },
+  { x: 0.58, y: 0.19, r: 8,  color: '#A78BFA', ps: 0.044, po: 0.3,  cpOff: [-0.08,  0.06] },
+  { x: 0.24, y: 0.38, r: 6,  color: '#86EFAC', ps: 0.062, po: 2.0,  cpOff: [ 0.10,  0.08] },
+  { x: 0.32, y: 0.75, r: 7,  color: '#FCA5A5', ps: 0.038, po: 3.1,  cpOff: [-0.06, -0.10] },
+  { x: 0.60, y: 0.76, r: 8,  color: '#F59E0B', ps: 0.046, po: 1.8,  cpOff: [ 0.10,  0.06] },
+  // İç halka — r 3-4, merkeze yakın (~0.12-0.16 mesafe)
+  { x: 0.64, y: 0.45, r: 4,  color: '#00C9A7', ps: 0.064, po: 0.5,  cpOff: [ 0.04, -0.08] },
+  { x: 0.49, y: 0.37, r: 3,  color: '#F97316', ps: 0.070, po: 2.2,  cpOff: [-0.06,  0.04] },
+  { x: 0.34, y: 0.49, r: 4,  color: '#E879F9', ps: 0.056, po: 1.0,  cpOff: [-0.04, -0.06] },
+  { x: 0.46, y: 0.64, r: 3,  color: '#60A5FA', ps: 0.060, po: 2.8,  cpOff: [ 0.06,  0.04] },
+  { x: 0.60, y: 0.56, r: 4,  color: '#4ADE80', ps: 0.066, po: 0.2,  cpOff: [ 0.04,  0.06] },
 ];
 
 const CENTER = { x: 0.50, y: 0.50 };
