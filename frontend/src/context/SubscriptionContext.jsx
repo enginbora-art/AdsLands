@@ -20,14 +20,22 @@ export function SubscriptionProvider({ children }) {
     }
 
     const periodEnd = user.subscription_period_end ? new Date(user.subscription_period_end) : null;
-    const status    = user.subscription_status;
+    const status    = user.subscription_status; // en güncel kayıt — 'active','trialing','cancelled','past_due','passive','inactive' veya null
     const now       = new Date();
 
     if (!periodEnd) {
-      // Hiç abonelik olmamış — plan gating Sidebar'da ele alınır, expiry flow değil
+      // Subscription kaydı hiç yok:
+      // - Ajans yönetimindeki marka → ajansın aboneliği yok = expired banner göster
+      // - Doğrudan kullanıcı → plan upgrade akışına gider (Sidebar gating)
+      if (user.is_managed_by_agency) {
+        return { accessState: 'expired', isActive: false, isExpired: true, isFrozen: false, expiredAt: null, frozenAt: null };
+      }
       return { accessState: 'none', isActive: false, isExpired: false, isFrozen: false, expiredAt: null, frozenAt: null };
     }
 
+    // Yalnızca 'active' veya 'trialing' + geçerli dönem → aktif
+    // 'cancelled' + pending cancel + geçerli dönem → hâlâ aktif (dönem sonuna kadar)
+    // Diğer her şey ('past_due','passive','inactive', bilinmeyen) → pasif/süresi dolmuş
     const effectivelyActive =
       (status === 'active'    && periodEnd > now) ||
       (status === 'trialing'  && periodEnd > now) ||
@@ -37,7 +45,7 @@ export function SubscriptionProvider({ children }) {
       return { accessState: 'active', isActive: true, isExpired: false, isFrozen: false, expiredAt: periodEnd, frozenAt: null };
     }
 
-    // Süresi dolmuş
+    // Süresi dolmuş; 30 gün sonra tamamen dondur
     const frozenAt = new Date(periodEnd.getTime() + 30 * 24 * 60 * 60 * 1000);
     if (now > frozenAt) {
       return { accessState: 'frozen', isActive: false, isExpired: true, isFrozen: true, expiredAt: periodEnd, frozenAt };

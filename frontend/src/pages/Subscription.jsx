@@ -61,8 +61,8 @@ function CancelModal({ onConfirm, onCancel, loading, periodEnd }) {
 
 export default function Subscription({ onNav }) {
   const { user } = useAuth();
-  // Ajans tarafından yönetilen marka kullanıcıları abonelik başlatamaz
-  const canManageSubscription = !(user?.company_type === 'brand' && user?.is_managed_by_agency);
+  // Ajansa bağlı marka kullanıcıları aboneliği hiçbir zaman yönetemez
+  const canManageSubscription = !user?.is_managed_by_agency;
   const [sub, setSub]               = useState(null);
   const [history, setHistory]       = useState([]);
   const [loading, setLoading]       = useState(true);

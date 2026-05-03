@@ -76,13 +76,13 @@ router.get('/me', auth, async (req, res) => {
                WHERE s.company_id = COALESCE(
                  (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
                  u.company_id
-               ) AND s.status IN ('active','cancelled','trialing','past_due')
+               )
                ORDER BY s.created_at DESC LIMIT 1) AS subscription_status,
               (SELECT s.current_period_end FROM subscriptions s
                WHERE s.company_id = COALESCE(
                  (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
                  u.company_id
-               ) AND s.status IN ('active','cancelled','trialing','past_due')
+               )
                ORDER BY s.created_at DESC LIMIT 1) AS subscription_period_end
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id
