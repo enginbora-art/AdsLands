@@ -3,37 +3,37 @@ import { login } from '../api';
 import { useAuth } from '../context/AuthContext';
 import ForgotPassword from './ForgotPassword';
 
-// ─── Platform & animasyon sabitleri ───────────────────────────────────────────
+// ─── Nebula node sabitleri ────────────────────────────────────────────────────
+// ps = pulse speed (rad/frame), po = pulse phase offset
 
-const PLATFORMS = [
-  { id: 'GA',  label: 'Google Analytics', color: '#F97316', x: 0.15, y: 0.20 },
-  { id: 'G',   label: 'Google Ads',       color: '#4ADE80', x: 0.12, y: 0.45 },
-  { id: 'M',   label: 'Meta Ads',         color: '#60A5FA', x: 0.18, y: 0.70 },
-  { id: 'T',   label: 'TikTok',           color: '#E879F9', x: 0.55, y: 0.12 },
-  { id: 'in',  label: 'LinkedIn',         color: '#38BDF8', x: 0.60, y: 0.85 },
-  { id: 'AF',  label: 'AppsFlyer',        color: '#86EFAC', x: 0.75, y: 0.25 },
-  { id: 'ADJ', label: 'Adjust',           color: '#FCA5A5', x: 0.80, y: 0.65 },
-  { id: 'ADF', label: 'Adform',           color: '#A78BFA', x: 0.45, y: 0.92 },
+const NODES = [
+  // Dış halka — r 10-14, merkeze 0.25-0.35 mesafe
+  { x: 0.73, y: 0.31, r: 12, color: '#60A5FA', ps: 0.048, po: 0.0,  cpOff: [ 0.08, -0.06] },
+  { x: 0.27, y: 0.27, r: 14, color: '#F97316', ps: 0.036, po: 1.2,  cpOff: [-0.10,  0.05] },
+  { x: 0.25, y: 0.64, r: 11, color: '#E879F9', ps: 0.052, po: 2.4,  cpOff: [-0.08, -0.10] },
+  { x: 0.74, y: 0.70, r: 13, color: '#4ADE80', ps: 0.040, po: 0.8,  cpOff: [ 0.10,  0.08] },
+  // Orta halka — r 6-8, merkeze 0.15-0.20 mesafe
+  { x: 0.66, y: 0.46, r: 7,  color: '#38BDF8', ps: 0.058, po: 1.5,  cpOff: [ 0.06, -0.10] },
+  { x: 0.53, y: 0.32, r: 8,  color: '#A78BFA', ps: 0.044, po: 0.3,  cpOff: [-0.06,  0.08] },
+  { x: 0.32, y: 0.44, r: 6,  color: '#86EFAC', ps: 0.062, po: 2.0,  cpOff: [ 0.10,  0.06] },
+  { x: 0.40, y: 0.64, r: 7,  color: '#FCA5A5', ps: 0.038, po: 3.1,  cpOff: [-0.08,  0.10] },
+  { x: 0.57, y: 0.64, r: 8,  color: '#F59E0B', ps: 0.046, po: 1.8,  cpOff: [ 0.08, -0.08] },
+  // İç halka — r 3-4, merkeze 0.08-0.12 mesafe
+  { x: 0.59, y: 0.46, r: 4,  color: '#00C9A7', ps: 0.064, po: 0.5,  cpOff: [ 0.04, -0.06] },
+  { x: 0.48, y: 0.41, r: 3,  color: '#F97316', ps: 0.070, po: 2.2,  cpOff: [-0.05,  0.04] },
+  { x: 0.39, y: 0.49, r: 4,  color: '#E879F9', ps: 0.056, po: 1.0,  cpOff: [-0.06, -0.04] },
+  { x: 0.47, y: 0.60, r: 3,  color: '#60A5FA', ps: 0.060, po: 2.8,  cpOff: [ 0.04,  0.06] },
+  { x: 0.59, y: 0.53, r: 4,  color: '#4ADE80', ps: 0.066, po: 0.2,  cpOff: [ 0.06,  0.04] },
 ];
 
 const CENTER = { x: 0.50, y: 0.50 };
 
-// Deterministic kontrol noktası offsetleri (platform başına)
-const CP_OFFSETS = [
-  [ 0.12, -0.08], [-0.10,  0.15], [ 0.08,  0.10], [-0.14, -0.12],
-  [ 0.10, -0.10], [-0.08,  0.12], [ 0.06, -0.14], [-0.12,  0.06],
-];
-
-// Paket hızları (platform başına 3 paket)
+// Paket hızları (node başına 2 paket)
 const PKT_SPEEDS = [
-  [0.0040, 0.0060, 0.0030],
-  [0.0050, 0.0030, 0.0070],
-  [0.0040, 0.0055, 0.0033],
-  [0.0060, 0.0040, 0.0050],
-  [0.0033, 0.0070, 0.0042],
-  [0.0050, 0.0042, 0.0060],
-  [0.0044, 0.0062, 0.0031],
-  [0.0070, 0.0033, 0.0051],
+  [0.0040, 0.0060], [0.0050, 0.0035], [0.0045, 0.0065], [0.0055, 0.0040],
+  [0.0048, 0.0032], [0.0062, 0.0042], [0.0038, 0.0058], [0.0052, 0.0068],
+  [0.0044, 0.0030], [0.0070, 0.0050], [0.0055, 0.0038], [0.0042, 0.0064],
+  [0.0060, 0.0044], [0.0035, 0.0055],
 ];
 
 // Quadratic bezier noktası
@@ -63,14 +63,14 @@ export default function Login() {
     const ctx = canvas.getContext('2d');
 
     // Curve data + paket state
-    const curves = PLATFORMS.map((p, i) => {
-      const [ox, oy] = CP_OFFSETS[i];
+    const curves = NODES.map((n, i) => {
+      const [ox, oy] = n.cpOff;
       return {
-        p,
-        cpx: p.x + (CENTER.x - p.x) * 0.4 + ox,
-        cpy: p.y + (CENTER.y - p.y) * 0.4 + oy,
+        n,
+        cpx: n.x + (CENTER.x - n.x) * 0.4 + ox,
+        cpy: n.y + (CENTER.y - n.y) * 0.4 + oy,
         pkts: PKT_SPEEDS[i].map((speed, j) => ({
-          t: (j * 0.33 + i * 0.12) % 1,
+          t: (j * 0.5 + i * 0.07) % 1,
           speed,
         })),
       };
@@ -97,53 +97,52 @@ export default function Login() {
       const cy = CENTER.y * H;
 
       // Bezier çizgileri
-      curves.forEach(({ p, cpx, cpy }) => {
+      curves.forEach(({ n, cpx, cpy }) => {
         ctx.beginPath();
-        ctx.moveTo(p.x * W, p.y * H);
+        ctx.moveTo(n.x * W, n.y * H);
         ctx.quadraticCurveTo(cpx * W, cpy * H, cx, cy);
-        ctx.strokeStyle = p.color + '3D';
+        ctx.strokeStyle = n.color + '3D';
         ctx.lineWidth = 1;
         ctx.stroke();
       });
 
-      // Merkez glow
-      const glowR = 55 + 8 * Math.sin(frame * 0.022);
+      // Merkez glow (güçlü)
+      const glowR = 70 + 12 * Math.sin(frame * 0.022);
       const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      grd.addColorStop(0, 'rgba(0,201,167,0.22)');
+      grd.addColorStop(0, 'rgba(0,201,167,0.35)');
+      grd.addColorStop(0.4, 'rgba(0,201,167,0.12)');
       grd.addColorStop(1, 'rgba(0,201,167,0)');
       ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
       ctx.fillStyle = grd; ctx.fill();
 
-      // Merkez düğüm (AdsLands "A")
-      const cGrd = ctx.createLinearGradient(cx - 26, cy - 26, cx + 26, cy + 26);
+      // Merkez düğüm — 30px, "A"
+      const cGrd = ctx.createLinearGradient(cx - 30, cy - 30, cx + 30, cy + 30);
       cGrd.addColorStop(0, '#00C9A7'); cGrd.addColorStop(1, '#0891B2');
-      ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2);
       ctx.fillStyle = cGrd; ctx.fill();
-      ctx.font = 'bold 15px "Plus Jakarta Sans", sans-serif';
+      ctx.font = 'bold 17px "Plus Jakarta Sans", sans-serif';
       ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('A', cx, cy);
 
-      // Platform düğümleri + akan paketler
-      curves.forEach(({ p, cpx, cpy, pkts }, pi) => {
-        const px = p.x * W;
-        const py = p.y * H;
+      // Node düğümleri + akan paketler
+      curves.forEach(({ n, cpx, cpy, pkts }) => {
+        const px = n.x * W;
+        const py = n.y * H;
 
-        // Platform glow (pulse)
-        const pulseR = 28 * (1 + 0.1 * Math.sin(frame * 0.022 + pi * 0.9));
-        const pgrd = ctx.createRadialGradient(px, py, 0, px, py, pulseR);
-        pgrd.addColorStop(0, p.color + '55'); pgrd.addColorStop(1, p.color + '00');
-        ctx.beginPath(); ctx.arc(px, py, pulseR, 0, Math.PI * 2);
+        // Pulse scale: 1.0 → 1.15 → 1.0
+        const scale = 1.0 + 0.075 * (1 + Math.sin(frame * n.ps + n.po));
+        const actualR = n.r * scale;
+
+        // Node glow
+        const glowNode = actualR * 2.8;
+        const pgrd = ctx.createRadialGradient(px, py, 0, px, py, glowNode);
+        pgrd.addColorStop(0, n.color + '55'); pgrd.addColorStop(1, n.color + '00');
+        ctx.beginPath(); ctx.arc(px, py, glowNode, 0, Math.PI * 2);
         ctx.fillStyle = pgrd; ctx.fill();
 
-        // Platform dairesi
-        ctx.beginPath(); ctx.arc(px, py, 18, 0, Math.PI * 2);
-        ctx.fillStyle = p.color + 'E6'; ctx.fill();
-
-        // Platform ID
-        ctx.font = 'bold 9px "Plus Jakarta Sans", sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(p.id, px, py);
+        // Node dairesi (metin yok)
+        ctx.beginPath(); ctx.arc(px, py, actualR, 0, Math.PI * 2);
+        ctx.fillStyle = n.color + 'E6'; ctx.fill();
 
         // Akan paketler
         pkts.forEach(pkt => {
@@ -151,8 +150,8 @@ export default function Login() {
           const pos = qBez(pkt.t, px, py, cpx * W, cpy * H, cx, cy);
           const fade = pkt.t > 0.82 ? (1 - pkt.t) / 0.18 : 0.9;
           ctx.globalAlpha = fade;
-          ctx.beginPath(); ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = p.color; ctx.fill();
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = n.color; ctx.fill();
           ctx.globalAlpha = 1;
         });
       });
@@ -245,21 +244,6 @@ export default function Login() {
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
           />
 
-          {/* Platform etiketleri */}
-          {PLATFORMS.map(p => (
-            <div key={p.id} style={{
-              position: 'absolute',
-              left: `${p.x * 100}%`,
-              top:  `${p.y * 100}%`,
-              transform: 'translate(-50%, 24px)',
-              fontSize: 10, color: p.color, fontWeight: 600,
-              whiteSpace: 'nowrap', pointerEvents: 'none',
-              textShadow: '0 1px 6px rgba(0,0,0,0.9)',
-              fontFamily: '"Plus Jakarta Sans", sans-serif',
-            }}>
-              {p.label}
-            </div>
-          ))}
 
         </div>
 
