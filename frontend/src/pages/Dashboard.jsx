@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard, getLastUpdated, refreshMetrics } from '../api';
+import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard, getLastUpdated, refreshMetrics, getCampaigns } from '../api';
 import InviteModal from '../components/InviteModal';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 
@@ -181,7 +181,55 @@ function AgencySummary({ onNav }) {
 }
 
 // ── Marka dashboard içeriği ────────────────────────────────────────────────────
-function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite, onNav, lastUpdated, onRefresh, refreshing }) {
+function ActiveCampaigns({ campaigns, onNav }) {
+  if (!campaigns?.length) return null;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Aktif Kampanyalar</div>
+          <div className="card-subtitle">{campaigns.length} kampanya</div>
+        </div>
+        <button onClick={() => onNav('campaigns')} style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text2)', fontFamily: 'var(--font)' }}>
+          Tümü →
+        </button>
+      </div>
+      <div className="card-body">
+        {campaigns.map(c => {
+          const pct = c.total_budget > 0 ? Math.min((c.total_spend / c.total_budget) * 100, 100) : 0;
+          const daysLeft = Math.max(Math.ceil((new Date(c.end_date) - new Date()) / 86400000), 0);
+          const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#00C9A7';
+          return (
+            <div key={c.id} onClick={() => onNav('campaigns')}
+              style={{ padding: '12px 0', borderBottom: '1px solid var(--border2)', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
+                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text2)' }}>
+                  <span style={{ color: '#00C9A7', fontWeight: 600 }}>{Number(c.avg_roas || 0).toFixed(2)}x ROAS</span>
+                  <span>{fmt(c.total_conversions)} dönüşüm</span>
+                  <span style={{ color: daysLeft <= 3 ? '#EF4444' : daysLeft <= 7 ? '#F59E0B' : 'var(--text3)' }}>{daysLeft}g kaldı</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 5 }}>
+                <span>₺{fmt(c.total_spend)}</span>
+                <span style={{ color: pct >= 80 ? '#F59E0B' : 'inherit' }}>%{Math.round(pct)}</span>
+                <span>₺{fmt(c.total_budget)}</span>
+              </div>
+              <div style={{ height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.4s' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvite, onNav, lastUpdated, onRefresh, refreshing, campaigns }) {
   const { summary, integrations, today_spend, budget, anomalies } = data;
 
   const updatedLabel = lastUpdated
@@ -224,6 +272,8 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
           <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" gauge={Math.min(Number(summary?.avg_roas || 0) / 5, 1)} />
           <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="#F59E0B" gauge={0.75} />
         </div>
+
+        <ActiveCampaigns campaigns={campaigns} onNav={onNav} />
 
         {!integrations?.length ? (
           <div className="card" style={{ textAlign: 'center', padding: 48 }}>
@@ -352,12 +402,13 @@ const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
 export default function Dashboard({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState(null);
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [apiError, setApiError]   = useState(null);
   const [showInvite, setShowInvite] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeCampaigns, setActiveCampaigns] = useState([]);
   const pollRef = useRef(null);
   const isAgency = user?.company_type === 'agency';
 
@@ -388,6 +439,13 @@ export default function Dashboard({ onNav }) {
       })
       .finally(() => setLoading(false));
   }, [isAgency, selectedBrand?.id]);
+
+  // Fetch active campaigns for the dashboard section
+  useEffect(() => {
+    if (isAgency && !selectedBrand) return;
+    const params = isAgency && selectedBrand ? { brand_id: selectedBrand.id, status: 'active' } : { status: 'active' };
+    getCampaigns(params).then(setActiveCampaigns).catch(() => setActiveCampaigns([]));
+  }, [isAgency, selectedBrand?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch last-updated timestamp + poll every 5 minutes
   const fetchLastUpdated = useCallback(() => {
@@ -461,6 +519,7 @@ export default function Dashboard({ onNav }) {
       lastUpdated={lastUpdated}
       onRefresh={handleRefresh}
       refreshing={refreshing}
+      campaigns={activeCampaigns}
     />
   );
 }

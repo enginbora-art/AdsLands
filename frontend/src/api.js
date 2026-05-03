@@ -183,3 +183,19 @@ export const tvEarlyAccess     = (data) => api.post('/tv/early-access', data).th
 // ── Metrik Güncellemesi ───────────────────────────────────────────────────────
 export const getLastUpdated = () => api.get('/metrics/last-updated').then(r => r.data);
 export const refreshMetrics = () => api.post('/metrics/refresh').then(r => r.data);
+
+// ── Kampanyalar ───────────────────────────────────────────────────────────────
+export const getCampaigns          = (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.brand_id) q.set('brand_id', params.brand_id);
+  if (params.status)   q.set('status', params.status);
+  return api.get(`/campaigns${q.toString() ? `?${q}` : ''}`).then(r => r.data);
+};
+export const createCampaign        = (data) => api.post('/campaigns', data).then(r => r.data);
+export const getCampaign           = (id) => api.get(`/campaigns/${id}`).then(r => r.data);
+export const updateCampaign        = (id, data) => api.put(`/campaigns/${id}`, data).then(r => r.data);
+export const deleteCampaign        = (id) => api.delete(`/campaigns/${id}`).then(r => r.data);
+export const addCampaignChannel    = (id, data) => api.post(`/campaigns/${id}/channels`, data).then(r => r.data);
+export const removeCampaignChannel = (id, channelId) => api.delete(`/campaigns/${id}/channels/${channelId}`).then(r => r.data);
+export const getPlatformCampaigns  = (id, platform, search) =>
+  api.get(`/campaigns/${id}/platform-campaigns?platform=${platform}${search ? `&search=${encodeURIComponent(search)}` : ''}`).then(r => r.data);

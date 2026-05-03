@@ -71,13 +71,28 @@ router.post('/generate', authMiddleware, requireActiveSubscription, checkAiLimit
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
 
-  const { days = 30, platforms, report_type, audience, brand_id } = req.body;
+  const { days = 30, platforms, report_type, audience, brand_id, campaign_id } = req.body;
 
   try {
     const companyId = await resolveCompanyId(req.user, brand_id);
 
-    const platformClause = platforms?.length ? 'AND i.platform = ANY($3)' : '';
-    const params = platforms?.length ? [days, companyId, platforms] : [days, companyId];
+    let effectiveDays = days;
+    let effectivePlatforms = platforms;
+    let campaignContext = '';
+    if (campaign_id) {
+      const { rows: [camp] } = await pool.query('SELECT * FROM campaigns WHERE id = $1 AND brand_id = $2', [campaign_id, companyId]);
+      if (camp) {
+        const start = new Date(camp.start_date);
+        const end = new Date(Math.min(new Date(camp.end_date), new Date()));
+        effectiveDays = Math.max(Math.ceil((end - start) / 86400000), 1);
+        const { rows: chans } = await pool.query('SELECT platform FROM campaign_channels WHERE campaign_id = $1', [campaign_id]);
+        if (chans.length) effectivePlatforms = chans.map(c => c.platform);
+        campaignContext = `\n\nRapor kampanya bazlı üretilmiştir. Kampanya: "${camp.name}" (${new Date(camp.start_date).toLocaleDateString('tr-TR')} — ${new Date(camp.end_date).toLocaleDateString('tr-TR')}). Toplam bütçe: ₺${Number(camp.total_budget).toLocaleString('tr-TR')}.`;
+      }
+    }
+
+    const platformClause = effectivePlatforms?.length ? 'AND i.platform = ANY($3)' : '';
+    const params = effectivePlatforms?.length ? [effectiveDays, companyId, effectivePlatforms] : [effectiveDays, companyId];
 
     const { rows: integrations } = await pool.query(`
       SELECT i.platform, i.account_id,
@@ -181,7 +196,7 @@ Rakamları kullan. Net ol. Tekrar yapma.`;
           content: `Rapor Tipi: ${reportLabel}
 Hedef Kitle: ${audienceNote}
 Şirket: ${company?.name || 'Bilinmiyor'}
-Sektör: ${company?.sector || 'Belirtilmemiş'}
+Sektör: ${company?.sector || 'Belirtilmemiş'}${campaignContext}
 Analiz Dönemi: Son ${days} gün
 
 Kanal Metrikleri:
@@ -237,13 +252,28 @@ router.post('/generate-pptx', authMiddleware, requireActiveSubscription, checkAi
     return res.status(503).json({ error: 'AI analiz şu an kullanılamıyor.' });
   }
 
-  const { days = 30, platforms, report_type = 'brand', slides, brand_id } = req.body;
+  const { days = 30, platforms, report_type = 'brand', slides, brand_id, campaign_id } = req.body;
 
   try {
     const companyId = await resolveCompanyId(req.user, brand_id);
 
-    const platformClause = platforms?.length ? 'AND i.platform = ANY($3)' : '';
-    const params = platforms?.length ? [days, companyId, platforms] : [days, companyId];
+    let effectiveDays = days;
+    let effectivePlatforms = platforms;
+    let campaignNote = '';
+    if (campaign_id) {
+      const { rows: [camp] } = await pool.query('SELECT * FROM campaigns WHERE id = $1 AND brand_id = $2', [campaign_id, companyId]);
+      if (camp) {
+        const start = new Date(camp.start_date);
+        const end = new Date(Math.min(new Date(camp.end_date), new Date()));
+        effectiveDays = Math.max(Math.ceil((end - start) / 86400000), 1);
+        const { rows: chans } = await pool.query('SELECT platform FROM campaign_channels WHERE campaign_id = $1', [campaign_id]);
+        if (chans.length) effectivePlatforms = chans.map(c => c.platform);
+        campaignNote = camp.name;
+      }
+    }
+
+    const platformClause = effectivePlatforms?.length ? 'AND i.platform = ANY($3)' : '';
+    const params = effectivePlatforms?.length ? [effectiveDays, companyId, effectivePlatforms] : [effectiveDays, companyId];
 
     // Aggregated metrics per channel
     const { rows: integrations } = await pool.query(`
@@ -360,7 +390,7 @@ Ortalama CTR: %${avgCtr.toFixed(2)}`,
       ctrNum:  avgCtr,
     };
 
-    const period = `Son ${days} gün`;
+    const period = campaignNote ? `Kampanya: ${campaignNote}` : `Son ${effectiveDays} gün`;
     const brandName  = company?.name || 'Marka';
     const agencyName = req.user.company_type === 'agency' ? req.user.company_name : null;
 

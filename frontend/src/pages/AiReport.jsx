@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { getIntegrations, getReports, deleteReport as apiDeleteReport } from '../api';
+import { getIntegrations, getReports, deleteReport as apiDeleteReport, getCampaigns } from '../api';
 import { useSubscription } from '../context/SubscriptionContext';
 import SubscriptionGateModal from '../components/SubscriptionGateModal';
 
@@ -222,24 +222,56 @@ function Step1Type({ value, onChange, onNext }) {
 
 // ── Step 2: Period ─────────────────────────────────────────────────────────────
 
-function Step2Period({ value, onChange, onPrev, onNext }) {
+function Step2Period({ value, onChange, onPrev, onNext, campaigns, selectedCampaign, onCampaignChange }) {
   const opts = [{ v: 7, l: '7 Gün' }, { v: 14, l: '14 Gün' }, { v: 30, l: '30 Gün' }, { v: 60, l: '60 Gün' }, { v: 90, l: '90 Gün' }];
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '';
   return (
     <div>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: 'var(--text1)' }}>Analiz dönemi seçin</div>
-      <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Seçilen döneme ait kampanya verileri rapora dahil edilir</div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 32, flexWrap: 'wrap' }}>
-        {opts.map(o => (
-          <button key={o.v} onClick={() => onChange(o.v)} style={{
-            padding: '14px 28px', borderRadius: 10, border: 'none', cursor: 'pointer',
-            background: value === o.v ? 'linear-gradient(135deg, #1D9E75, #0d8a63)' : 'var(--bg3)',
-            color: value === o.v ? '#0B1219' : 'var(--text2)',
-            fontWeight: value === o.v ? 700 : 400, fontSize: 14, fontFamily: 'var(--font)', transition: 'all 0.15s',
-          }}>
-            {o.l}
-          </button>
-        ))}
-      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: 'var(--text1)' }}>Analiz kapsamı</div>
+      <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Tüm marka veya belirli kampanya bazında rapor oluşturun</div>
+
+      {campaigns?.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Kampanya Seç (opsiyonel)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button onClick={() => onCampaignChange(null)}
+              style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', border: `1px solid ${!selectedCampaign ? 'rgba(0,201,167,0.5)' : 'var(--border2)'}`, background: !selectedCampaign ? 'rgba(0,201,167,0.1)' : 'var(--bg3)', color: !selectedCampaign ? '#00C9A7' : 'var(--text2)' }}>
+              Tüm Marka
+            </button>
+            {campaigns.map(c => (
+              <button key={c.id} onClick={() => onCampaignChange(c)}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', border: `1px solid ${selectedCampaign?.id === c.id ? 'rgba(0,201,167,0.5)' : 'var(--border2)'}`, background: selectedCampaign?.id === c.id ? 'rgba(0,201,167,0.1)' : 'var(--bg3)', color: selectedCampaign?.id === c.id ? '#00C9A7' : 'var(--text2)' }}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+          {selectedCampaign && (
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ color: '#00C9A7' }}>✓</span>
+              Kampanya dönemi kullanılacak: {fmtD(selectedCampaign.start_date)} — {fmtD(selectedCampaign.end_date)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!selectedCampaign && (
+        <>
+          <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dönem</div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+            {opts.map(o => (
+              <button key={o.v} onClick={() => onChange(o.v)} style={{
+                padding: '14px 28px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: value === o.v ? 'linear-gradient(135deg, #1D9E75, #0d8a63)' : 'var(--bg3)',
+                color: value === o.v ? '#0B1219' : 'var(--text2)',
+                fontWeight: value === o.v ? 700 : 400, fontSize: 14, fontFamily: 'var(--font)', transition: 'all 0.15s',
+              }}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <div style={{ marginBottom: 24 }} />
       <WizardNav onPrev={onPrev} onNext={onNext} />
     </div>
   );
@@ -586,6 +618,10 @@ export default function AiReport({ onNav }) {
   const [savedReports, setSavedReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Campaigns for scoped reports
+  const [reportCampaigns, setReportCampaigns] = useState([]);
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
+
   // Wizard state
   const [wizardStep, setWizardStep]   = useState(1);
   const [reportType, setReportType]   = useState('');
@@ -606,16 +642,24 @@ export default function AiReport({ onNav }) {
   useEffect(() => {
     setIntegrations([]);
     setSavedReports([]);
+    setReportCampaigns([]);
+    setSelectedCampaign(null);
     setLoading(true);
-    Promise.allSettled([getIntegrations(brandId), getReports(brandId)]).then(([intRes, repRes]) => {
+    Promise.allSettled([
+      getIntegrations(brandId),
+      getReports(brandId),
+      getCampaigns(brandId ? { brand_id: brandId, status: 'active' } : { status: 'active' }),
+    ]).then(([intRes, repRes, campRes]) => {
       if (intRes.status === 'fulfilled') {
         setIntegrations((intRes.value || []).filter(i => i.is_active && i.platform !== 'google_analytics'));
       }
       if (repRes.status === 'fulfilled') setSavedReports(repRes.value || []);
+      if (campRes.status === 'fulfilled') setReportCampaigns(campRes.value || []);
     }).finally(() => setLoading(false));
   }, [brandId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scrollToWizard = () => {
+    setSelectedCampaign(null);
     setWizardStep(1);
     setResult(null);
     setGenError('');
@@ -650,6 +694,7 @@ export default function AiReport({ onNav }) {
           report_type: reportType,
           slides: selectedSlides,
           brand_id: brandId,
+          campaign_id: selectedCampaign?.id || null,
         }),
       });
 
@@ -737,6 +782,9 @@ export default function AiReport({ onNav }) {
                   onChange={setDays}
                   onPrev={() => setWizardStep(1)}
                   onNext={() => setWizardStep(3)}
+                  campaigns={reportCampaigns}
+                  selectedCampaign={selectedCampaign}
+                  onCampaignChange={setSelectedCampaign}
                 />
               )}
               {wizardStep === 3 && (

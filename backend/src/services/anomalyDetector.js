@@ -180,4 +180,131 @@ async function detectAndHandle(integration, isIntraday = false) {
   }
 }
 
-module.exports = { detectAndHandle };
+async function sendCampaignAnomalyEmail(companyId, campaignName, anomalyTitle, anomalyMsg) {
+  if (!process.env.RESEND_API_KEY) return;
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { rows: users } = await pool.query(
+    `SELECT u.email, c.name AS company_name FROM users u JOIN companies c ON c.id = u.company_id
+     WHERE u.company_id = $1 AND u.is_active = true AND u.is_company_admin = true`,
+    [companyId]
+  );
+  const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  const html = `
+    <div style="font-family:sans-serif;max-width:540px;margin:0 auto;background:#0B1219;color:#F0F5F3;padding:40px;border-radius:12px;">
+      <div style="margin-bottom:24px;"><span style="font-size:18px;font-weight:700;">Ads<span style="color:#00BFA6;">Lands</span></span></div>
+      <div style="background:#2D1E0F;border:1px solid #F59E0B44;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+        <div style="font-size:11px;color:#F59E0B;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">⚠️ Kampanya Uyarısı</div>
+        <div style="font-size:15px;font-weight:600;">${campaignName}</div>
+      </div>
+      <p style="color:#94A8B3;line-height:1.7;margin:0 0 20px;">${anomalyMsg}</p>
+      <p style="color:#5A7080;font-size:11px;margin-top:24px;">AdsLands &rsaquo; Kampanyalar sayfasından detayları görebilirsiniz.</p>
+    </div>
+  `;
+  for (const r of users) {
+    await resend.emails.send({
+      from: `AdsLands <${fromEmail}>`,
+      to: r.email,
+      subject: `⚠️ ${anomalyTitle} — ${campaignName}`,
+      html,
+    }).catch(err => console.error('Kampanya anomali maili gönderilemedi:', r.email, err.message));
+  }
+}
+
+async function detectCampaignAnomalies(companyId) {
+  try {
+    const { rows: campaigns } = await pool.query(`
+      SELECT c.*,
+        COALESCE((
+          SELECT SUM(m.spend) FROM campaign_channels cc
+          JOIN integrations i ON i.company_id = c.brand_id AND i.platform = cc.platform AND i.is_active = true
+          JOIN ad_metrics m ON m.integration_id = i.id AND m.date >= c.start_date AND m.date <= CURRENT_DATE
+          WHERE cc.campaign_id = c.id
+        ), 0)::float AS total_spend
+      FROM campaigns c
+      WHERE c.brand_id = $1 AND c.status = 'active' AND c.end_date >= CURRENT_DATE
+    `, [companyId]);
+
+    const settings = await getSettings(companyId);
+
+    for (const campaign of campaigns) {
+      const spend = parseFloat(campaign.total_spend);
+      const budget = parseFloat(campaign.total_budget);
+      const budgetPct = budget > 0 ? (spend / budget) * 100 : 0;
+      const now = new Date();
+      const endDate = new Date(campaign.end_date);
+      const daysRemaining = Math.ceil((endDate - now) / 86400000);
+
+      const checks = [
+        // %80 bütçe harcandı uyarısı
+        budgetPct >= 80 && budgetPct < 100 && {
+          type: 'campaign_budget_80',
+          title: `Kampanya bütçesinin %${Math.round(budgetPct)}'i harcandı`,
+          message: `"${campaign.name}" kampanyasında bütçenin %${Math.round(budgetPct)}'i kullanıldı (₺${spend.toLocaleString('tr-TR')} / ₺${budget.toLocaleString('tr-TR')}).`,
+        },
+        // 3 gün kaldı, %40 altında harcama
+        daysRemaining <= 3 && daysRemaining > 0 && budgetPct < 40 && {
+          type: 'campaign_low_spend_near_end',
+          title: `Kampanya bitiyor, bütçe kullanımı düşük`,
+          message: `"${campaign.name}" kampanyasının bitmesine ${daysRemaining} gün kaldı. Bütçenin yalnızca %${Math.round(budgetPct)}'i kullanıldı.`,
+        },
+      ].filter(Boolean);
+
+      // Single channel dominance check
+      const { rows: channelSpends } = await pool.query(`
+        SELECT cc.platform,
+          COALESCE(SUM(m.spend), 0)::float AS ch_spend
+        FROM campaign_channels cc
+        JOIN integrations i ON i.company_id = $1 AND i.platform = cc.platform AND i.is_active = true
+        JOIN ad_metrics m ON m.integration_id = i.id AND m.date >= $2 AND m.date <= CURRENT_DATE
+        WHERE cc.campaign_id = $3
+        GROUP BY cc.platform
+      `, [companyId, campaign.start_date, campaign.id]);
+
+      const totalChSpend = channelSpends.reduce((s, c) => s + parseFloat(c.ch_spend), 0);
+      if (channelSpends.length > 1 && totalChSpend > 0) {
+        for (const ch of channelSpends) {
+          const pct = (parseFloat(ch.ch_spend) / totalChSpend) * 100;
+          if (pct >= 90) {
+            checks.push({
+              type: 'campaign_single_channel_dominance',
+              title: `Tek kanal bütçe hakimiyeti`,
+              message: `"${campaign.name}" kampanyasında ${PLATFORM_LABELS[ch.platform] || ch.platform} bütçenin %${Math.round(pct)}'ini kullanıyor.`,
+            });
+          }
+        }
+      }
+
+      for (const check of checks) {
+        // Deduplicate: skip if same type+campaign notified in last 24h
+        const { rows: [existing] } = await pool.query(`
+          SELECT id FROM notifications
+          WHERE company_id = $1 AND type = $2
+            AND meta->>'campaign_id' = $3
+            AND created_at >= NOW() - INTERVAL '24 hours'
+          LIMIT 1
+        `, [companyId, check.type, campaign.id]);
+        if (existing) continue;
+
+        const meta = JSON.stringify({ campaign_id: campaign.id, campaign_name: campaign.name });
+        const { rows: users } = await pool.query(
+          'SELECT id FROM users WHERE company_id = $1 AND is_active = true', [companyId]
+        );
+        for (const u of users) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, company_id, type, title, message, meta)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [u.id, companyId, check.type, check.title, check.message, meta]
+          ).catch(() => {});
+        }
+
+        if (settings.email_on) {
+          await sendCampaignAnomalyEmail(companyId, campaign.name, check.title, check.message).catch(console.error);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[detectCampaignAnomalies]', err.message);
+  }
+}
+
+module.exports = { detectAndHandle, detectCampaignAnomalies };

@@ -6,6 +6,7 @@ const ICONS = {
   dashboard:    <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
   channels:     <path d="M18 20V10M12 20V4M6 20v-6"/>,
   report:       <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></>,
+  campaigns:    <><path d="M2 3h20v5H2zM2 11h14v5H2zM2 19h8v2H2z"/></>,
   budget:       <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>,
   tv:           <><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M8 2l4 4 4-4"/></>,
   tvplan:       <><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
@@ -40,6 +41,7 @@ const AGENCY_BASE_NAV = [
 const AGENCY_BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
+    { id: 'campaigns', label: 'Kampanyalar',    perm: 'butce_planlama' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
     { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
     { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },
@@ -61,6 +63,7 @@ const AGENCY_BRAND_NAV = [
 const BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
+    { id: 'campaigns', label: 'Kampanyalar',    perm: 'butce_planlama' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
     { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
     { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },

@@ -28,6 +28,7 @@ const tvRoutes         = require('./routes/tv');
 const paymentsRoutes   = require('./routes/payments');
 const aiRoutes         = require('./routes/ai');
 const metricsRoutes    = require('./routes/metrics');
+const campaignRoutes   = require('./routes/campaigns');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -105,6 +106,7 @@ app.use('/api/tv',        tvRoutes);
 app.use('/api/payments',  paymentsRoutes);
 app.use('/api/ai',        aiRoutes);
 app.use('/api/metrics',   metricsRoutes);
+app.use('/api/campaigns', campaignRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

@@ -156,6 +156,21 @@ function startCronJobs() {
     }
   }, { timezone: 'Europe/Istanbul' });
 
+  // Campaign anomaly checks — daily at 10:00
+  cron.schedule('0 10 * * *', async () => {
+    const { detectCampaignAnomalies } = require('../services/anomalyDetector');
+    try {
+      const { rows: companies } = await pool.query(
+        "SELECT DISTINCT brand_id AS id FROM campaigns WHERE status = 'active' AND end_date >= CURRENT_DATE"
+      );
+      for (const c of companies) {
+        await detectCampaignAnomalies(c.id).catch(err => console.error('[Kampanya anomali]', c.id, err.message));
+      }
+    } catch (err) {
+      console.error('[Kampanya anomali cron]', err.message);
+    }
+  });
+
   console.log('⏰ Cron jobs aktif (02:00 gece sync, 08:00 token expiry, 09:00 trial uyarı, 07-23/2h gün içi)');
 }
 

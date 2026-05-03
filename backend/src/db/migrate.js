@@ -512,6 +512,36 @@ async function migrate() {
       ALTER TABLE ad_metrics ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
+    // ── Kampanyalar ───────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        total_budget NUMERIC(12,2) NOT NULL DEFAULT 0,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'active', 'completed')),
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_channels (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        platform VARCHAR(30) NOT NULL,
+        external_campaign_id VARCHAR(255),
+        external_campaign_name VARCHAR(255),
+        allocated_budget NUMERIC(12,2) DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(campaign_id, platform)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS campaigns_brand_id_idx ON campaigns (brand_id);`);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(
       `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`
