@@ -40,17 +40,15 @@ const AGENCY_BASE_NAV = [
 const AGENCY_BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
-    { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
-    { id: 'report',    label: 'AI Raporları',   perm: 'ai_raporlar' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
+    { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
+    { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },
+    { id: 'report',    label: 'AI Raporları',   perm: 'ai_raporlar' },
+    { id: 'benchmark', label: 'Benchmark',       perm: 'benchmark' },
   ]},
   { label: 'Broadcast', items: [
     { id: 'tv',     label: 'TV Ad Verification', badge: 'CANLI', badgeLive: true, perm: 'tv_ad_verification' },
     { id: 'tvplan', label: 'TV Medya Planı',     perm: 'tv_medya_plani' },
-  ]},
-  { label: 'İzleme', items: [
-    { id: 'anomalies', label: 'Anomaliler', perm: 'anomalier' },
-    { id: 'benchmark', label: 'Benchmark',  perm: 'benchmark' },
   ]},
   { label: 'Yönetim', items: [
     { id: 'integrations',  label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
@@ -63,17 +61,15 @@ const AGENCY_BRAND_NAV = [
 const BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
-    { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
-    { id: 'report',    label: 'AI Raporları',   perm: 'ai_raporlar' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
+    { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
+    { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },
+    { id: 'report',    label: 'AI Raporları',   perm: 'ai_raporlar' },
+    { id: 'benchmark', label: 'Benchmark',       perm: 'benchmark' },
   ]},
   { label: 'Broadcast', items: [
     { id: 'tv',     label: 'TV Ad Verification', badge: 'CANLI', badgeLive: true, perm: 'tv_ad_verification' },
     { id: 'tvplan', label: 'TV Medya Planı',     perm: 'tv_medya_plani' },
-  ]},
-  { label: 'İzleme', items: [
-    { id: 'anomalies', label: 'Anomaliler', perm: 'anomalier' },
-    { id: 'benchmark', label: 'Benchmark',  perm: 'benchmark' },
   ]},
   { label: 'Yönetim', items: [
     { id: 'integrations',  label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
