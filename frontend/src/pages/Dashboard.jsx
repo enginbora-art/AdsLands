@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import { getBrandDashboard, getAgencyBrandDetail, getAgencyDashboard, getLastUpdated, refreshMetrics } from '../api';
 import InviteModal from '../components/InviteModal';
+import SubscriptionBanner from '../components/SubscriptionBanner';
 
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
 const PLATFORM_LABELS = { google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads', google_analytics: 'Google Analytics', linkedin: 'LinkedIn Ads', adform: 'Adform', appsflyer: 'AppsFlyer', adjust: 'Adjust', other: 'Diğer' };
@@ -214,6 +215,7 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
       </div>
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       <div className="content">
+        <SubscriptionBanner onNav={onNav} />
         <BudgetIntegrationWarning budget={budget} integrations={integrations} onNav={onNav} />
         <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="#00C9A7" />

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import { getDashboardAnomalies, getAgencyBrandDetail, getAgencyDashboard, resolveAnomaly, getAnomalySettings, saveAnomalySettings } from '../api';
+import { useSubscription } from '../context/SubscriptionContext';
+import SubscriptionGateModal from '../components/SubscriptionGateModal';
 
 const ANIM_CSS = `
 @keyframes anom-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
@@ -400,6 +402,8 @@ function Toggle({ on, onChange }) {
 
 function NotificationSettings() {
   const { user } = useAuth();
+  const { isActive } = useSubscription();
+  const [gateModal, setGateModal] = useState(false);
   const [s, setS] = useState(DEFAULT_SETTINGS);
   const [loadState, setLoadState] = useState('loading'); // loading | idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState('');
@@ -508,9 +512,10 @@ function NotificationSettings() {
         </div>
       </div>
 
+      {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} />}
       <div style={{ display:'flex', alignItems:'center', gap:12 }}>
         <button
-          onClick={save}
+          onClick={() => { if (!isActive) { setGateModal(true); return; } save(); }}
           disabled={loadState === 'loading' || loadState === 'saving'}
           style={{
             padding:'9px 22px',

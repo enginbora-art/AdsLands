@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import { getIntegrations, getReports, deleteReport as apiDeleteReport } from '../api';
+import { useSubscription } from '../context/SubscriptionContext';
+import SubscriptionGateModal from '../components/SubscriptionGateModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -570,7 +572,9 @@ function AutoReports({ autoWeekly, setAutoWeekly, autoMonthly, setAutoMonthly, a
 export default function AiReport({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
+  const { isActive } = useSubscription();
   const isAgency = user?.company_type === 'agency';
+  const [gateModal, setGateModal] = useState(false);
   const brandId   = isAgency ? selectedBrand?.id : null;
   const brandName = isAgency
     ? (selectedBrand?.name || selectedBrand?.company_name)
@@ -703,9 +707,10 @@ export default function AiReport({ onNav }) {
       </div>
 
       <div className="content" style={{ padding: 0 }}>
+        {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} onNav={onNav} />}
 
         {/* 1. HERO */}
-        <HeroSection onStartWizard={scrollToWizard} />
+        <HeroSection onStartWizard={() => { if (!isActive) { setGateModal(true); return; } scrollToWizard(); }} />
 
         {/* 2. WIZARD */}
         <div ref={wizardRef} style={{ padding: '56px 40px', background: 'var(--bg2)', borderTop: '1px solid var(--border)' }}>
@@ -746,7 +751,7 @@ export default function AiReport({ onNav }) {
               {wizardStep === 4 && (
                 <div>
                   <Step4Generate
-                    onGenerate={generateReport}
+                    onGenerate={() => { if (!isActive) { setGateModal(true); return; } generateReport(); }}
                     generating={generating}
                     animStep={animStep}
                     result={result}

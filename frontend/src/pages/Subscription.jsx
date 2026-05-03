@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSubscription, cancelSubscription, getPaymentHistory, downloadInvoice } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const PLAN_LABELS = {
   starter:          'Basic',
@@ -59,6 +60,9 @@ function CancelModal({ onConfirm, onCancel, loading, periodEnd }) {
 }
 
 export default function Subscription({ onNav }) {
+  const { user } = useAuth();
+  // Ajans tarafından yönetilen marka kullanıcıları abonelik başlatamaz
+  const canManageSubscription = !(user?.company_type === 'brand' && user?.is_managed_by_agency);
   const [sub, setSub]               = useState(null);
   const [history, setHistory]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -147,12 +151,14 @@ export default function Subscription({ onNav }) {
           <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600 }}>
             ⏳ Deneme süreniz <strong>{trialDays} gün</strong> sonra bitiyor.
           </span>
-          <button
-            onClick={() => onNav && onNav('pricing')}
-            style={{ padding: '8px 16px', borderRadius: 8, background: '#f59e0b', border: 'none', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
-          >
-            Abonelik Başlat →
-          </button>
+          {canManageSubscription && (
+            <button
+              onClick={() => onNav && onNav('pricing')}
+              style={{ padding: '8px 16px', borderRadius: 8, background: '#f59e0b', border: 'none', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              Abonelik Başlat →
+            </button>
+          )}
         </div>
       )}
 
@@ -215,7 +221,7 @@ export default function Subscription({ onNav }) {
                   Aboneliği İptal Et
                 </button>
               )}
-              {(isCancelPending || sub.status === 'cancelled') && (
+              {canManageSubscription && (isCancelPending || sub.status === 'cancelled') && (
                 <button
                   onClick={() => onNav && onNav('pricing')}
                   style={{ padding: '10px 20px', borderRadius: 9, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
@@ -223,7 +229,7 @@ export default function Subscription({ onNav }) {
                   Aboneliği Yeniden Başlat
                 </button>
               )}
-              {!isCancelPending && sub.status !== 'cancelled' && (
+              {canManageSubscription && !isCancelPending && sub.status !== 'cancelled' && (
                 <button
                   onClick={() => onNav && onNav('pricing')}
                   style={{ padding: '10px 20px', borderRadius: 9, background: 'rgba(13,148,136,0.1)', border: '1px solid rgba(13,148,136,0.25)', color: '#0d9488', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
@@ -246,12 +252,18 @@ export default function Subscription({ onNav }) {
                 Tüm özelliklere erişmek için bir plan seçin.
               </div>
             )}
-            <button
-              onClick={() => onNav && onNav('pricing')}
-              style={{ padding: '12px 28px', borderRadius: 10, background: '#0d9488', color: '#fff', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer' }}
-            >
-              Planları Görüntüle
-            </button>
+            {canManageSubscription ? (
+              <button
+                onClick={() => onNav && onNav('pricing')}
+                style={{ padding: '12px 28px', borderRadius: 10, background: '#0d9488', color: '#fff', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer' }}
+              >
+                Planları Görüntüle
+              </button>
+            ) : (
+              <div style={{ fontSize: 13, color: '#64748b', padding: '10px 0' }}>
+                Aboneliğiniz ajansınız tarafından yönetilmektedir.
+              </div>
+            )}
           </div>
         )}
       </div>

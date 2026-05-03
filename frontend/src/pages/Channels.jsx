@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import { getChannelData, getAiUsageToday, getAiQueueStatus } from '../api';
+import { useSubscription } from '../context/SubscriptionContext';
+import SubscriptionBanner from '../components/SubscriptionBanner';
+import SubscriptionGateModal from '../components/SubscriptionGateModal';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine,
@@ -488,8 +491,11 @@ function SynergyFunnelFull({ allAdIntegrations, connectedKeys }) {
 export default function Channels({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
+  const { isActive } = useSubscription();
   const isAgency   = user?.company_type === 'agency';
   const needsBrand = isAgency && !selectedBrand;
+
+  const [gateModal, setGateModal] = useState(false);
 
   const [days, setDays]             = useState(30);
   const [platFilter, setPlatFilter] = useState('all');
@@ -745,6 +751,7 @@ export default function Channels({ onNav }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="fade-in">
+      {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} onNav={onNav} />}
       {/* Topbar */}
       <div className="topbar">
         <div className="topbar-title">{title}</div>
@@ -761,9 +768,9 @@ export default function Channels({ onNav }) {
             <option value="all">Tüm Kanallar</option>
             {SPEND_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
           </select>
-          {hasAdData && <button onClick={() => exportCsv(adIntegrations, sector)} style={s.exportBtn}>↓ CSV</button>}
+          {hasAdData && <button onClick={() => { if (!isActive) { setGateModal(true); return; } exportCsv(adIntegrations, sector); }} style={s.exportBtn}>↓ CSV</button>}
           {kpiBrandId && (
-            <button onClick={runKpiAnalysis} disabled={kpiLoading}
+            <button onClick={() => { if (!isActive) { setGateModal(true); return; } runKpiAnalysis(); }} disabled={kpiLoading}
               style={{ ...s.exportBtn, background: kpiPanelOpen ? 'rgba(139,92,246,0.15)' : 'transparent', borderColor: '#8b5cf6', color: '#a78bfa' }}>
               🎯 KPI Analizi
             </button>
@@ -792,6 +799,8 @@ export default function Channels({ onNav }) {
             </div>
           </div>
         )}
+
+        <SubscriptionBanner onNav={onNav} />
 
         {/* ── BÖLÜM 1: Reklam Harcaması Özeti ───────────────────────────── */}
         {loading ? (
@@ -1093,7 +1102,7 @@ export default function Channels({ onNav }) {
                 {!aiText && !aiLoading && !aiError && (
                   <div style={{ textAlign: 'center', padding: '20px 16px' }}>
                     <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>Son {days} günün performansı sektör benchmarklarıyla karşılaştırılarak analiz edilecek.</div>
-                    <button onClick={runAi} style={{ padding: '10px 28px', background: 'linear-gradient(135deg, #7C3AED, #0EA5E9)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    <button onClick={() => { if (!isActive) { setGateModal(true); return; } runAi(); }} style={{ padding: '10px 28px', background: 'linear-gradient(135deg, #7C3AED, #0EA5E9)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                       ✦ AI Analiz Et
                     </button>
                   </div>

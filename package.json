@@ -5,5 +5,9 @@
     "backend": "cd backend && node src/index.js",
     "frontend": "cd frontend && npm run dev",
     "dev": "npm run backend & npm run frontend"
+  },
+  "dependencies": {
+    "elevenlabs": "^1.59.0",
+    "playwright": "^1.59.1"
   }
 }

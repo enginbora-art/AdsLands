@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandProvider, useSelectedBrand } from './context/BrandContext';
+import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import AdminPanel from './pages/AdminPanel';
@@ -25,6 +26,29 @@ import SetupPassword from './pages/SetupPassword';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import './index.css';
+
+// Abonelik gerektiren veri sayfaları (30 gün sonra tamamen kilitlenir)
+const DATA_PAGES = new Set(['dashboard', 'channels', 'report', 'budget', 'anomalies', 'benchmark', 'tv', 'tvplan']);
+
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '—';
+
+function FrozenDataPage({ onNav, expiredAt }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: 32 }}>
+      <div style={{ fontSize: 56, marginBottom: 20 }}>🔒</div>
+      <h2 style={{ color: '#f1f5f9', fontSize: 20, fontWeight: 700, marginBottom: 12, fontFamily: 'var(--font)' }}>Veri Erişimi Donduruldu</h2>
+      <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.7, maxWidth: 400, marginBottom: 28, fontFamily: 'var(--font)' }}>
+        Aboneliğinizin <strong style={{ color: '#f1f5f9' }}>{fmtDate(expiredAt)}</strong> tarihinde sona ermesinden 30 gün geçtiğinden tüm veri erişimi durdurulmuştur. Verilere yeniden erişmek için aboneliğinizi yenileyin.
+      </p>
+      <button
+        onClick={() => onNav('subscription')}
+        style={{ padding: '13px 32px', borderRadius: 12, background: '#0d9488', border: 'none', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font)' }}
+      >
+        Aboneliği Yenile
+      </button>
+    </div>
+  );
+}
 
 const PAGES = {
   dashboard:    Dashboard,
@@ -94,6 +118,7 @@ function buildUrl(page, brand) {
 function AppInner() {
   const { user, loading, logout } = useAuth();
   const { selectedBrand, setSelectedBrand } = useSelectedBrand();
+  const sub = useSubscription();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [active, setActive] = useState(() => {
@@ -188,14 +213,18 @@ function AppInner() {
 
   const Page = PAGES[active] || Dashboard;
 
+  const mainContent = (() => {
+    if (active === 'agency') return <Agency key="agency" onSelectBrand={handleSelectBrand} />;
+    if (sub.isFrozen && DATA_PAGES.has(active)) return <FrozenDataPage onNav={handleNav} expiredAt={sub.expiredAt} />;
+    return <Page key={active} onNav={handleNav} />;
+  })();
+
   return (
     <div className="app">
       <Sidebar active={active} onNav={handleNav} onLogout={logout} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <Header onNav={handleNav} onMenuToggle={() => setSidebarOpen(prev => !prev)} />
       <main className="main">
-        {active === 'agency'
-          ? <Agency key="agency" onSelectBrand={handleSelectBrand} />
-          : <Page key={active} onNav={handleNav} />}
+        {mainContent}
       </main>
     </div>
   );
@@ -205,7 +234,9 @@ export default function App() {
   return (
     <AuthProvider>
       <BrandProvider>
-        <AppInner />
+        <SubscriptionProvider>
+          <AppInner />
+        </SubscriptionProvider>
       </BrandProvider>
     </AuthProvider>
   );

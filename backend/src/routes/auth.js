@@ -55,12 +55,35 @@ router.get('/me', auth, async (req, res) => {
               EXISTS(
                 SELECT 1 FROM connections WHERE brand_company_id = u.company_id
               ) AS is_managed_by_agency,
+              -- Abonelik kaynağı: ajans tarafından yönetiliyorsa ajansın şirketi, yoksa kendi şirketi
+              COALESCE(
+                (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
+                u.company_id
+              ) AS effective_company_id,
               (SELECT s.plan FROM subscriptions s
-               WHERE s.company_id = u.company_id AND s.status = 'active'
+               WHERE s.company_id = COALESCE(
+                 (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
+                 u.company_id
+               ) AND s.status = 'active'
                ORDER BY s.created_at DESC LIMIT 1) AS subscription_plan,
               (SELECT s.cancel_at_period_end FROM subscriptions s
-               WHERE s.company_id = u.company_id AND s.status = 'active'
-               ORDER BY s.created_at DESC LIMIT 1) AS subscription_cancelling
+               WHERE s.company_id = COALESCE(
+                 (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
+                 u.company_id
+               ) AND s.status IN ('active','cancelled','trialing','past_due')
+               ORDER BY s.created_at DESC LIMIT 1) AS subscription_cancelling,
+              (SELECT s.status FROM subscriptions s
+               WHERE s.company_id = COALESCE(
+                 (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
+                 u.company_id
+               ) AND s.status IN ('active','cancelled','trialing','past_due')
+               ORDER BY s.created_at DESC LIMIT 1) AS subscription_status,
+              (SELECT s.current_period_end FROM subscriptions s
+               WHERE s.company_id = COALESCE(
+                 (SELECT con.agency_company_id FROM connections con WHERE con.brand_company_id = u.company_id LIMIT 1),
+                 u.company_id
+               ) AND s.status IN ('active','cancelled','trialing','past_due')
+               ORDER BY s.created_at DESC LIMIT 1) AS subscription_period_end
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id
        LEFT JOIN roles r ON u.role_id = r.id
@@ -87,6 +110,8 @@ router.get('/me', auth, async (req, res) => {
       is_managed_by_agency: user.is_managed_by_agency,
       subscription_plan: user.subscription_plan || null,
       subscription_cancelling: user.subscription_cancelling || false,
+      subscription_status: user.subscription_status || null,
+      subscription_period_end: user.subscription_period_end || null,
       on_trial: onTrial,
       permissions,
     });
