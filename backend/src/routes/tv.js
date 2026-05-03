@@ -5,6 +5,9 @@ const router = express.Router();
 const { Resend } = require('resend');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
+const { queueAiRequest } = require('../services/aiQueue');
+const requireActiveSubscription = require('../middleware/requireActiveSubscription');
 
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
@@ -380,26 +383,234 @@ router.get('/plans/:id/summary', authMiddleware, async (req, res) => {
   }
 });
 
-// ── TV Erken Erişim ────────────────────────────────────────────────────────────
+// ── TV AI Öneri Sistemi ───────────────────────────────────────────────────────
 
-router.post('/early-access', async (req, res) => {
-  const { full_name, email } = req.body;
-  if (!full_name?.trim() || !email?.trim()) {
-    return res.status(400).json({ error: 'Ad soyad ve e-posta zorunludur.' });
-  }
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRe.test(email.trim())) {
-    return res.status(400).json({ error: 'Geçersiz e-posta adresi.' });
-  }
+const DOW_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+router.post('/plans/:id/ai-suggest', authMiddleware, requireActiveSubscription,
+  checkAiLimit('tv_ai_suggest'), async (req, res) => {
   try {
-    await pool.query(
-      `INSERT INTO tv_early_access (full_name, email)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [full_name.trim(), email.trim().toLowerCase()]
+    const planId    = req.params.id;
+    const companyId = req.user.company_id;
+    const isAgency  = req.user.company_type === 'agency';
+
+    // Plan erişim kontrolü
+    const { rows: [plan] } = await pool.query(
+      `SELECT p.*, c.name AS company_name
+       FROM tv_media_plans p
+       JOIN companies c ON c.id = p.company_id
+       WHERE p.id = $1 AND (p.company_id = $2 OR p.brand_id = $2)`,
+      [planId, companyId]
     );
-    res.json({ ok: true, message: 'Listeye eklendiniz!' });
+    if (!plan) return res.status(404).json({ error: 'Plan bulunamadı.' });
+
+    const targetCompanyId = plan.brand_id || plan.company_id;
+
+    // TV plan kalemleri
+    const { rows: planItems } = await pool.query(
+      'SELECT * FROM tv_plan_items WHERE plan_id = $1 ORDER BY broadcast_date, daypart',
+      [planId]
+    );
+    if (!planItems.length) {
+      return res.json({ no_data: true, reason: 'no_spots', message: 'Öneri üretmek için önce plana spot ekleyin.' });
+    }
+
+    // Online performans verisi — son 90 gün, gün-bazında
+    const { rows: metrics } = await pool.query(`
+      SELECT
+        EXTRACT(DOW FROM am.date)::int                                  AS dow,
+        COUNT(DISTINCT am.date)                                         AS data_days,
+        ROUND(AVG(am.roas)::numeric, 2)                                 AS avg_roas,
+        ROUND(SUM(am.conversions)::numeric / NULLIF(COUNT(DISTINCT am.date),0), 1) AS avg_daily_conversions,
+        ROUND(SUM(am.spend)::numeric / NULLIF(COUNT(DISTINCT am.date),0), 0) AS avg_daily_spend,
+        ROUND(SUM(am.clicks)::numeric / NULLIF(SUM(am.impressions)::numeric,0) * 100, 2) AS avg_ctr,
+        i.platform
+      FROM ad_metrics am
+      JOIN integrations i ON i.id = am.integration_id
+      WHERE i.company_id = $1
+        AND am.date >= CURRENT_DATE - INTERVAL '90 days'
+        AND i.is_active = true
+        AND i.status != 'disconnected'
+        AND i.platform IN ('google_ads', 'google_analytics', 'meta')
+      GROUP BY EXTRACT(DOW FROM am.date)::int, i.platform
+      ORDER BY EXTRACT(DOW FROM am.date)::int, i.platform
+    `, [targetCompanyId]);
+
+    if (!metrics.length) {
+      return res.json({ no_data: true, reason: 'no_metrics', message: 'Öneri için yeterli veri yok — Google Ads, Google Analytics veya Meta entegrasyonlarınızı kontrol edin. En az 90 günlük veri gereklidir.' });
+    }
+
+    // Günlük özet (platformları topla)
+    const dowSummary = {};
+    for (let d = 0; d < 7; d++) {
+      const dayMetrics = metrics.filter(m => m.dow === d);
+      if (!dayMetrics.length) continue;
+      dowSummary[d] = {
+        dow: d,
+        day_name: DOW_TR[d],
+        avg_roas: dayMetrics.reduce((s, m) => s + parseFloat(m.avg_roas || 0), 0) / dayMetrics.length,
+        avg_daily_conversions: dayMetrics.reduce((s, m) => s + parseFloat(m.avg_daily_conversions || 0), 0),
+        avg_daily_spend: dayMetrics.reduce((s, m) => s + parseFloat(m.avg_daily_spend || 0), 0),
+        platforms: dayMetrics.map(m => m.platform),
+      };
+    }
+
+    // TV plan özeti
+    const planSummary = {};
+    for (const item of planItems) {
+      const dow = item.broadcast_date ? new Date(item.broadcast_date).getDay() : null;
+      const key = `${item.channel_code}|${item.daypart}`;
+      if (!planSummary[key]) planSummary[key] = { channel: item.channel_name, daypart: item.daypart, spots: [], dow_list: [] };
+      planSummary[key].spots.push(item);
+      if (dow !== null) planSummary[key].dow_list.push(dow);
+    }
+
+    // Genel online ortalama (kıyaslama için)
+    const allDays = Object.values(dowSummary);
+    const avgConversionsAll = allDays.reduce((s, d) => s + d.avg_daily_conversions, 0) / (allDays.length || 1);
+    const avgRoasAll = allDays.reduce((s, d) => s + d.avg_roas, 0) / (allDays.length || 1);
+
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.adslands.com';
+
+    // SSE stream
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    try {
+      await queueAiRequest(async ({ waitMs, startedAt }) => {
+        res.write(`data: ${JSON.stringify({ status: 'processing' })}\n\n`);
+
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+        const dowSummaryText = Object.values(dowSummary).map(d =>
+          `${d.day_name}: ort. ROAS ${d.avg_roas.toFixed(2)}x, ort. günlük dönüşüm ${d.avg_daily_conversions.toFixed(1)}, ort. günlük harcama ₺${d.avg_daily_spend.toFixed(0)}`
+        ).join('\n');
+
+        const planSummaryText = Object.values(planSummary).map(s =>
+          `${s.channel} - ${s.daypart} kuşağı: ${s.spots.length} spot, günler: ${[...new Set(s.dow_list)].map(d => DOW_TR[d]).join(', ') || 'tarihsiz'}`
+        ).join('\n');
+
+        const prompt = `Sen bir TV medya planı danışmanısın. Aşağıda bir markanın son 90 günlük online performans verisi ve mevcut TV medya planı var.
+
+**Online Performans (Gün Bazında Ortalama — Son 90 Gün):**
+${dowSummaryText}
+
+**Genel Ortalama:** ROAS ${avgRoasAll.toFixed(2)}x, günlük dönüşüm ${avgConversionsAll.toFixed(1)}
+
+**Mevcut TV Medya Planı (${plan.plan_name} — ${MONTHS[(plan.month || 1) - 1]} ${plan.year}):**
+${planSummaryText}
+
+Lütfen tam olarak şu JSON formatında yanıt ver (başka hiçbir şey yazma):
+{
+  "suggestions": [
+    {
+      "id": "s1",
+      "priority": "high",
+      "title": "kısa başlık (max 60 karakter)",
+      "description": "öneri açıklaması",
+      "evidence": "dayandığı veri özeti (sayısal değerlerle)",
+      "action": {
+        "type": "emphasize_daypart|reduce_daypart|shift_budget|general",
+        "channel_code": "trt1|kanald|showtv|atv|startv|foxtv|tv8|trt2|cnnturk|ntv|haberturk|tv360 (yoksa null)",
+        "daypart": "sabah|ogle|aksam|prime|gece (yoksa null)",
+        "day_of_week": 0-6 (Pazar=0, yoksa null)
+      }
+    }
+  ],
+  "overall_insight": "Genel değerlendirme (1-2 cümle)"
+}
+
+KURALLAR:
+- Sadece online veriye dayalı zamanlama önerileri üret
+- Fiyat, GRP veya rating tahmini yapma
+- Maksimum 4 öneri üret
+- En az 2 öneri mevcut planla doğrudan ilgili olsun (var olan kanal/kuşak analizi)
+- Evidence'da gerçek rakamları kullan (kaçıncı günün ortalamanın kaç katı olduğu gibi)
+- Tüm metinler Türkçe olsun`;
+
+        let rawText = '';
+        const stream = client.messages.stream({
+          model: 'claude-opus-4-7',
+          max_tokens: 1200,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        for await (const chunk of stream) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            rawText += chunk.delta.text;
+          }
+        }
+
+        const final = await stream.finalMessage();
+        const { input_tokens, output_tokens } = final.usage || {};
+        const processMs = Date.now() - startedAt;
+
+        let parsed;
+        try {
+          const match = rawText.match(/\{[\s\S]*\}/);
+          parsed = JSON.parse(match ? match[0] : rawText);
+        } catch {
+          parsed = { suggestions: [], overall_insight: rawText.slice(0, 200) };
+        }
+
+        res.write(`data: ${JSON.stringify({ result: parsed })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'tv_ai_suggest', input_tokens, output_tokens, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
+      });
+    } catch (err) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      }
+    }
   } catch (err) {
+    console.error('[tv/ai-suggest]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ── TV AI Öneri Uygulama ──────────────────────────────────────────────────────
+
+router.post('/plans/:id/ai-apply', authMiddleware, async (req, res) => {
+  try {
+    const planId    = req.params.id;
+    const companyId = req.user.company_id;
+    const { suggestion_id, action } = req.body;
+
+    const { rows: [plan] } = await pool.query(
+      'SELECT * FROM tv_media_plans WHERE id = $1 AND company_id = $2',
+      [planId, companyId]
+    );
+    if (!plan) return res.status(403).json({ error: 'Plan bulunamadı veya yetkiniz yok.' });
+
+    if (action?.type === 'emphasize_daypart' && action.channel_code && action.daypart) {
+      // Plana AI kaynaklı yeni bir spot yer tutucu ekle
+      const ch = action.channel_code;
+      const channelNames = {
+        trt1: 'TRT 1', kanald: 'Kanal D', showtv: 'Show TV', atv: 'ATV',
+        startv: 'Star TV', foxtv: 'FOX TV', tv8: 'TV8', trt2: 'TRT 2',
+        cnnturk: 'CNN Türk', ntv: 'NTV', haberturk: 'Habertürk', tv360: 'TV360',
+      };
+      const { rows: [item] } = await pool.query(
+        `INSERT INTO tv_plan_items
+           (plan_id, channel_code, channel_name, daypart, status, ai_suggestion_id)
+         VALUES ($1, $2, $3, $4, 'planned', $5)
+         RETURNING *`,
+        [planId, ch, channelNames[ch] || ch, action.daypart, suggestion_id]
+      );
+      await updatePlanTotals(planId);
+      return res.json({ applied: true, new_item: item });
+    }
+
+    // Diğer öneri tipleri için sadece onay döndür (UI'da uygulandı işaretlenir)
+    res.json({ applied: true });
+  } catch (err) {
+    console.error('[tv/ai-apply]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

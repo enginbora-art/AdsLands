@@ -8,7 +8,6 @@ const ICONS = {
   report:       <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></>,
   campaigns:    <><path d="M2 3h20v5H2zM2 11h14v5H2zM2 19h8v2H2z"/></>,
   budget:       <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>,
-  tv:           <><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M8 2l4 4 4-4"/></>,
   tvplan:       <><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
   anomalies:    <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
   benchmark:    <><circle cx="12" cy="12" r="10"/><path d="M16 12l-4-4-4 4M12 16V8"/></>,
@@ -49,8 +48,7 @@ const AGENCY_BRAND_NAV = [
     { id: 'benchmark', label: 'Benchmark',       perm: 'benchmark' },
   ]},
   { label: 'Broadcast', items: [
-    { id: 'tv',     label: 'TV Ad Verification', badge: 'CANLI', badgeLive: true, perm: 'tv_ad_verification' },
-    { id: 'tvplan', label: 'TV Medya Planı',     perm: 'tv_medya_plani' },
+    { id: 'tvplan', label: 'TV Medya Planı', perm: 'tv_medya_plani' },
   ]},
   { label: 'Yönetim', items: [
     { id: 'integrations',  label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
@@ -71,8 +69,7 @@ const BRAND_NAV = [
     { id: 'benchmark', label: 'Benchmark',       perm: 'benchmark' },
   ]},
   { label: 'Broadcast', items: [
-    { id: 'tv',     label: 'TV Ad Verification', badge: 'CANLI', badgeLive: true, perm: 'tv_ad_verification' },
-    { id: 'tvplan', label: 'TV Medya Planı',     perm: 'tv_medya_plani' },
+    { id: 'tvplan', label: 'TV Medya Planı', perm: 'tv_medya_plani' },
   ]},
   { label: 'Yönetim', items: [
     { id: 'integrations',  label: 'Entegrasyonlar', perm: 'entegrasyonlar' },
@@ -108,7 +105,6 @@ const PLAN_LABELS = {
 const ITEM_MIN_PLAN = {
   anomalies: 'growth',
   benchmark: 'growth',
-  tv:        'scale',
   tvplan:    'scale',
 };
 

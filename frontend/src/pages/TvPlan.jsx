@@ -6,6 +6,7 @@ import {
   getTvCampaigns, createTvPlan, deleteTvPlan,
   getTvPlans, getTvPlanItems, addTvPlanItem,
   updateTvPlanItem, deleteTvPlanItem, getTvPlanSummary,
+  getTvAiSuggestions, applyTvAiSuggestion,
 } from '../api';
 
 // ── Sabitler ───────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ const chByCode = (code) => TR_CHANNELS.find(c => c.code === code) || { name: cod
 const CSS = `
 @keyframes tvIn  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
 @keyframes tvSlide{ from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+@keyframes aiPulse{ 0%,100%{opacity:1} 50%{opacity:0.5} }
 .tv-card { transition: border-color 0.15s, box-shadow 0.15s; }
 .tv-card:hover { border-color: rgba(29,158,117,0.4) !important; box-shadow: 0 8px 28px rgba(0,0,0,0.25); }
 .tv-row:hover td { background: rgba(255,255,255,0.025) !important; }
@@ -393,11 +395,104 @@ function ChannelCards({ channelSummary }) {
 
 // ── Plan Detay ─────────────────────────────────────────────────────────────────
 
+// ── AI Öneri Kartı ─────────────────────────────────────────────────────────────
+
+const PRIORITY_CFG = {
+  high:   { label: 'Yüksek',  bg: 'rgba(239,68,68,0.1)',    color: '#ef4444',  border: 'rgba(239,68,68,0.25)' },
+  medium: { label: 'Orta',    bg: 'rgba(245,158,11,0.1)',   color: '#f59e0b',  border: 'rgba(245,158,11,0.25)' },
+  low:    { label: 'Düşük',   bg: 'rgba(99,102,241,0.1)',   color: '#818cf8',  border: 'rgba(99,102,241,0.25)' },
+};
+
+function SuggestionCard({ suggestion, isApplied, isApplying, onApply }) {
+  const pCfg = PRIORITY_CFG[suggestion.priority] || PRIORITY_CFG.medium;
+  return (
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, animation: 'tvIn 0.25s ease' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: pCfg.bg, color: pCfg.color, border: `1px solid ${pCfg.border}`, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              {pCfg.label}
+            </span>
+            {isApplied && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)' }}>
+                ✓ Uygulandı
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)', lineHeight: 1.4 }}>{suggestion.title}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.65 }}>{suggestion.description}</div>
+      {suggestion.evidence && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 7, padding: '6px 10px', lineHeight: 1.5 }}>
+          📊 {suggestion.evidence}
+        </div>
+      )}
+      {!isApplied && (
+        <button
+          onClick={() => onApply(suggestion)}
+          disabled={isApplying}
+          style={{ alignSelf: 'flex-start', padding: '7px 16px', background: isApplying ? 'rgba(29,158,117,0.35)' : 'rgba(29,158,117,0.12)', border: '1px solid rgba(29,158,117,0.35)', borderRadius: 7, color: '#1D9E75', fontSize: 12, fontWeight: 700, cursor: isApplying ? 'wait' : 'pointer', fontFamily: 'var(--font)' }}>
+          {isApplying ? 'Uygulanıyor...' : 'Planıma Uygula'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AiSuggestionsPanel({ suggestions, overallInsight, appliedIds, applyingId, onApply, onRefresh, loading }) {
+  return (
+    <div style={{ background: 'var(--bg2)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 14, padding: '20px 22px', marginBottom: 24, animation: 'tvIn 0.2s ease' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>✨</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>AI Önerileri</span>
+          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(139,92,246,0.15)', color: '#a78bfa', fontWeight: 700 }}>
+            {suggestions.length} öneri
+          </span>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          style={{ padding: '5px 12px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text3)', fontSize: 11, cursor: loading ? 'wait' : 'pointer', fontFamily: 'var(--font)' }}>
+          ↻ Yenile
+        </button>
+      </div>
+      {overallInsight && (
+        <div style={{ fontSize: 12, color: 'var(--text2)', background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, lineHeight: 1.6 }}>
+          {overallInsight}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {suggestions.map(s => (
+          <SuggestionCard
+            key={s.id}
+            suggestion={s}
+            isApplied={appliedIds.has(s.id)}
+            isApplying={applyingId === s.id}
+            onApply={onApply}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Plan Detayı ────────────────────────────────────────────────────────────────
+
 function PlanDetail({ plan, companyId, onBack }) {
   const [items, setItems]     = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSpot, setShowSpot] = useState(false);
+
+  // AI öneri state
+  const [aiState, setAiState]         = useState('idle'); // idle | loading | done | error | no_data
+  const [aiResult, setAiResult]       = useState(null);
+  const [aiError, setAiError]         = useState('');
+  const [aiNoDataMsg, setAiNoDataMsg] = useState('');
+  const [appliedIds, setAppliedIds]   = useState(new Set());
+  const [applyingId, setApplyingId]   = useState(null);
 
   const canEdit = plan.company_id === companyId;
 
@@ -426,10 +521,55 @@ function PlanDetail({ plan, companyId, onBack }) {
 
   const enriched = summary?.plan || plan;
 
+  const runAiSuggest = async () => {
+    setAiState('loading'); setAiError(''); setAiResult(null); setAiNoDataMsg('');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/tv/plans/${plan.id}/ai-suggest`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (res.status === 403 || res.status === 429) {
+        const e = await res.json().catch(() => ({}));
+        setAiError(e.error || 'AI kullanım limiti doldu veya abonelik gerekli.');
+        setAiState('error'); return;
+      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'AI analiz başarısız.'); }
+
+      const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n'); buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { setAiState('done'); return; }
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.no_data) { setAiNoDataMsg(parsed.message); setAiState('no_data'); return; }
+            if (parsed.result) { setAiResult(parsed.result); }
+          } catch (e) { if (e.message !== 'Unexpected token') { setAiError(e.message); setAiState('error'); return; } }
+        }
+      }
+      setAiState('done');
+    } catch (err) { setAiError(err.message); setAiState('error'); }
+  };
+
+  const handleApply = async (suggestion) => {
+    setApplyingId(suggestion.id);
+    try {
+      const result = await applyTvAiSuggestion(plan.id, { suggestion_id: suggestion.id, action: suggestion.action });
+      setAppliedIds(prev => new Set([...prev, suggestion.id]));
+      if (result?.new_item) await reload(); // yeni spot eklendiyse planı yenile
+    } catch (err) { console.error('AI apply hatası:', err); }
+    finally { setApplyingId(null); }
+  };
+
   return (
     <div style={{ animation: 'tvSlide 0.25s ease' }}>
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+      {/* Breadcrumb + AI butonu */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font)', padding: '6px 10px', borderRadius: 6 }}>
           ← Geri
         </button>
@@ -438,6 +578,22 @@ function PlanDetail({ plan, companyId, onBack }) {
         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: 'rgba(29,158,117,0.1)', color: 'var(--teal)', marginLeft: 4 }}>
           {MONTHS[(plan.month || 1) - 1]} {plan.year}
         </span>
+        <div style={{ marginLeft: 'auto' }}>
+          <button
+            onClick={runAiSuggest}
+            disabled={aiState === 'loading' || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.4)',
+              background: aiState === 'loading' ? 'rgba(139,92,246,0.08)' : 'rgba(139,92,246,0.12)',
+              color: '#a78bfa', fontWeight: 700, fontSize: 12, cursor: aiState === 'loading' || loading ? 'wait' : 'pointer',
+              fontFamily: 'var(--font)', transition: 'background 0.15s',
+            }}>
+            {aiState === 'loading'
+              ? <><span style={{ animation: 'aiPulse 1s infinite' }}>✨</span> Analiz ediliyor...</>
+              : <><span>✨</span> AI Öneri</>}
+          </button>
+        </div>
       </div>
 
       {/* Ajans bilgi notu */}
@@ -445,6 +601,30 @@ function PlanDetail({ plan, companyId, onBack }) {
         <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#3B82F6', display: 'flex', gap: 8 }}>
           ℹ️ Bu plan <strong style={{ marginLeft: 4 }}>{plan.creator_name}</strong> tarafından hazırlanmıştır. Düzenleme yetkiniz bulunmamaktadır.
         </div>
+      )}
+
+      {/* AI sonuçları */}
+      {aiState === 'error' && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#ef4444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠ {aiError}</span>
+          <button onClick={() => setAiState('idle')} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}>×</button>
+        </div>
+      )}
+      {aiState === 'no_data' && (
+        <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 10, padding: '14px 18px', marginBottom: 16, fontSize: 13, color: '#818cf8' }}>
+          ℹ️ {aiNoDataMsg}
+        </div>
+      )}
+      {(aiState === 'done' || aiState === 'loading') && aiResult?.suggestions?.length > 0 && (
+        <AiSuggestionsPanel
+          suggestions={aiResult.suggestions}
+          overallInsight={aiResult.overall_insight}
+          appliedIds={appliedIds}
+          applyingId={applyingId}
+          onApply={handleApply}
+          onRefresh={runAiSuggest}
+          loading={aiState === 'loading'}
+        />
       )}
 
       <SummaryBar plan={enriched} items={items} />

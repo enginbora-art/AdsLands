@@ -359,29 +359,12 @@ async function migrate() {
       );
     `);
 
-    // ── TV Tespitler ──────────────────────────────────────────────────────────
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS tv_detections (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        campaign_id UUID NOT NULL REFERENCES tv_campaigns(id) ON DELETE CASCADE,
-        plan_item_id UUID REFERENCES tv_plan_items(id) ON DELETE SET NULL,
-        channel_name VARCHAR(100) NOT NULL,
-        detected_at TIMESTAMPTZ NOT NULL,
-        confidence_score NUMERIC(5,4),
-        screenshot_url TEXT,
-        screenshot_expires_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
+    // tv_detections ve tv_early_access tabloları kaldırıldı (TV Ad Verification özelliği silindi)
+    // Mevcut veritabanlarında varsa tutulur, yeni kurulumda oluşturulmaz.
 
-    // ── TV Erken Erişim ───────────────────────────────────────────────────────
+    // tv_plan_items için AI öneri etiketi kolonu
     await client.query(`
-      CREATE TABLE IF NOT EXISTS tv_early_access (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        full_name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
+      ALTER TABLE tv_plan_items ADD COLUMN IF NOT EXISTS ai_suggestion_id TEXT;
     `);
 
     // ── Abonelikler ───────────────────────────────────────────────────────────

@@ -177,8 +177,9 @@ export const getTvPlanItems    = (planId) => api.get(`/tv/plans/${planId}/items`
 export const addTvPlanItem     = (planId, data) => api.post(`/tv/plans/${planId}/items`, data).then(r => r.data);
 export const updateTvPlanItem  = (planId, itemId, data) => api.patch(`/tv/plans/${planId}/items/${itemId}`, data).then(r => r.data);
 export const deleteTvPlanItem  = (planId, itemId) => api.delete(`/tv/plans/${planId}/items/${itemId}`).then(r => r.data);
-export const getTvPlanSummary  = (planId) => api.get(`/tv/plans/${planId}/summary`).then(r => r.data);
-export const tvEarlyAccess     = (data) => api.post('/tv/early-access', data).then(r => r.data);
+export const getTvPlanSummary    = (planId) => api.get(`/tv/plans/${planId}/summary`).then(r => r.data);
+export const getTvAiSuggestions  = (planId) => api.post(`/tv/plans/${planId}/ai-suggest`).then(r => r.data);
+export const applyTvAiSuggestion = (planId, action) => api.post(`/tv/plans/${planId}/ai-apply`, action).then(r => r.data);
 
 // ── Metrik Güncellemesi ───────────────────────────────────────────────────────
 export const getLastUpdated = () => api.get('/metrics/last-updated').then(r => r.data);
