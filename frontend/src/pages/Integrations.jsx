@@ -336,7 +336,7 @@ function TokenConnectModal({ platform, onClose, onSuccess, onVerify }) {
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
             <button type="button" onClick={onClose} style={s.btnSecondary}>İptal</button>
             <button type="submit" disabled={loading}
-              style={{ flex: 1, padding: '10px 0', background: platform.color, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+              style={{ flex: 1, padding: '10px 0', background: 'transparent', border: '1px solid #00C9A7', borderRadius: 8, color: '#00C9A7', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Doğrulanıyor...' : 'Bağla'}
             </button>
           </div>
@@ -942,7 +942,7 @@ const s = {
   header:       { marginBottom: 28 },
   title:        { fontSize: 22, fontWeight: 700, marginBottom: 6 },
   sub:          { fontSize: 13, color: 'var(--text3)' },
-  connectBtn:   { flex: 1, padding: '8px 0', border: 'none', borderRadius: 8, background: '#0EA5E9', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  connectBtn:   { flex: 1, padding: '8px 0', border: '1px solid #00C9A7', borderRadius: 8, background: 'transparent', color: '#00C9A7', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   tableWrap:    { overflowX: 'auto' },
   table:        { width: '100%', borderCollapse: 'collapse' },
   th:           { padding: '10px 14px', fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left', borderBottom: '1px solid var(--border2)', whiteSpace: 'nowrap' },
