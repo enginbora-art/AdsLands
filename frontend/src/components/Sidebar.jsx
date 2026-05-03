@@ -1,109 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-
-const SB_NODES = [
-  { color: '#F97316', y: 0.60 },
-  { color: '#4ADE80', y: 0.68 },
-  { color: '#60A5FA', y: 0.76 },
-  { color: '#E879F9', y: 0.84 },
-];
-const SB_SPEEDS = [0.0035, 0.0028, 0.0042, 0.0031];
-
-function SidebarCanvas() {
-  const canvasRef = useRef(null);
-  const timerRef  = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    const pkts = SB_NODES.map((_, i) => ({
-      t: (i * 0.25) % 1,
-      speed: SB_SPEEDS[i],
-    }));
-
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
-      canvas.width  = W * dpr;
-      canvas.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const draw = () => {
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
-      ctx.clearRect(0, 0, W, H);
-
-      const cx = W * 0.88;
-      const cy = H * 0.72;
-      const nx = 14;
-
-      SB_NODES.forEach(({ color, y }, i) => {
-        const py = H * y;
-        const cpx = W * 0.5;
-        const cpy = (py + cy) * 0.5;
-
-        // Curve
-        ctx.beginPath();
-        ctx.moveTo(nx, py);
-        ctx.quadraticCurveTo(cpx, cpy, cx, cy);
-        ctx.strokeStyle = color;
-        ctx.globalAlpha = 0.08;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-
-        // Node dot
-        ctx.beginPath();
-        ctx.arc(nx, py, 3, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.4;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-
-        // Packet
-        const pkt = pkts[i];
-        pkt.t = (pkt.t + pkt.speed) % 1;
-        const u = 1 - pkt.t;
-        const px = u * u * nx + 2 * u * pkt.t * cpx + pkt.t * pkt.t * cx;
-        const py2 = u * u * py + 2 * u * pkt.t * cpy + pkt.t * pkt.t * cy;
-        const fade = pkt.t > 0.80 ? (1 - pkt.t) / 0.20 : 0.5;
-        ctx.beginPath();
-        ctx.arc(px, py2, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = fade * 0.5;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      });
-
-      timerRef.current = setTimeout(draw, 33);
-    };
-
-    draw();
-
-    return () => {
-      clearTimeout(timerRef.current);
-      window.removeEventListener('resize', resize);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'absolute', inset: 0,
-        width: '100%', height: '100%',
-        pointerEvents: 'none', zIndex: 0,
-      }}
-    />
-  );
-}
 
 const ICONS = {
   dashboard:    <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -299,11 +196,9 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
       {/* Mobile backdrop */}
       <div className={`sidebar-backdrop${open ? ' visible' : ''}`} onClick={onClose} />
 
-      <aside className={`sidebar${open ? ' sidebar-open' : ''}`} style={{ position: 'relative' }}>
-        <SidebarCanvas />
-
+      <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
         {/* Logo */}
-        <div className="logo" onClick={() => handleNav('dashboard')} style={{ position: 'relative', zIndex: 1 }}>
+        <div className="logo" onClick={() => handleNav('dashboard')}>
           <svg width="26" height="26" viewBox="0 0 32 32" style={{ flexShrink: 0 }}>
             <circle cx="16" cy="16" r="11" fill="none" stroke="#00BFA6" strokeWidth="2.5"/>
             <line x1="16" y1="2" x2="16" y2="7" stroke="#00BFA6" strokeWidth="2" strokeLinecap="round"/>
@@ -317,7 +212,7 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
 
         {/* Selected brand chip */}
         {isAgency && selectedBrand && (
-          <div className="sidebar-brand-chip" style={{ margin: '4px 12px 8px', padding: '8px 12px', background: 'rgba(0,191,166,0.06)', border: '1px solid rgba(0,191,166,0.15)', borderRadius: 8, position: 'relative', zIndex: 1 }}>
+          <div className="sidebar-brand-chip" style={{ margin: '4px 12px 8px', padding: '8px 12px', background: 'rgba(0,191,166,0.06)', border: '1px solid rgba(0,191,166,0.15)', borderRadius: 8 }}>
             <button
               onClick={handleClearBrand}
               style={{ fontSize: 11, color: 'rgba(0,191,166,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5, fontFamily: 'var(--font)' }}>
@@ -331,7 +226,7 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
         )}
 
         {/* Nav */}
-        <nav className="nav" style={{ position: 'relative', zIndex: 1 }}>
+        <nav className="nav">
           {navConfig.map(section => {
             const visibleItems = section.items.filter(isVisible);
             if (visibleItems.length === 0) return null;
@@ -373,7 +268,7 @@ export default function Sidebar({ active, onNav, onLogout, open, onClose }) {
 
         {/* Footer */}
         {onLogout && (
-          <div className="sidebar-footer" style={{ position: 'relative', zIndex: 1 }}>
+          <div className="sidebar-footer">
             <button className="nav-item nav-logout" onClick={onLogout} title="Çıkış Yap">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
