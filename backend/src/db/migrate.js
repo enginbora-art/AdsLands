@@ -131,6 +131,11 @@ async function migrate() {
       ALTER TABLE integrations ADD COLUMN IF NOT EXISTS extra JSONB DEFAULT '{}';
     `);
 
+    // status kolonu — 'connected' | 'disconnected' | 'expiring'
+    await client.query(`
+      ALTER TABLE integrations ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'connected';
+    `);
+
     // sector kolonu ekle (varsa sessizce geç)
     await client.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS sector VARCHAR(100);

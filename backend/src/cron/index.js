@@ -1,72 +1,135 @@
 const cron = require('node-cron');
 const pool = require('../db');
 const { fetchYesterdayMetrics, fetchTodayMetrics } = require('../services/metricsFetcher');
+const { markDisconnected, markExpiring, refreshWithBackoff } = require('../services/tokenRefresh');
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.adslands.com';
 
+const PLATFORM_LABELS = {
+  google_ads: 'Google Ads', google_analytics: 'Google Analytics',
+  meta: 'Meta Ads', tiktok: 'TikTok Ads', linkedin: 'LinkedIn Ads',
+};
+
+async function sendExpiryNotification(row, daysLeft) {
+  const { rows: [existing] } = await pool.query(`
+    SELECT id FROM notifications
+    WHERE company_id = $1 AND type = 'token_expiry_warning'
+      AND meta->>'integration_id' = $2
+      AND created_at >= NOW() - INTERVAL '20 hours'
+    LIMIT 1
+  `, [row.company_id, row.id]);
+  if (existing) return;
+
+  const platformLabel = PLATFORM_LABELS[row.platform] || row.platform;
+  const title   = `${platformLabel} bağlantısının süresi doluyor`;
+  const message = `${platformLabel} bağlantınızın süresi ${daysLeft} gün içinde dolacak. Kesintisiz veri akışı için yeniden bağlanın.`;
+  const meta    = JSON.stringify({ action_url: '/integrations', platform: row.platform, integration_id: row.id, days_left: daysLeft });
+
+  const { rows: admins } = await pool.query(
+    'SELECT id, email FROM users WHERE company_id = $1 AND is_company_admin = true AND is_active = true',
+    [row.company_id]
+  );
+
+  for (const admin of admins) {
+    await pool.query(
+      `INSERT INTO notifications (user_id, company_id, type, title, message, meta)
+       VALUES ($1, $2, 'token_expiry_warning', $3, $4, $5)`,
+      [admin.id, row.company_id, title, message, meta]
+    ).catch(console.error);
+
+    if (process.env.RESEND_API_KEY && admin.email) {
+      try {
+        const { Resend } = require('resend');
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+          from:    `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+          to:      admin.email,
+          subject: title,
+          html:    `<p>${message}</p><p><a href="${FRONTEND_URL}/integrations">Yeniden Bağlan →</a></p>`,
+        });
+      } catch (emailErr) {
+        console.error('[cron] Token expiry e-posta hatası:', emailErr.message);
+      }
+    }
+  }
+
+  console.log(`⏰ Token expiry uyarısı: platform=${row.platform} company=${row.company_id} days_left=${daysLeft}`);
+}
+
 async function checkExpiringTokens() {
+  // ── 1. Tüm platformlar: 7 gün içinde dolacak tokenlar ──────────────────────
   const { rows: expiring } = await pool.query(`
-    SELECT i.id, i.company_id, i.platform, i.token_expiry,
+    SELECT i.id, i.company_id, i.platform, i.token_expiry, i.refresh_token,
            CEIL(EXTRACT(EPOCH FROM (i.token_expiry - NOW())) / 86400)::int AS days_left
     FROM integrations i
-    WHERE i.platform IN ('meta', 'linkedin')
-      AND i.is_active = true
+    WHERE i.is_active = true
+      AND i.status != 'disconnected'
       AND i.token_expiry IS NOT NULL
       AND i.token_expiry < NOW() + INTERVAL '7 days'
       AND i.token_expiry > NOW()
   `);
 
   for (const row of expiring) {
-    // Bugün zaten bildirim gönderildiyse atla
-    const { rows: [existing] } = await pool.query(`
-      SELECT id FROM notifications
-      WHERE company_id = $1
-        AND type = 'token_expiry_warning'
-        AND meta->>'integration_id' = $2
-        AND created_at >= NOW() - INTERVAL '20 hours'
-      LIMIT 1
-    `, [row.company_id, row.id]);
-    if (existing) continue;
-
-    const platformLabel = row.platform === 'meta' ? 'Meta Ads' : 'LinkedIn Ads';
-    const title   = `${platformLabel} bağlantısının süresi doluyor`;
-    const message = `${platformLabel} bağlantınızın süresi ${row.days_left} gün içinde dolacak. Kesintisiz veri akışı için yeniden bağlanın.`;
-    const meta    = JSON.stringify({
-      action_url:     '/integrations',
-      platform:       row.platform,
-      integration_id: row.id,
-      days_left:      row.days_left,
-    });
-
-    const { rows: admins } = await pool.query(
-      'SELECT id, email FROM users WHERE company_id = $1 AND is_company_admin = true AND is_active = true',
-      [row.company_id]
-    );
-
-    for (const admin of admins) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, company_id, type, title, message, meta)
-         VALUES ($1, $2, 'token_expiry_warning', $3, $4, $5)`,
-        [admin.id, row.company_id, title, message, meta]
-      ).catch(console.error);
-
-      // E-posta bildirim
-      if (process.env.RESEND_API_KEY && admin.email) {
-        try {
-          const { Resend } = require('resend');
-          const resend = new Resend(process.env.RESEND_API_KEY);
-          await resend.emails.send({
-            from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
-            to:   admin.email,
-            subject: title,
-            html: `<p>${message}</p><p><a href="${FRONTEND_URL}/integrations">Yeniden Bağlan →</a></p>`,
-          });
-        } catch (emailErr) {
-          console.error('[cron] Token expiry e-posta hatası:', emailErr.message);
-        }
+    // Google ve TikTok: refresh_token varsa otomatik yenile
+    if (['google_ads', 'google_analytics', 'tiktok'].includes(row.platform) && row.refresh_token) {
+      try {
+        await refreshWithBackoff(row);
+        console.log(`⏰ Proaktif token yenileme: platform=${row.platform} company=${row.company_id}`);
+        continue; // başarılı — uyarı gönderme
+      } catch (err) {
+        console.error(`[cron] Proaktif refresh başarısız (${row.platform}):`, err.message);
+        await markDisconnected(row.id, row.company_id, row.platform).catch(console.error);
+        continue;
       }
     }
 
-    console.log(`⏰ Token expiry uyarısı: platform=${row.platform} company=${row.company_id} days_left=${row.days_left}`);
+    // LinkedIn: refresh_token varsa otomatik yenile
+    if (row.platform === 'linkedin' && row.refresh_token) {
+      try {
+        await refreshWithBackoff(row);
+        console.log(`⏰ LinkedIn proaktif token yenileme: company=${row.company_id}`);
+        continue;
+      } catch (err) {
+        console.error('[cron] LinkedIn proaktif refresh başarısız:', err.message);
+      }
+    }
+
+    // Yenilenemeyenler: expiring olarak işaretle ve uyarı gönder
+    await markExpiring(row.id).catch(console.error);
+    await sendExpiryNotification(row, row.days_left).catch(console.error);
+  }
+
+  // ── 2. Meta özel: 45 gün kullanılmamış token uyarısı ───────────────────────
+  // Meta long-lived token 60 gün kullanılmazsa düşer; 45. günde uyar
+  const { rows: metaOld } = await pool.query(`
+    SELECT i.id, i.company_id, i.platform, i.token_expiry
+    FROM integrations i
+    WHERE i.platform = 'meta'
+      AND i.is_active = true
+      AND i.status != 'disconnected'
+      AND i.token_expiry IS NOT NULL
+      AND i.token_expiry < NOW() + INTERVAL '15 days'
+      AND i.token_expiry > NOW()
+  `);
+
+  for (const row of metaOld) {
+    const daysLeft = Math.ceil((new Date(row.token_expiry) - Date.now()) / 86400000);
+    await markExpiring(row.id).catch(console.error);
+    await sendExpiryNotification(row, daysLeft).catch(console.error);
+  }
+
+  // ── 3. Süresi dolmuş tokenlar: direkt disconnect ──────────────────────────
+  const { rows: expired } = await pool.query(`
+    SELECT i.id, i.company_id, i.platform
+    FROM integrations i
+    WHERE i.is_active = true
+      AND i.status = 'connected'
+      AND i.token_expiry IS NOT NULL
+      AND i.token_expiry < NOW()
+  `);
+
+  for (const row of expired) {
+    await markDisconnected(row.id, row.company_id, row.platform).catch(console.error);
+    console.log(`⏰ Süresi dolmuş token disconnect: platform=${row.platform} company=${row.company_id}`);
   }
 }
 

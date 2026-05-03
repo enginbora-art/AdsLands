@@ -33,7 +33,32 @@ async function exchangeToken(code) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 12000,
   });
-  return { access_token: data.access_token, expires_in: data.expires_in };
+  // LinkedIn returns refresh_token for offline_access scope (365-day validity)
+  return {
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token || null,
+    expires_in:    data.expires_in,
+    refresh_token_expires_in: data.refresh_token_expires_in || null,
+  };
+}
+
+async function refreshAccessToken(refreshToken) {
+  const body = new URLSearchParams({
+    grant_type:    'refresh_token',
+    refresh_token: refreshToken,
+    client_id:     process.env.LINKEDIN_CLIENT_ID || '',
+    client_secret: process.env.LINKEDIN_CLIENT_SECRET || '',
+  });
+  const { data } = await axios.post(TOKEN_URL, body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 12000,
+  });
+  if (!data.access_token) throw new Error('LinkedIn refresh token geçersiz veya süresi dolmuş');
+  return {
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token || refreshToken,
+    expires_in:    data.expires_in,
+  };
 }
 
 async function getAdAccounts(accessToken) {
@@ -72,4 +97,4 @@ async function getAccountName(accessToken, accountId) {
   }
 }
 
-module.exports = { getLinkedinAuthUrl, exchangeToken, getAdAccounts, getAccountName };
+module.exports = { getLinkedinAuthUrl, exchangeToken, refreshAccessToken, getAdAccounts, getAccountName };

@@ -5,6 +5,7 @@ const { validateAndNormalize } = require('./metricNormalizer');
 const { decryptIntegration } = require('./tokenEncryption');
 const { callWithRetry } = require('./platformQueue');
 const { ACTIVE_INTEGRATIONS_SQL } = require('./subscriptionService');
+const { withAuthRetry, markDisconnected, isAuthError } = require('./tokenRefresh');
 
 async function saveMetric(integrationId, metric) {
   await pool.query(
@@ -44,15 +45,24 @@ async function fetchYesterdayMetrics() {
     try {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const dateStr    = yesterday.toISOString().split('T')[0];
-      const decrypted  = decryptIntegration(integration);
-      const svc        = getPlatformService(decrypted.platform);
-      const raw        = await callWithRetry(decrypted.platform, () => svc.fetchDailyMetrics(decrypted, dateStr));
-      const metric     = validateAndNormalize(decrypted.platform, raw);
-      await saveMetric(decrypted.id, metric);
-      await detectAndHandle(decrypted);
+      const dateStr = yesterday.toISOString().split('T')[0];
+
+      const raw = await withAuthRetry(integration, (int) => {
+        const decrypted = decryptIntegration(int);
+        const svc = getPlatformService(decrypted.platform);
+        return callWithRetry(decrypted.platform, () => svc.fetchDailyMetrics(decrypted, dateStr));
+      });
+
+      const metric = validateAndNormalize(integration.platform, raw);
+      await saveMetric(integration.id, metric);
+      await detectAndHandle(decryptIntegration(integration));
     } catch (err) {
-      console.error(`[Normalizer] Hata (${integration.platform}):`, err.message);
+      if (isAuthError(err)) {
+        // markDisconnected was already called inside withAuthRetry
+        console.error(`[metricsFetcher] Auth hatası (${integration.platform}): bağlantı kesildi`);
+      } else {
+        console.error(`[metricsFetcher] Hata (${integration.platform}):`, err.message);
+      }
     }
   }
 
@@ -67,15 +77,23 @@ async function fetchTodayMetrics(companyId) {
 
   for (const integration of integrations.rows) {
     try {
-      const today     = new Date().toISOString().split('T')[0];
-      const decrypted = decryptIntegration(integration);
-      const svc       = getPlatformService(decrypted.platform);
-      const raw       = await callWithRetry(decrypted.platform, () => svc.fetchDailyMetrics(decrypted, today));
-      const metric    = validateAndNormalize(decrypted.platform, raw);
-      await saveMetric(decrypted.id, metric);
-      await detectAndHandle(decrypted, true);
+      const today = new Date().toISOString().split('T')[0];
+
+      const raw = await withAuthRetry(integration, (int) => {
+        const decrypted = decryptIntegration(int);
+        const svc = getPlatformService(decrypted.platform);
+        return callWithRetry(decrypted.platform, () => svc.fetchDailyMetrics(decrypted, today));
+      });
+
+      const metric = validateAndNormalize(integration.platform, raw);
+      await saveMetric(integration.id, metric);
+      await detectAndHandle(decryptIntegration(integration), true);
     } catch (err) {
-      console.error(`[Normalizer] Hata (${integration.platform}):`, err.message);
+      if (isAuthError(err)) {
+        console.error(`[metricsFetcher] Auth hatası (${integration.platform}): bağlantı kesildi`);
+      } else {
+        console.error(`[metricsFetcher] Hata (${integration.platform}):`, err.message);
+      }
     }
   }
 

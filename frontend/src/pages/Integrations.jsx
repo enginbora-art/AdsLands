@@ -80,11 +80,15 @@ const fmtDate = (str) => {
 
 function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onConnect, onDisconnect, onDetail }) {
   const [hover, setHover] = useState(false);
+  const isDisconnected = connected?.status === 'disconnected';
+  const isExpiring     = connected?.status === 'expiring';
 
   return (
     <div style={{
       background: '#161b27',
-      border: connected ? '1px solid rgba(16,185,129,0.3)' : '1px solid #1e2535',
+      border: isDisconnected
+        ? '1px solid rgba(239,68,68,0.4)'
+        : connected ? '1px solid rgba(16,185,129,0.3)' : '1px solid #1e2535',
       borderRadius: 10,
       padding: '14px 14px 12px',
       display: 'flex',
@@ -105,8 +109,8 @@ function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onCo
           <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', lineHeight: 1.25 }}>
             {platform.name}
           </div>
-          <div style={{ fontSize: 11, marginTop: 3, color: connected ? '#10b981' : '#6b7280' }}>
-            {connected ? '● Bağlı' : '○ Bağlı değil'}
+          <div style={{ fontSize: 11, marginTop: 3, color: isDisconnected ? '#ef4444' : isExpiring ? '#f59e0b' : connected ? '#10b981' : '#6b7280' }}>
+            {isDisconnected ? '⚠ Bağlantı kesildi' : isExpiring ? '⚠ Token süresi doluyor' : connected ? '● Bağlı' : '○ Bağlı değil'}
           </div>
         </div>
         <div style={{
@@ -121,8 +125,22 @@ function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onCo
         </div>
       </div>
 
-      {/* Connected stats */}
-      {connected && (
+      {/* Disconnected warning */}
+      {isDisconnected && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 7, padding: '7px 10px', fontSize: 11, color: '#ef4444' }}>
+          Token geçersiz — veri akışı durdu. Yeniden bağlanın.
+        </div>
+      )}
+
+      {/* Expiring warning */}
+      {isExpiring && !isDisconnected && (
+        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 7, padding: '7px 10px', fontSize: 11, color: '#f59e0b' }}>
+          Token yakında geçersiz olacak — yeniden bağlanın.
+        </div>
+      )}
+
+      {/* Connected stats — only when active */}
+      {connected && !isDisconnected && (
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
           background: 'rgba(255,255,255,0.03)', borderRadius: 7, padding: '8px 6px',
@@ -140,21 +158,44 @@ function PlatformCard({ platform, connected, isConnecting, isDisconnecting, onCo
 
       {/* Actions */}
       {connected ? (
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={onDetail}
-            style={{ flex: 1, padding: '7px 0', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 7, color: '#10b981', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        isDisconnected ? (
+          <div
+            onClick={!isConnecting ? onConnect : undefined}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            style={{
+              background: isConnecting ? 'rgba(239,68,68,0.05)' : hover ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.07)',
+              border: '1px solid rgba(239,68,68,0.4)',
+              color: '#ef4444',
+              fontWeight: 700,
+              borderRadius: 8,
+              padding: '8px 0',
+              textAlign: 'center',
+              cursor: isConnecting ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              transition: 'background .15s',
+              userSelect: 'none',
+            }}
           >
-            Detay
-          </button>
-          <button
-            onClick={onDisconnect}
-            disabled={isDisconnecting}
-            style={{ flex: 1, padding: '7px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 7, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: isDisconnecting ? 'not-allowed' : 'pointer' }}
-          >
-            {isDisconnecting ? '...' : 'Kes'}
-          </button>
-        </div>
+            {isConnecting ? 'Yönlendiriliyor...' : 'Yeniden Bağlan'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={onDetail}
+              style={{ flex: 1, padding: '7px 0', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 7, color: '#10b981', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Detay
+            </button>
+            <button
+              onClick={onDisconnect}
+              disabled={isDisconnecting}
+              style={{ flex: 1, padding: '7px 0', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 7, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: isDisconnecting ? 'not-allowed' : 'pointer' }}
+            >
+              {isDisconnecting ? '...' : 'Kes'}
+            </button>
+          </div>
+        )
       ) : (
         <div
           onClick={!isConnecting ? onConnect : undefined}

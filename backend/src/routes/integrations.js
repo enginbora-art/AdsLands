@@ -53,7 +53,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user, req.query.brand_id);
     const { rows } = await pool.query(
-      `SELECT i.id, i.platform, i.account_id, i.is_active, i.created_at,
+      `SELECT i.id, i.platform, i.account_id, i.is_active, i.status, i.token_expiry, i.created_at,
         COALESCE(SUM(m.spend), 0) AS total_spend,
         COALESCE(AVG(m.roas), 0) AS avg_roas,
         COALESCE(SUM(m.conversions), 0) AS total_conversions,
@@ -117,14 +117,15 @@ router.get('/google/callback', async (req, res) => {
 
     const { rows: [integration] } = await pool.query(
       `INSERT INTO integrations
-         (company_id, platform, access_token, refresh_token, account_id, token_expiry, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+         (company_id, platform, access_token, refresh_token, account_id, token_expiry, is_active, status)
+       VALUES ($1, $2, $3, $4, $5, $6, true, 'connected')
        ON CONFLICT (company_id, platform) DO UPDATE SET
          access_token  = EXCLUDED.access_token,
          refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
          account_id    = COALESCE(EXCLUDED.account_id, integrations.account_id),
          token_expiry  = EXCLUDED.token_expiry,
-         is_active     = true
+         is_active     = true,
+         status        = 'connected'
        RETURNING *`,
       [companyId, platform, encrypt(tokens.access_token), encrypt(tokens.refresh_token || null),
        accountId, tokens.expiry_date ? new Date(tokens.expiry_date) : null]
@@ -459,7 +460,7 @@ router.get('/linkedin/callback', async (req, res) => {
   }
 
   try {
-    const { access_token, expires_in } = await exchangeLinkedinToken(code);
+    const { access_token, refresh_token, expires_in } = await exchangeLinkedinToken(code);
     const tokenExpiry = new Date(Date.now() + (expires_in || 5_184_000) * 1000); // ~60 gün default
 
     const accounts = await getLinkedinAccounts(access_token).catch(() => []);
@@ -468,15 +469,17 @@ router.get('/linkedin/callback', async (req, res) => {
     const accountName = account?.name || (accountId ? await getLinkedinName(access_token, accountId).catch(() => null) : null);
 
     const { rows: [integration] } = await pool.query(
-      `INSERT INTO integrations (company_id, platform, access_token, account_id, token_expiry, is_active)
-       VALUES ($1, 'linkedin', $2, $3, $4, true)
+      `INSERT INTO integrations (company_id, platform, access_token, refresh_token, account_id, token_expiry, is_active, status)
+       VALUES ($1, 'linkedin', $2, $3, $4, $5, true, 'connected')
        ON CONFLICT (company_id, platform) DO UPDATE
          SET access_token  = EXCLUDED.access_token,
+             refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
              account_id    = COALESCE(EXCLUDED.account_id, integrations.account_id),
              token_expiry  = EXCLUDED.token_expiry,
-             is_active     = true
+             is_active     = true,
+             status        = 'connected'
        RETURNING *`,
-      [companyId, encrypt(access_token), accountId, tokenExpiry]
+      [companyId, encrypt(access_token), refresh_token ? encrypt(refresh_token) : null, accountId, tokenExpiry]
     );
 
     await seedHistoricalMetrics(integration).catch(console.error);
@@ -521,10 +524,10 @@ router.get('/:platform/connect', authMiddleware, async (req, res) => {
     const companyId = await resolveCompanyId(req.user, req.query.brand_id);
     const accountId = `mock_${platform}_${companyId.slice(0, 8)}`;
     const { rows: [integration] } = await pool.query(
-      `INSERT INTO integrations (company_id, platform, access_token, refresh_token, account_id, is_active)
-       VALUES ($1, $2, 'mock_token', 'mock_refresh', $3, true)
+      `INSERT INTO integrations (company_id, platform, access_token, refresh_token, account_id, is_active, status)
+       VALUES ($1, $2, 'mock_token', 'mock_refresh', $3, true, 'connected')
        ON CONFLICT (company_id, platform) DO UPDATE
-         SET is_active = true, access_token = 'mock_token', account_id = EXCLUDED.account_id
+         SET is_active = true, access_token = 'mock_token', account_id = EXCLUDED.account_id, status = 'connected'
        RETURNING *`,
       [companyId, platform, accountId]
     );

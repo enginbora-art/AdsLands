@@ -303,6 +303,7 @@ async function listMccCustomers(tokens) {
 }
 
 module.exports = {
+  createGoogleClient: createClient,
   getAuthUrl,
   getTokens,
   refreshIfNeeded,

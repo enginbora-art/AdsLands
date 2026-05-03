@@ -42,6 +42,7 @@ const ACTIVE_INTEGRATIONS_SQL = (withCompanyFilter = false) => `
   FROM integrations i
   JOIN companies c ON c.id = i.company_id
   WHERE i.is_active = true
+    AND i.status != 'disconnected'
   ${withCompanyFilter ? 'AND i.company_id = $1' : ''}
     AND (
       c.trial_ends_at > NOW()
