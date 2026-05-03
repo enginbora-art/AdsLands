@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
-import { useSubscription } from '../context/SubscriptionContext';
 import SubscriptionBanner from '../components/SubscriptionBanner';
-import SubscriptionGateModal from '../components/SubscriptionGateModal';
 import {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getCampaign, addCampaignChannel, removeCampaignChannel,
@@ -411,14 +409,12 @@ function CampaignCard({ campaign, onClick }) {
 export default function Campaigns({ onNav }) {
   const { user } = useAuth();
   const { selectedBrand } = useSelectedBrand();
-  const { isActive } = useSubscription();
   const isAgency = user?.company_type === 'agency';
   const brandId  = isAgency ? selectedBrand?.id : null;
 
   const [tab, setTab]         = useState('active');
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [gateModal, setGateModal]   = useState(false);
   const [createModal, setCreateModal] = useState(false);
   const [editModal, setEditModal]   = useState(null);
   const [detailId, setDetailId]     = useState(null);
@@ -457,7 +453,6 @@ export default function Campaigns({ onNav }) {
 
   return (
     <div className="fade-in">
-      {gateModal && <SubscriptionGateModal onClose={() => setGateModal(false)} onNav={onNav} />}
       {createModal && (
         <CampaignFormModal brandId={brandId || user?.company_id} onClose={() => setCreateModal(false)} onSave={handleCreate} />
       )}
@@ -480,7 +475,7 @@ export default function Campaigns({ onNav }) {
       <div className="topbar">
         <div className="topbar-title">Kampanyalar</div>
         <div className="topbar-right">
-          <button onClick={() => { if (!isActive) { setGateModal(true); return; } setCreateModal(true); }}
+          <button onClick={() => setCreateModal(true)}
             style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)' }}>
             + Yeni Kampanya
           </button>
@@ -515,7 +510,7 @@ export default function Campaigns({ onNav }) {
               {tab === 'active' ? 'Yeni bir kampanya oluşturun ve kanal bütçelerinizi yönetin.' : 'Biten kampanyalar burada görünür.'}
             </div>
             {tab === 'active' && (
-              <button onClick={() => { if (!isActive) { setGateModal(true); return; } setCreateModal(true); }}
+              <button onClick={() => setCreateModal(true)}
                 style={{ padding: '10px 24px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '1px solid rgba(0,201,167,0.4)', background: 'rgba(0,201,167,0.08)', color: '#00C9A7', fontFamily: 'var(--font)' }}>
                 + Yeni Kampanya Oluştur
               </button>
