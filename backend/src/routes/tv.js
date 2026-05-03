@@ -388,7 +388,7 @@ router.get('/plans/:id/summary', authMiddleware, async (req, res) => {
 const DOW_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
 router.post('/plans/:id/ai-suggest', authMiddleware, requireActiveSubscription,
-  checkAiLimit('tv_ai_suggest'), async (req, res) => {
+  checkAiLimit('tv_plan_suggestion'), async (req, res) => {
   try {
     const planId    = req.params.id;
     const companyId = req.user.company_id;
@@ -560,7 +560,7 @@ KURALLAR:
         res.write('data: [DONE]\n\n');
         res.end();
 
-        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'tv_ai_suggest', input_tokens, output_tokens, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' });
+        logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'tv_plan_suggestion', input_tokens, output_tokens, 'claude-opus-4-7', { waitMs, processMs, status: 'completed' }, { plan_id: planId });
       });
     } catch (err) {
       if (!res.writableEnded) {

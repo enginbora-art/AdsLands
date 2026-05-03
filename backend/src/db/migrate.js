@@ -471,6 +471,7 @@ async function migrate() {
       ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS wait_ms    INTEGER;
       ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS process_ms INTEGER;
       ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS status     VARCHAR(20) DEFAULT 'completed';
+      ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS plan_id    UUID REFERENCES tv_media_plans(id) ON DELETE SET NULL;
     `);
 
     // Genişletilmiş plan listesi: brand_basic / brand_pro / brand_enterprise
