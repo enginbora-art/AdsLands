@@ -15,10 +15,25 @@ const LEGACY_CHANNEL_MAP = [
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
 function MetricCard({ label, value, sub, accent, danger }) {
+  const color = danger ? '#F87171' : (accent || 'var(--text1)');
+  const isHex = color.startsWith('#');
+  const bg    = isHex ? `${color}0D` : 'transparent';
+  const shadow = isHex ? `${color}1A` : 'transparent';
   return (
-    <div style={{ background: 'var(--bg2)', border: `1px solid ${danger ? 'rgba(255,107,90,0.3)' : 'var(--border2)'}`, borderRadius: 12, padding: '18px 20px' }}>
+    <div
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 0 20px ${shadow}`; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+      style={{
+        background: bg,
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 12,
+        padding: '18px 20px',
+        transition: 'all 0.2s',
+      }}
+    >
       <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--coral)' : accent || 'var(--text1)' }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
     </div>
   );
@@ -101,8 +116,8 @@ function AgencySummary() {
       <div className="content">
         <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="Toplam Müşteri"      value={loading ? '—' : summary.total_clients}                       sub="Bağlı marka"  accent="#A78BFA" />
-          <MetricCard label="Yönetilen Bütçe"     value={loading ? '—' : `₺${fmt(summary.total_managed_budget)}`}    sub="Bu ay toplam" accent="var(--teal)" />
-          <MetricCard label="Bugünkü Harcama"     value={loading ? '—' : `₺${fmt(summary.total_today_spend)}`}       sub="Tüm markalar" accent="#60A5FA" />
+          <MetricCard label="Yönetilen Bütçe"     value={loading ? '—' : `₺${fmt(summary.total_managed_budget)}`}    sub="Bu ay toplam" accent="#00C9A7" />
+          <MetricCard label="Bugünkü Harcama"     value={loading ? '—' : `₺${fmt(summary.total_today_spend)}`}       sub="Tüm markalar" accent="#38BDF8" />
           <MetricCard
             label="Aktif Anomali"
             value={loading ? '—' : summary.total_anomalies}
@@ -166,10 +181,10 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
       <div className="content">
         <BudgetIntegrationWarning budget={budget} integrations={integrations} onNav={onNav} />
         <div className="metrics" style={{ marginBottom: 24 }}>
-          <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="var(--teal)" />
-          <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#60A5FA" />
+          <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="#00C9A7" />
+          <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#38BDF8" />
           <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" />
-          <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="var(--amber)" />
+          <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="#F59E0B" />
         </div>
 
         {!integrations?.length ? (
@@ -188,7 +203,12 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
                 const color = PLATFORM_COLORS[i.platform] || 'var(--teal)';
                 const icon = i.platform === 'google_analytics' ? 'GA' : i.platform[0].toUpperCase();
                 return (
-                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border2)' }}>
+                  <div
+                    key={i.id}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: 16, marginBottom: 8, transition: 'background 0.2s' }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 30, height: 30, borderRadius: 7, background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800 }}>{icon}</div>
                       <div>
