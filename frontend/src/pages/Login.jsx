@@ -218,7 +218,7 @@ export default function Login() {
           cursor: pointer; transition: box-shadow 0.2s, transform 0.2s;
         }
         .lbtn:hover:not(:disabled) {
-          box-shadow: 0 8px 30px rgba(0,201,167,0.35);
+          box-shadow: 0 0 20px rgba(0,201,167,0.35), 0 0 40px rgba(0,201,167,0.15);
           transform: translateY(-1px);
         }
         .lbtn:active:not(:disabled) { transform: translateY(0); }

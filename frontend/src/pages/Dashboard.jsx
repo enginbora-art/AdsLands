@@ -14,14 +14,36 @@ const LEGACY_CHANNEL_MAP = [
 ];
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
-function MetricCard({ label, value, sub, accent, danger }) {
+function Gauge({ value = 0, color = '#F59E0B' }) {
+  const [p, setP] = useState(0);
+  useEffect(() => {
+    const id = setTimeout(() => setP(Math.min(Math.max(value, 0), 1)), 150);
+    return () => clearTimeout(id);
+  }, [value]);
+  // M 12 40 A 28 28 0 0 0 68 40 = semicircle from left to right through TOP
+  const arcLen = Math.PI * 28;
+  const filled = arcLen * p;
+  return (
+    <svg width="72" height="40" viewBox="8 8 64 36" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M 12 40 A 28 28 0 0 0 68 40" fill="none"
+        stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M 12 40 A 28 28 0 0 0 68 40" fill="none"
+        stroke={color} strokeWidth="3.5" strokeLinecap="round"
+        strokeDasharray={`${filled} ${arcLen}`}
+        style={{ transition: 'stroke-dasharray 1.5s cubic-bezier(0.16, 1, 0.3, 1)' }}
+      />
+    </svg>
+  );
+}
+
+function MetricCard({ label, value, sub, accent, danger, gauge }) {
   const color = danger ? '#F87171' : (accent || 'var(--text1)');
   const isHex = color.startsWith('#');
   const bg    = isHex ? `${color}0D` : 'transparent';
-  const shadow = isHex ? `${color}1A` : 'transparent';
+  const glow  = isHex ? `0 0 25px ${color}33, 0 0 50px ${color}14` : 'none';
   return (
     <div
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 0 20px ${shadow}`; }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = glow; }}
       onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
       style={{
         background: bg,
@@ -33,8 +55,20 @@ function MetricCard({ label, value, sub, accent, danger }) {
       }}
     >
       <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
+      {gauge != null ? (
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
+            {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
+          </div>
+          <Gauge value={gauge} color={color} />
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
+          {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
+        </>
+      )}
     </div>
   );
 }
@@ -170,6 +204,7 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
           </button>
           {!isAgency && (
             <button
+              className="btn-glow-teal"
               style={{ padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'transparent', color: 'var(--teal)' }}
               onClick={() => setShowInvite(true)}>
               + Ajans Davet Et
@@ -183,8 +218,8 @@ function BrandDashboardContent({ data, title, isAgency, showInvite, setShowInvit
         <div className="metrics" style={{ marginBottom: 24 }}>
           <MetricCard label="30g Harcama"     value={`₺${fmt(summary?.total_spend)}`}             accent="#00C9A7" />
           <MetricCard label="Bugünkü Harcama" value={`₺${fmt(today_spend)}`}                       accent="#38BDF8" />
-          <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" />
-          <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="#F59E0B" />
+          <MetricCard label="Ort. ROAS"       value={`${Number(summary?.avg_roas || 0).toFixed(2)}x`} accent="#A78BFA" gauge={Math.min(Number(summary?.avg_roas || 0) / 5, 1)} />
+          <MetricCard label="Dönüşüm"         value={fmt(summary?.total_conversions)} sub="Son 30 gün" accent="#F59E0B" gauge={0.75} />
         </div>
 
         {!integrations?.length ? (

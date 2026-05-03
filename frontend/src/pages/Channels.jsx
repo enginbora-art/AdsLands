@@ -1052,7 +1052,7 @@ export default function Channels({ onNav }) {
                           <td>
                             {kpi?.kpi_roas != null ? (
                               <KpiCell actual={parseFloat(i.avg_roas)} target={kpi.kpi_roas} fmt={v => `${v.toFixed(1)}x`} />
-                            ) : <span style={{ color: 'var(--text2)' }}>{Number(i.avg_roas).toFixed(2)}x</span>}
+                            ) : <span style={{ color: '#A78BFA', textShadow: '0 0 20px rgba(167,139,250,0.5)' }}>{Number(i.avg_roas).toFixed(2)}x</span>}
                           </td>
                           <td>
                             {kpi?.kpi_cpa != null ? (
