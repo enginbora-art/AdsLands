@@ -151,13 +151,13 @@ function ProgressBar({ pct, color = '#00C9A7' }) {
 
 function StatusBadge({ status }) {
   const cfg = {
-    active:    { label: 'Aktif',      bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7', dot: '#00C9A7' },
-    draft:     { label: 'Kanal yok',  bg: 'rgba(148,163,184,0.1)', color: '#94a3b8', dot: '#94a3b8' },
-    completed: { label: 'Tamamlandı', bg: 'rgba(99,102,241,0.12)', color: '#818CF8', dot: '#818CF8' },
+    active:    { label: 'Aktif',      bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7', dot: '#00C9A7', border: '1px solid transparent' },
+    draft:     { label: 'Taslak',     bg: 'rgba(245,158,11,0.08)', color: '#F59E0B', dot: '#F59E0B', border: '1px dashed rgba(245,158,11,0.55)' },
+    completed: { label: 'Tamamlandı', bg: 'rgba(99,102,241,0.12)', color: '#818CF8', dot: '#818CF8', border: '1px solid transparent' },
   };
   const s = cfg[status] || cfg.draft;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 12, background: s.bg, fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 12, background: s.bg, border: s.border, fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot }} />
       {s.label}
     </span>
@@ -721,25 +721,44 @@ function CampaignCard({ campaign, onClick }) {
   const pct = campaign.total_budget > 0 ? (campaign.total_spend / campaign.total_budget) * 100 : 0;
   const now = new Date();
   const daysLeft = Math.max(Math.ceil((new Date(campaign.end_date) - now) / 86400000), 0);
-  const accentColor = campaign.status === 'active' ? '#00C9A7' : campaign.status === 'completed' ? '#818CF8' : '#475569';
-  const borderBase  = campaign.status === 'active' ? 'rgba(0,201,167,0.18)' : 'var(--border2)';
+
+  const isDraft     = campaign.status === 'draft';
+  const isCompleted = campaign.status === 'completed';
+  const accentColor = isDraft ? '#64748B' : isCompleted ? '#818CF8' : '#00C9A7';
+  const borderBase  = isCompleted ? 'rgba(99,102,241,0.2)' : campaign.status === 'active' ? 'rgba(0,201,167,0.18)' : 'rgba(100,116,139,0.2)';
+  const cardOpacity = isCompleted ? 0.62 : isDraft ? 0.76 : 1;
 
   return (
     <div onClick={onClick}
-      style={{ background: 'var(--bg2)', border: `1px solid ${borderBase}`, borderLeft: `3px solid ${accentColor}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease', position: 'relative', opacity: campaign.status === 'draft' ? 0.82 : 1 }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 10px 28px rgba(0,0,0,0.3), 0 0 0 1px ${accentColor}44`; e.currentTarget.style.borderColor = `${accentColor}66`; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = borderBase; }}
+      style={{ background: 'var(--bg2)', border: `1px solid ${borderBase}`, borderLeft: `3px solid ${accentColor}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease, opacity 0.15s ease', position: 'relative', opacity: cardOpacity }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'translateY(-3px)';
+        e.currentTarget.style.boxShadow = `0 10px 28px rgba(0,0,0,0.3), 0 0 0 1px ${accentColor}44`;
+        e.currentTarget.style.opacity = '1';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = '';
+        e.currentTarget.style.boxShadow = '';
+        e.currentTarget.style.opacity = String(cardOpacity);
+      }}
     >
+      {/* Completed: soft purple overlay tint */}
+      {isCompleted && (
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: 'rgba(99,102,241,0.05)', pointerEvents: 'none' }} />
+      )}
+
       {campaign.has_anomaly && (
         <div title="Aktif uyarı" style={{ position: 'absolute', top: 14, right: 14, width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', boxShadow: '0 0 0 3px rgba(245,158,11,0.2)' }} />
       )}
+
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text1)', lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: campaign.has_anomaly ? 16 : 0 }}>
           {campaign.name}
         </div>
         <StatusBadge status={campaign.status} />
       </div>
-      <div style={{ marginBottom: 12 }}>
+
+      <div style={{ marginBottom: 12, opacity: isDraft ? 0.7 : 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 5 }}>
           <span>₺{fmt(campaign.total_spend)}</span>
           <span style={{ fontWeight: 600, color: pct >= 80 ? '#F59E0B' : 'var(--text2)' }}>%{Math.round(pct)}</span>
@@ -747,7 +766,8 @@ function CampaignCard({ campaign, onClick }) {
         </div>
         <ProgressBar pct={pct} />
       </div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 14, opacity: isDraft ? 0.7 : 1 }}>
         <div>
           <div style={{ fontSize: 10, color: 'var(--text3)' }}>ROAS</div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>{Number(campaign.avg_roas || 0).toFixed(2)}x</div>
@@ -763,10 +783,15 @@ function CampaignCard({ campaign, onClick }) {
           </div>
         )}
       </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-          {campaign.channel_count === 0 ? 'Kanal bağlanmadı' : `${campaign.channel_count} kanal`}
-        </span>
+        {isDraft ? (
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', padding: '2px 8px', borderRadius: 6 }}>
+            ⚠ Kanal bağlanmadı
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{campaign.channel_count} kanal</span>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)' }}>
           {fmtDate(campaign.start_date)} — {fmtDate(campaign.end_date)}
         </span>
