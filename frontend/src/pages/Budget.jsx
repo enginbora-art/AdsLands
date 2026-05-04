@@ -543,8 +543,32 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing
   );
 }
 
+// ── Confirm Modal ─────────────────────────────────────────────────────────────
+function ConfirmModal({ title, message, onConfirm, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const handleConfirm = async () => {
+    setLoading(true);
+    try { await onConfirm(); onClose(); } catch { setLoading(false); }
+  };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }} onClick={onClose}>
+      <div style={{ background: '#1a1f2e', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 14, padding: '28px 28px 24px', maxWidth: 420, width: '100%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12, color: 'var(--text1)' }}>{title}</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.7, marginBottom: 24 }}>{message}</div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: 9, fontSize: 13, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text2)', fontWeight: 600, fontFamily: 'var(--font)' }}>İptal</button>
+          <button onClick={handleConfirm} disabled={loading}
+            style={{ padding: '9px 22px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontFamily: 'var(--font)', opacity: loading ? 0.7 : 1 }}>
+            {loading ? 'Siliniyor...' : 'Evet, Sil'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Campaign Detail Modal ─────────────────────────────────────────────────────
-function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }) {
+function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, onDelete }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [showAddCh, setShowAddCh]     = useState(false);
@@ -587,6 +611,10 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {data && <StatusBadge status={data.status} />}
+            {data?.status === 'draft' && (
+              <button onClick={() => onDelete(campaignId, data.name)}
+                style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', cursor: 'pointer', fontFamily: 'var(--font)' }}>Sil</button>
+            )}
             {data?.status !== 'completed' && (
               <button onClick={onEdit} style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text2)', cursor: 'pointer', fontFamily: 'var(--font)' }}>Düzenle</button>
             )}
@@ -766,11 +794,12 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const [campSearch, setCampSearch] = useState('');
   const [campTab, setCampTab]       = useState('active');
   const [campPage, setCampPage]     = useState(1);
-  const [createModal, setCreateModal] = useState(false);
-  const [editModal, setEditModal]   = useState(null);
-  const [detailId, setDetailId]     = useState(null);
-  const [deleting, setDeleting]     = useState(null);
-  const autoCreatedRef              = useRef(false);
+  const [createModal, setCreateModal]     = useState(false);
+  const [editModal, setEditModal]         = useState(null);
+  const [detailId, setDetailId]           = useState(null);
+  const [deleting, setDeleting]           = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, name }
+  const autoCreatedRef                    = useRef(false);
 
   const isEmbedded         = !!forceBrandId || (isAgency && !!selectedBrand);
   const resolvedBrandId    = forceBrandId   || (isAgency ? selectedBrand?.id          : undefined);
@@ -830,8 +859,9 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
 
   const handleCampaignCreate = async (data) => { await createCampaign(data); loadCampaigns(); };
   const handleCampaignEdit   = async (data) => { await updateCampaign(editModal.id, data); loadCampaigns(); };
-  const handleCampaignDelete = async (id) => {
-    if (!window.confirm('Kampanyayı silmek istediğinizden emin misiniz?')) return;
+  const handleCampaignDelete = (id, name) => setConfirmDelete({ id, name });
+  const doDeleteCampaign = async () => {
+    const id = confirmDelete.id;
     setDeleting(id);
     try { await deleteCampaign(id); loadCampaigns(); } catch {}
     finally { setDeleting(null); }
@@ -1045,8 +1075,8 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
             {pageList.map(c => (
               <div key={c.id} style={{ position: 'relative' }}>
                 <CampaignCard campaign={c} onClick={() => setDetailId(c.id)} />
-                {c.status !== 'completed' && (
-                  <button onClick={(e) => { e.stopPropagation(); handleCampaignDelete(c.id); }} disabled={deleting === c.id} title="Sil"
+                {c.status === 'draft' && (
+                  <button onClick={(e) => { e.stopPropagation(); handleCampaignDelete(c.id, c.name); }} disabled={deleting === c.id} title="Sil"
                     style={{ position: 'absolute', bottom: 14, right: 14, width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid rgba(239,68,68,0.2)', color: 'rgba(239,68,68,0.5)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: deleting === c.id ? 0.5 : 1 }}>
                     ×
                   </button>
@@ -1081,6 +1111,14 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
 
   const modals = (
     <>
+      {confirmDelete && (
+        <ConfirmModal
+          title="Kampanyayı Sil"
+          message={`"${confirmDelete.name}" kampanyasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`}
+          onConfirm={doDeleteCampaign}
+          onClose={() => setConfirmDelete(null)}
+        />
+      )}
       {showBudgetModal && (
         <BudgetModal role={user?.company_type} brands={brands} month={selMonth} year={selYear}
           existing={budgetPlan} forceBrandId={resolvedBrandId}
@@ -1103,6 +1141,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
             const c = campList.find(x => x.id === detailId);
             if (c) { setDetailId(null); setEditModal(c); }
           }}
+          onDelete={(id, name) => { setDetailId(null); handleCampaignDelete(id, name); }}
           onRefresh={loadCampaigns}
         />
       )}

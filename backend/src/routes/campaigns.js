@@ -261,14 +261,17 @@ router.put('/:id', authMiddleware, requireActiveSubscription, async (req, res) =
   }
 });
 
-// DELETE /api/campaigns/:id
+// DELETE /api/campaigns/:id  — only draft (no channels) campaigns may be deleted
 router.delete('/:id', authMiddleware, requireActiveSubscription, async (req, res) => {
   try {
     const { rows: [c] } = await pool.query(
-      'SELECT id, name, brand_id FROM campaigns WHERE id = $1 AND brand_id = $2',
+      'SELECT id, name, brand_id, status FROM campaigns WHERE id = $1 AND brand_id = $2',
       [req.params.id, req.user.company_id]
     );
     if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+    if (c.status !== 'draft') {
+      return res.status(403).json({ error: 'Yalnızca kanal bağlanmamış (taslak) kampanyalar silinebilir.' });
+    }
     await pool.query('DELETE FROM campaigns WHERE id = $1', [req.params.id]);
     logCampaignAction(req.user, null, c.brand_id, 'campaign_deleted', c.name, null, null);
     res.json({ success: true });
