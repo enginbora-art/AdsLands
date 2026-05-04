@@ -598,29 +598,52 @@ function getSortFn(sortBy) {
 }
 
 // focus-aware Turkish number input: shows 20.000 when blurred, 20000 when focused
-function PriceInput({ value, onChange, label, suffix = '₺', step = 1, max }) {
-  const [focused, setFocused] = useState(false);
-  const raw = String(value ?? '').replace(/\./g, '').replace(/[^0-9]/g, '');
-  const displayed = focused ? raw : (raw ? parseInt(raw, 10).toLocaleString('tr-TR') : '');
+function PriceInput({ value, onChange, label, suffix = '₺', max }) {
+  // localStr holds the raw string while the input is focused so mid-edit
+  // states like '' or '2' don't get parsed/clobbered by the parent re-render.
+  const [localStr, setLocalStr] = useState(null); // null = not focused
+  const isFocused = localStr !== null;
+
+  const handleFocus = () => {
+    // seed local string from current prop, strip formatting chars
+    const seed = String(value ?? '').replace(/\./g, '').replace(/[^0-9]/g, '');
+    setLocalStr(seed);
+  };
+
+  const handleChange = (e) => {
+    const cleaned = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+    if (max !== undefined && cleaned !== '' && parseInt(cleaned, 10) > max) return;
+    setLocalStr(cleaned);
+    // propagate as string while typing; parent stores it in edits as-is
+    onChange(cleaned === '' ? '' : parseInt(cleaned, 10));
+  };
+
+  const handleBlur = () => {
+    const parsed = localStr === '' || localStr === null ? 0 : (parseInt(localStr, 10) || 0);
+    setLocalStr(null);
+    onChange(parsed);
+  };
+
+  // Display: while focused show raw string; blurred show TR-formatted number
+  const blurredNum = parseInt(String(value ?? '').replace(/\./g, '').replace(/[^0-9]/g, '') || '0', 10);
+  const displayed = isFocused
+    ? localStr
+    : (blurredNum ? blurredNum.toLocaleString('tr-TR') : '');
+
   return (
     <div>
       <label style={fieldLabel}>{label}</label>
       <div style={{ position: 'relative' }}>
-        {!focused && raw && (
+        {!isFocused && displayed && (
           <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--text3)', pointerEvents: 'none' }}>{suffix}</span>
         )}
         <input
           inputMode="numeric"
           value={displayed}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onChange={e => {
-            const cleaned = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
-            const num = cleaned === '' ? 0 : parseInt(cleaned, 10);
-            if (max !== undefined && num > max) return;
-            onChange(num);
-          }}
-          style={{ ...inp, fontFamily: 'monospace', paddingLeft: !focused && raw ? 22 : 9 }}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onChange={handleChange}
+          style={{ ...inp, fontFamily: 'monospace', paddingLeft: !isFocused && displayed ? 22 : 9 }}
         />
       </div>
     </div>
