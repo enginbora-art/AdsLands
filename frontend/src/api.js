@@ -214,3 +214,7 @@ export const addCampaignChannel    = (id, data) => api.post(`/campaigns/${id}/ch
 export const removeCampaignChannel = (id, channelId) => api.delete(`/campaigns/${id}/channels/${channelId}`).then(r => r.data);
 export const getPlatformCampaigns  = (id, platform, search) =>
   api.get(`/campaigns/${id}/platform-campaigns?platform=${platform}${search ? `&search=${encodeURIComponent(search)}` : ''}`).then(r => r.data);
+export const importMediaPlan       = (file, filename) =>
+  api.post('/campaigns/import-plan', { file, filename }).then(r => r.data);
+export const confirmMediaPlanImport = (data) =>
+  api.post('/campaigns/import-confirm', data).then(r => r.data);

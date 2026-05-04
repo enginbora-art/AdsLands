@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/requireActiveSubscription');
+const { checkAiLimit, logAiUsage } = require('../middleware/aiLimit');
 
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads',
@@ -395,6 +396,220 @@ router.get('/:id/platform-campaigns', authMiddleware, requireActiveSubscription,
   } catch (err) {
     console.error('[campaigns GET /:id/platform-campaigns]', err);
     res.status(500).json({ error: 'Platform kampanyaları yüklenemedi.' });
+  }
+});
+
+// ── Excel Medya Planı Import ──────────────────────────────────────────────────
+
+function cellText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return String(v);
+  if (v instanceof Date) return v.toISOString().split('T')[0];
+  if (typeof v === 'object') {
+    if (v.richText) return v.richText.map(r => r.text || '').join('').trim();
+    if (v.formula && v.result != null) return cellText(v.result);
+    if (v.text) return String(v.text).trim();
+    if (v.hyperlink) return (v.text || v.hyperlink).trim();
+  }
+  return String(v);
+}
+
+const DIGITAL_KEYWORDS = ['dijital', 'digital', 'transfer'];
+const IGNORE_KEYWORDS  = ['tv', 'radyo', 'gazete', 'dergi', 'televizyon'];
+
+function isDigitalSheet(name) {
+  const lower = (name || '').toLowerCase();
+  if (IGNORE_KEYWORDS.some(k => lower.includes(k))) return false;
+  return DIGITAL_KEYWORDS.some(k => lower.includes(k));
+}
+
+// POST /api/campaigns/import-plan — parse Excel with AI
+router.post('/import-plan', authMiddleware, requireActiveSubscription, checkAiLimit('plan_import'), async (req, res) => {
+  const { file, filename } = req.body;
+  if (!file) return res.status(400).json({ error: 'Dosya gerekli.' });
+
+  const approxBytes = Math.round(file.length * 0.75);
+  if (approxBytes > 10 * 1024 * 1024) {
+    return res.status(400).json({ error: 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.' });
+  }
+
+  try {
+    const ExcelJS = require('exceljs');
+    const buf = Buffer.from(file, 'base64');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buf);
+
+    const allSheets = [];
+    workbook.eachSheet(sheet => {
+      const rows = [];
+      sheet.eachRow({ includeEmpty: false }, row => {
+        const cells = [];
+        row.eachCell({ includeEmpty: true }, cell => cells.push(cellText(cell.value)));
+        const nonEmpty = cells.filter(Boolean).length;
+        if (nonEmpty > 0) rows.push(cells.join('\t'));
+      });
+      if (rows.length > 0) allSheets.push({ name: sheet.name, rows });
+    });
+
+    if (allSheets.length === 0) {
+      return res.status(422).json({ error: 'Bu dosyada dijital plan bulunamadı. Lütfen dijital plan içeren bir Excel yükleyin.' });
+    }
+
+    // Prefer digital sheets; fall back to all
+    const digital = allSheets.filter(s => isDigitalSheet(s.name));
+    const chosen  = digital.length > 0 ? digital : allSheets;
+
+    // Truncate to ~12k chars per sheet to stay within token budget
+    const sheetsText = chosen.map(s =>
+      `=== Sheet: ${s.name} ===\n${s.rows.slice(0, 200).join('\n')}`
+    ).join('\n\n').slice(0, 50000);
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'AI servisi şu an kullanılamıyor.' });
+    }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const t0 = Date.now();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      system: `Sen bir medya planı analiz uzmanısın. Verilen Excel verisinden SADECE dijital plan bilgilerini çıkar. TV, radyo, gazete, dergi sheet'lerini tamamen yoksay.
+
+Her satır için şunu çıkar:
+{
+  "platform": "google|meta|tiktok|youtube|programatik|display|video|x|linkedin",
+  "ad_model": string,
+  "budget": sayı (TL),
+  "buying_type": "CPM|CPC|CPV" veya null,
+  "unit_price": sayı veya null,
+  "planned_kpi": sayı veya null,
+  "kpi_type": "impression|click|view" veya null,
+  "targeting": string veya null,
+  "frequency": string veya null
+}
+
+Platform normalizasyonu:
+- "Facebook", "Instagram", "Facebook & Instagram", "Facebook / İnstagram", "Meta" → "meta"
+- "YouTube", "Youtube" → "youtube"
+- "Staff Programatik", "DV360", "Programatik Network", "Programmatic", "Display", "GDN", "Native" → "programatik"
+- "X", "Genart/X", "Twitter" → "x"
+- "Google", "Google Ads", "Search", "Arama", "Demand Gen" → "google"
+- "TikTok" → "tiktok"
+- "LinkedIn" → "linkedin"
+- "Video" (bağımsız) → "video"
+
+Tarih: Excel seri numarasını YYYY-MM-DD'ye çevir (epoch: 1900-01-01, -2 gün offset).
+Adserver fee, yasal işletim ücreti, alt toplam, boş satırları hariç tut.
+
+SADECE JSON yanıt ver, başka hiçbir şey ekleme:
+{
+  "campaign_name": string veya null,
+  "start_date": "YYYY-MM-DD" veya null,
+  "end_date": "YYYY-MM-DD" veya null,
+  "total_budget": sayı,
+  "lines": [...],
+  "missing_fields": [string]
+}`,
+      messages: [{ role: 'user', content: sheetsText }],
+    });
+
+    const processMs    = Date.now() - t0;
+    const inputTokens  = response.usage?.input_tokens  ?? 0;
+    const outputTokens = response.usage?.output_tokens ?? 0;
+    logAiUsage(req.aiCtx.companyId, req.aiCtx.userId, 'plan_import', inputTokens, outputTokens, 'claude-sonnet-4-6', { processMs });
+
+    const raw       = response.content[0]?.text || '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(422).json({ error: 'Plan formatı tanınamadı. Farklı bir format mı kullanıyorsunuz? Bize ulaşın, destekleyelim.' });
+    }
+
+    let parsed;
+    try { parsed = JSON.parse(jsonMatch[0]); }
+    catch { return res.status(422).json({ error: 'Plan formatı tanınamadı. Farklı bir format mı kullanıyorsunuz? Bize ulaşın, destekleyelim.' }); }
+
+    if (!parsed.lines || parsed.lines.length === 0) {
+      return res.status(422).json({ error: 'Bu dosyada dijital plan bulunamadı. Lütfen dijital plan içeren bir Excel yükleyin.' });
+    }
+
+    res.json(parsed);
+  } catch (err) {
+    console.error('[import-plan]', err);
+    res.status(500).json({ error: err.message || 'İçe aktarma başarısız.' });
+  }
+});
+
+// POST /api/campaigns/import-confirm — create campaign + channels from parsed plan
+router.post('/import-confirm', authMiddleware, requireActiveSubscription, async (req, res) => {
+  const { name, total_budget, start_date, end_date, brand_id, lines } = req.body;
+  if (!name?.trim() || !total_budget || !start_date || !end_date || !Array.isArray(lines) || !lines.length) {
+    return res.status(400).json({ error: 'Eksik veri.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = await resolveCompanyId(req.user, brand_id);
+
+    const { rows: [campaign] } = await client.query(`
+      INSERT INTO campaigns (brand_id, name, total_budget, start_date, end_date, status, created_by)
+      VALUES ($1, $2, $3, $4, $5, 'draft', $6) RETURNING *
+    `, [companyId, name.trim(), Number(total_budget), start_date, end_date, req.user.id]);
+
+    // Group lines by platform, aggregate budget and KPI
+    const groups = {};
+    for (const ln of lines) {
+      const platform = (ln.platform || 'other').toLowerCase();
+      if (!groups[platform]) {
+        groups[platform] = {
+          budget: 0, planned_kpi: 0, kpi_type: ln.kpi_type || null,
+          buying_type: ln.buying_type || null, unit_price: ln.unit_price || null,
+          targeting: ln.targeting || null, frequency: ln.frequency || null,
+          ad_models: [],
+        };
+      }
+      groups[platform].budget     += Number(ln.budget) || 0;
+      groups[platform].planned_kpi += Number(ln.planned_kpi) || 0;
+      if (ln.ad_model) groups[platform].ad_models.push(ln.ad_model);
+    }
+
+    for (const [platform, g] of Object.entries(groups)) {
+      await client.query(`
+        INSERT INTO campaign_channels
+          (campaign_id, platform, allocated_budget, planned_kpi, kpi_type,
+           buying_type, unit_price, targeting, frequency, imported_from_plan, external_campaign_name)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10)
+        ON CONFLICT (campaign_id, platform) DO UPDATE SET
+          allocated_budget   = EXCLUDED.allocated_budget,
+          planned_kpi        = EXCLUDED.planned_kpi,
+          kpi_type           = EXCLUDED.kpi_type,
+          buying_type        = EXCLUDED.buying_type,
+          unit_price         = EXCLUDED.unit_price,
+          targeting          = EXCLUDED.targeting,
+          frequency          = EXCLUDED.frequency,
+          imported_from_plan = true,
+          external_campaign_name = EXCLUDED.external_campaign_name
+      `, [
+        campaign.id, platform,
+        g.budget, g.planned_kpi > 0 ? g.planned_kpi : null, g.kpi_type,
+        g.buying_type, g.unit_price, g.targeting, g.frequency,
+        g.ad_models.length ? g.ad_models.join(', ') : null,
+      ]);
+    }
+
+    await client.query('COMMIT');
+    logCampaignAction(req.user, campaign.id, companyId, 'campaign_created', name.trim(), null, { imported: true, lines: lines.length });
+    res.status(201).json({ id: campaign.id, name: campaign.name });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[import-confirm]', err);
+    res.status(500).json({ error: err.message || 'Kampanya oluşturulamadı.' });
+  } finally {
+    client.release();
   }
 });
 

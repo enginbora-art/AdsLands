@@ -15,7 +15,7 @@ const PLANS = {
     desc:          '0-5 marka',
     color:         '#0d9488',
     features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları'],
-    ai_limits: { channel_analysis: 20, ai_report: 5, tv_plan_suggestion: 5, kpi_analysis: 20 },
+    ai_limits: { channel_analysis: 20, ai_report: 5, tv_plan_suggestion: 5, kpi_analysis: 20, plan_import: 5 },
   },
   agency_pro: {
     key:           'agency_pro',
@@ -28,7 +28,7 @@ const PLANS = {
     color:         '#3b82f6',
     popular:       true,
     features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları', 'Anomali uyarıları', 'Benchmark'],
-    ai_limits: { channel_analysis: 80, ai_report: 20, tv_plan_suggestion: 20, kpi_analysis: 80 },
+    ai_limits: { channel_analysis: 80, ai_report: 20, tv_plan_suggestion: 20, kpi_analysis: 80, plan_import: 15 },
   },
   agency_enterprise: {
     key:           'agency_enterprise',
@@ -40,7 +40,7 @@ const PLANS = {
     desc:          '10+ marka',
     color:         '#8b5cf6',
     features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları', 'Anomali uyarıları', 'Benchmark', 'TV Medya Planı ve İzleme'],
-    ai_limits: { channel_analysis: 500, ai_report: 100, tv_plan_suggestion: 100, kpi_analysis: 500 },
+    ai_limits: { channel_analysis: 500, ai_report: 100, tv_plan_suggestion: 100, kpi_analysis: 500, plan_import: 50 },
   },
 
   // ── Brand plans ───────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ const PLANS = {
     desc:          'Marka hesabı',
     color:         '#0d9488',
     features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları'],
-    ai_limits: { channel_analysis: 20, ai_report: 5, tv_plan_suggestion: 5, kpi_analysis: 20 },
+    ai_limits: { channel_analysis: 20, ai_report: 5, tv_plan_suggestion: 5, kpi_analysis: 20, plan_import: 5 },
   },
   brand_pro: {
     key:           'brand_pro',
@@ -67,7 +67,7 @@ const PLANS = {
     color:         '#3b82f6',
     popular:       true,
     features: ['Tüm entegrasyonlar', 'AI Raporlar', 'TV Medya Planı', 'Ajans bağlantısı', 'Email destek'],
-    ai_limits: { channel_analysis: 40, ai_report: 10, tv_plan_suggestion: 10, kpi_analysis: 40 },
+    ai_limits: { channel_analysis: 40, ai_report: 10, tv_plan_suggestion: 10, kpi_analysis: 40, plan_import: 10 },
   },
   brand_enterprise: {
     key:           'brand_enterprise',
@@ -79,7 +79,7 @@ const PLANS = {
     desc:          'Marka hesabı',
     color:         '#8b5cf6',
     features: ['Tüm entegrasyonlar', 'Bütçe planlama', 'Kanal analizi', 'AI raporları', 'Anomali uyarıları', 'Benchmark'],
-    ai_limits: { channel_analysis: 500, ai_report: 100, tv_plan_suggestion: 100, kpi_analysis: 500 },
+    ai_limits: { channel_analysis: 500, ai_report: 100, tv_plan_suggestion: 100, kpi_analysis: 500, plan_import: 50 },
   },
 };
 
@@ -87,11 +87,11 @@ const PLANS = {
 const SPECIAL_PLANS = {
   trial: {
     label:      'Deneme',
-    ai_limits:  { channel_analysis: 10, ai_report: 3, tv_plan_suggestion: 3, kpi_analysis: 10 },
+    ai_limits:  { channel_analysis: 10, ai_report: 3, tv_plan_suggestion: 3, kpi_analysis: 10, plan_import: 3 },
   },
   none: {
     label:      'Ücretsiz',
-    ai_limits:  { channel_analysis: 10, ai_report: 3, tv_plan_suggestion: 3, kpi_analysis: 10 },
+    ai_limits:  { channel_analysis: 10, ai_report: 3, tv_plan_suggestion: 3, kpi_analysis: 10, plan_import: 3 },
   },
 };
 

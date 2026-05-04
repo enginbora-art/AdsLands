@@ -553,6 +553,15 @@ async function migrate() {
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_conversion INTEGER;
     `);
     await client.query(`
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS planned_kpi        INTEGER;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_type           VARCHAR(20);
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS buying_type        VARCHAR(10);
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS unit_price         DECIMAL(10,4);
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS targeting          TEXT;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS frequency          VARCHAR(50);
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS imported_from_plan BOOLEAN DEFAULT false;
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS campaign_logs (
         id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         campaign_id      UUID REFERENCES campaigns(id) ON DELETE SET NULL,

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
+import MediaPlanImport from './MediaPlanImport';
 import {
   getBudgetPlan, saveBudgetPlan, getBudgetBrands,
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
@@ -725,6 +726,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const [campTab, setCampTab]       = useState('active');
   const [campPage, setCampPage]     = useState(1);
   const [createModal, setCreateModal]     = useState(false);
+  const [importModal, setImportModal]     = useState(false);
   const [editModal, setEditModal]         = useState(null);
   const [detailId, setDetailId]           = useState(null);
   const [deleting, setDeleting]           = useState(null);
@@ -943,12 +945,18 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
             </div>
           )}
         </div>
-        <button onClick={() => setCreateModal(true)}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(0,201,167,0.22), 0 4px 12px rgba(0,201,167,0.25)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-          style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}>
-          + Yeni Kampanya
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setImportModal(true)}
+            style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text2)', fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15 }}>📊</span> Excel'den İçe Aktar
+          </button>
+          <button onClick={() => setCreateModal(true)}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(0,201,167,0.22), 0 4px 12px rgba(0,201,167,0.25)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+            style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}>
+            + Yeni Kampanya
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -1057,6 +1065,13 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
       {createModal && (
         <CampaignFormModal brandId={effectiveBrandId || user?.company_id}
           onClose={() => setCreateModal(false)} onSave={handleCampaignCreate} />
+      )}
+      {importModal && (
+        <MediaPlanImport
+          brandId={effectiveBrandId || user?.company_id}
+          onClose={() => setImportModal(false)}
+          onCampaignCreated={(id) => { setImportModal(false); loadCampaigns(); setDetailId(id); }}
+        />
       )}
       {editModal && (
         <CampaignFormModal existing={editModal} brandId={effectiveBrandId || user?.company_id}
