@@ -530,6 +530,13 @@ async function migrate() {
       );
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS campaigns_brand_id_idx ON campaigns (brand_id);`);
+    await client.query(`
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_roas       DECIMAL;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_cpa        DECIMAL;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_ctr        DECIMAL;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_impression BIGINT;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_conversion INTEGER;
+    `);
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(

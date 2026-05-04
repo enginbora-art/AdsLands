@@ -351,24 +351,40 @@ function CampaignFormModal({ existing, onClose, onSave, brandId }) {
   );
 }
 
-// ── Add Channel Modal ─────────────────────────────────────────────────────────
-function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose, onSave }) {
-  const [platform, setPlatform]     = useState('');
-  const [extId, setExtId]           = useState('');
-  const [extName, setExtName]       = useState('');
-  const [allocBudget, setAllocBudget] = useState('');
-  const [kpiValues, setKpiValues]   = useState({});
+// ── Add / Edit Channel Modal ───────────────────────────────────────────────────
+function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing, onClose, onSave }) {
+  const isEdit = !!existing;
+  const [platform, setPlatform]       = useState(existing?.platform || '');
+  const [extId, setExtId]             = useState(existing?.external_campaign_id || '');
+  const [extName, setExtName]         = useState(existing?.external_campaign_name || '');
+  const [allocBudget, setAllocBudget] = useState(
+    existing?.allocated_budget > 0 ? String(Math.round(Number(existing.allocated_budget))) : ''
+  );
+  const [kpiValues, setKpiValues]   = useState(() => {
+    if (!existing) return {};
+    return {
+      roas:       existing.kpi_roas       != null ? String(existing.kpi_roas)       : '',
+      cpa:        existing.kpi_cpa        != null ? String(existing.kpi_cpa)        : '',
+      ctr:        existing.kpi_ctr        != null ? String(existing.kpi_ctr)        : '',
+      impression: existing.kpi_impression != null ? String(existing.kpi_impression) : '',
+      conversion: existing.kpi_conversion != null ? String(existing.kpi_conversion) : '',
+    };
+  });
   const [suggestions, setSuggestions] = useState([]);
-  const [searching, setSearching]   = useState(false);
-  const [showSugg, setShowSugg]     = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [error, setError]           = useState('');
-  const searchTimer                 = useRef(null);
-  const available = ALL_CAMPAIGN_PLATFORMS.filter(p => !existingPlatforms.includes(p));
+  const [searching, setSearching]     = useState(false);
+  const [showSugg, setShowSugg]       = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState('');
+  const searchTimer                   = useRef(null);
+  // For add mode: exclude already-added platforms; for edit mode: all platforms available (platform is locked anyway)
+  const available = isEdit
+    ? ALL_CAMPAIGN_PLATFORMS
+    : ALL_CAMPAIGN_PLATFORMS.filter(p => !existingPlatforms.includes(p));
 
   useEffect(() => {
+    if (isEdit) return; // don't reset when editing
     setExtId(''); setExtName(''); setSuggestions([]); setKpiValues({});
-  }, [platform]);
+  }, [platform]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExtIdChange = (val) => {
     setExtId(val);
@@ -413,22 +429,28 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1010, padding: '24px 16px', overflowY: 'auto' }} onClick={onClose}>
       <div style={{ background: '#1a1f2e', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 16, padding: '28px', maxWidth: 480, width: '100%', marginTop: 24, marginBottom: 24 }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Kanal Ekle</div>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{isEdit ? 'Kanal Düzenle' : 'Kanal Ekle'}</div>
         <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 20 }}>{campaignName}</div>
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#ef4444', marginBottom: 16 }}>{error}</div>}
 
         {/* Platform */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>Platform</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {available.map(p => (
-              <button key={p} onClick={() => setPlatform(p)}
-                style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', background: platform === p ? `${PLATFORM_COLORS[p]}22` : 'var(--bg3)', border: `1px solid ${platform === p ? PLATFORM_COLORS[p] + '88' : 'var(--border2)'}`, color: platform === p ? PLATFORM_COLORS[p] : 'var(--text2)' }}>
-                {PLATFORM_LABELS[p]}
-              </button>
-            ))}
-            {available.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)' }}>Tüm platformlar eklenmiş.</div>}
-          </div>
+          {isEdit ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: `${PLATFORM_COLORS[platform]}22`, border: `1px solid ${PLATFORM_COLORS[platform]}88`, color: PLATFORM_COLORS[platform] }}>
+              {PLATFORM_LABELS[platform]}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {available.map(p => (
+                <button key={p} onClick={() => setPlatform(p)}
+                  style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', background: platform === p ? `${PLATFORM_COLORS[p]}22` : 'var(--bg3)', border: `1px solid ${platform === p ? PLATFORM_COLORS[p] + '88' : 'var(--border2)'}`, color: platform === p ? PLATFORM_COLORS[p] : 'var(--text2)' }}>
+                  {PLATFORM_LABELS[p]}
+                </button>
+              ))}
+              {available.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)' }}>Tüm platformlar eklenmiş.</div>}
+            </div>
+          )}
         </div>
 
         {platform && (
@@ -494,7 +516,7 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
           <button onClick={onClose} style={{ flex: 1, padding: '11px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 10, color: 'var(--text3)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>İptal</button>
           <button onClick={handleSave} disabled={saving || !platform || available.length === 0}
             style={{ flex: 2, padding: '11px 0', background: 'rgba(0,201,167,0.12)', border: '1px solid rgba(0,201,167,0.3)', borderRadius: 10, color: '#00C9A7', fontWeight: 700, fontSize: 13, cursor: saving || !platform ? 'default' : 'pointer', fontFamily: 'var(--font)', opacity: (!platform || saving) ? 0.5 : 1 }}>
-            {saving ? 'Ekleniyor...' : 'Kaydet'}
+            {saving ? (isEdit ? 'Güncelleniyor...' : 'Ekleniyor...') : 'Kaydet'}
           </button>
         </div>
       </div>
@@ -504,10 +526,11 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
 
 // ── Campaign Detail Modal ─────────────────────────────────────────────────────
 function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }) {
-  const [data, setData]           = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [showAddCh, setShowAddCh] = useState(false);
-  const [removing, setRemoving]   = useState(null);
+  const [data, setData]               = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [showAddCh, setShowAddCh]     = useState(false);
+  const [editingChannel, setEditingChannel] = useState(null);
+  const [removing, setRemoving]       = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -530,9 +553,12 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '24px 16px', overflowY: 'auto' }} onClick={onClose}>
       <div style={{ background: '#141922', border: '1px solid var(--border2)', borderRadius: 16, maxWidth: 640, width: '100%', marginTop: 24, marginBottom: 24 }} onClick={e => e.stopPropagation()}>
         {showAddCh && data && (
-          <AddChannelModal campaignId={campaignId} campaignName={data.name}
+          <AddChannelModal
+            campaignId={campaignId} campaignName={data.name}
             existingPlatforms={(data.channels || []).map(c => c.platform)}
-            onClose={() => setShowAddCh(false)} onSave={handleAddChannel} />
+            existing={editingChannel}
+            onClose={() => { setShowAddCh(false); setEditingChannel(null); }}
+            onSave={handleAddChannel} />
         )}
 
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -619,10 +645,16 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }
                         {ch.allocated_budget > 0 && <div style={{ fontSize: 11, color: 'var(--text3)' }}>Ayrılan: ₺{fmt(ch.allocated_budget)}</div>}
                       </div>
                       {data.status !== 'completed' && (
-                        <button onClick={() => handleRemoveChannel(ch.id)} disabled={removing === ch.id}
-                          style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontFamily: 'var(--font)', opacity: removing === ch.id ? 0.5 : 1 }}>
-                          Kaldır
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                          <button onClick={() => { setEditingChannel(ch); setShowAddCh(true); }}
+                            style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--teal)', fontFamily: 'var(--font)' }}>
+                            Düzenle
+                          </button>
+                          <button onClick={() => handleRemoveChannel(ch.id)} disabled={removing === ch.id}
+                            style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontFamily: 'var(--font)', opacity: removing === ch.id ? 0.5 : 1 }}>
+                            Kaldır
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -888,13 +920,6 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
               </div>
             );
           })}
-          {channelData.length === 0 && (
-            <div className="metric-card">
-              <div className="metric-label">Kanal Dağılımı</div>
-              <div className="metric-value" style={{ fontSize: 14, color: 'var(--text3)' }}>Girilmemiş</div>
-              <div className="metric-sub">Bütçeyi Düzenle'den ekleyebilirsiniz</div>
-            </div>
-          )}
         </div>
       )}
     </>

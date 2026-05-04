@@ -259,9 +259,9 @@ router.delete('/:id', authMiddleware, requireActiveSubscription, async (req, res
   }
 });
 
-// POST /api/campaigns/:id/channels
+// POST /api/campaigns/:id/channels  (also used for updating via upsert)
 router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (req, res) => {
-  const { platform, external_campaign_id, external_campaign_name, allocated_budget } = req.body;
+  const { platform, external_campaign_id, external_campaign_name, allocated_budget, kpi } = req.body;
   if (!platform) return res.status(400).json({ error: 'Platform gerekli.' });
   try {
     const companyId = req.user.company_type === 'agency' ? req.body.brand_id || req.user.company_id : req.user.company_id;
@@ -272,14 +272,26 @@ router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (r
     if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
 
     const { rows: [channel] } = await pool.query(`
-      INSERT INTO campaign_channels (campaign_id, platform, external_campaign_id, external_campaign_name, allocated_budget)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO campaign_channels
+        (campaign_id, platform, external_campaign_id, external_campaign_name, allocated_budget,
+         kpi_roas, kpi_cpa, kpi_ctr, kpi_impression, kpi_conversion)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (campaign_id, platform) DO UPDATE
-        SET external_campaign_id = EXCLUDED.external_campaign_id,
+        SET external_campaign_id   = EXCLUDED.external_campaign_id,
             external_campaign_name = EXCLUDED.external_campaign_name,
-            allocated_budget = EXCLUDED.allocated_budget
+            allocated_budget       = EXCLUDED.allocated_budget,
+            kpi_roas               = EXCLUDED.kpi_roas,
+            kpi_cpa                = EXCLUDED.kpi_cpa,
+            kpi_ctr                = EXCLUDED.kpi_ctr,
+            kpi_impression         = EXCLUDED.kpi_impression,
+            kpi_conversion         = EXCLUDED.kpi_conversion
       RETURNING *
-    `, [req.params.id, platform, external_campaign_id || null, external_campaign_name || null, allocated_budget || 0]);
+    `, [
+      req.params.id, platform,
+      external_campaign_id || null, external_campaign_name || null, allocated_budget || 0,
+      kpi?.roas || null, kpi?.cpa || null, kpi?.ctr || null,
+      kpi?.impression || null, kpi?.conversion || null,
+    ]);
 
     await autoUpdateStatus(req.params.id);
     res.status(201).json(channel);
