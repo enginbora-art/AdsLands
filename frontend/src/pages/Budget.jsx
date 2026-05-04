@@ -158,7 +158,7 @@ function StatusBadge({ status }) {
   const s = cfg[status] || cfg.draft;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 12, background: s.bg, border: s.border, fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: 'nowrap' }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot }} />
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, ...(status === 'active' && { animation: 'badgeDotPulse 1.8s ease-in-out infinite' }) }} />
       {s.label}
     </span>
   );
