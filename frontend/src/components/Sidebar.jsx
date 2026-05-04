@@ -40,7 +40,6 @@ const AGENCY_BASE_NAV = [
 const AGENCY_BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
-    { id: 'campaigns', label: 'Kampanyalar',    perm: 'butce_planlama' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
     { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
     { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },
@@ -61,7 +60,6 @@ const AGENCY_BRAND_NAV = [
 const BRAND_NAV = [
   { label: 'Online', items: [
     { id: 'dashboard', label: 'Dashboard',      perm: 'dashboard' },
-    { id: 'campaigns', label: 'Kampanyalar',    perm: 'butce_planlama' },
     { id: 'budget',    label: 'Bütçe Planlama', perm: 'butce_planlama' },
     { id: 'channels',  label: 'Kanal Analizi',  perm: 'kanal_analizi' },
     { id: 'anomalies', label: 'Anomaliler',      perm: 'anomalier' },

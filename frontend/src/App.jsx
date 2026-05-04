@@ -13,7 +13,6 @@ import TvPlan from './pages/TvPlan';
 import Anomalies from './pages/Anomalies';
 import Benchmark from './pages/Benchmark';
 import Agency from './pages/Agency';
-import Campaigns from './pages/Campaigns';
 import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
@@ -28,7 +27,7 @@ import ResetPassword from './pages/ResetPassword';
 import './index.css';
 
 // Abonelik gerektiren veri sayfaları (30 gün sonra tamamen kilitlenir)
-const DATA_PAGES = new Set(['dashboard', 'channels', 'report', 'budget', 'campaigns', 'anomalies', 'benchmark', 'tvplan']);
+const DATA_PAGES = new Set(['dashboard', 'channels', 'report', 'budget', 'anomalies', 'benchmark', 'tvplan']);
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '—';
 
@@ -59,7 +58,6 @@ const PAGES = {
   anomalies:    Anomalies,
   benchmark:    Benchmark,
   agency:       Agency,
-  campaigns:    Campaigns,
   integrations: Integrations,
   settings:     Settings,
   users:        UserManagement,
@@ -78,7 +76,6 @@ const PAGE_URL = {
   settings:     'settings',
   integrations: 'integrations',
   budget:       'budget',
-  campaigns:    'campaigns',
   channels:     'channels',
   report:       'ai-reports',
   tvplan:       'tvplan',
