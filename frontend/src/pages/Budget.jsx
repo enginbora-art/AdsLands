@@ -869,8 +869,12 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     : brands.find(b => b.id === selBrandId);
 
   // Campaign filtering + pagination — hide the auto-created "Genel Bütçe" placeholder
-  const campList     = (campaigns || []).filter(c => c.name !== 'Genel Bütçe');
-  const activeList   = campList.filter(c => c.status === 'active' || c.status === 'draft');
+  const campList      = (campaigns || []).filter(c => c.name !== 'Genel Bütçe');
+  const totalSpent    = campList.reduce((s, c) => s + Number(c.total_spend || 0), 0);
+  const remaining     = totalBudget != null ? totalBudget - totalSpent : null;
+  const spentPct      = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+  const remainColor   = totalBudget != null && totalSpent > totalBudget ? '#EF4444' : spentPct >= 80 ? '#F59E0B' : '#00C9A7';
+  const activeList    = campList.filter(c => c.status === 'active' || c.status === 'draft');
   const completedList = campList.filter(c => c.status === 'completed');
   const tabList      = campTab === 'active' ? activeList : completedList;
   const filtered     = campSearch.trim()
@@ -904,6 +908,18 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
             <div className="metric-label">Toplam Bütçe</div>
             <div className="metric-value">₺{fmt(totalBudget)}</div>
             <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div>
+          </div>
+          <div className="metric-card" style={{ borderColor: `${remainColor}33` }}>
+            <div className="metric-label" style={{ color: remainColor }}>Kalan Bütçe</div>
+            <div className="metric-value" style={{ color: remainColor, fontSize: 22 }}>
+              {remaining != null ? (remaining < 0 ? '-' : '') + '₺' + fmt(Math.abs(remaining)) : '—'}
+            </div>
+            <div style={{ margin: '8px 0 4px' }}>
+              <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${spentPct}%`, background: remainColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
+              </div>
+            </div>
+            <div className="metric-sub">Harcanan: ₺{fmt(totalSpent)} · %{Math.round(spentPct)}</div>
           </div>
           {channelData.length > 0 && channelData.slice(0, 3).map(ch => {
             const pct = totalBudget > 0 ? (ch.budget / totalBudget) * 100 : 0;
