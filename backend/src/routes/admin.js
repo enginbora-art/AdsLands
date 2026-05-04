@@ -351,5 +351,63 @@ router.get('/ai-usage', platformAdmin, async (req, res) => {
   }
 });
 
+// ── GET /api/admin/plan-prices ────────────────────────────────────────────────
+router.get('/plan-prices', platformAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT pp.*, u.email AS updated_by_email
+       FROM plan_prices pp
+       LEFT JOIN users u ON u.id = pp.updated_by
+       ORDER BY pp.plan_key`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/admin/plan-prices/:plan_key ──────────────────────────────────────
+router.put('/plan-prices/:plan_key', platformAdmin, async (req, res) => {
+  try {
+    const { plan_key } = req.params;
+    const { monthly_price, yearly_price, yearly_discount_pct, is_active } = req.body;
+
+    if (monthly_price !== undefined && (isNaN(monthly_price) || Number(monthly_price) < 0)) {
+      return res.status(400).json({ error: 'Geçersiz aylık fiyat.' });
+    }
+    if (yearly_price !== undefined && (isNaN(yearly_price) || Number(yearly_price) < 0)) {
+      return res.status(400).json({ error: 'Geçersiz yıllık fiyat.' });
+    }
+    if (yearly_discount_pct !== undefined && (isNaN(yearly_discount_pct) || Number(yearly_discount_pct) < 0 || Number(yearly_discount_pct) > 100)) {
+      return res.status(400).json({ error: 'İndirim oranı 0-100 arasında olmalıdır.' });
+    }
+
+    const sets = [];
+    const params = [];
+    let idx = 1;
+
+    if (monthly_price !== undefined)       { sets.push(`monthly_price = $${idx++}`);       params.push(Number(monthly_price)); }
+    if (yearly_price !== undefined)        { sets.push(`yearly_price = $${idx++}`);        params.push(Number(yearly_price)); }
+    if (yearly_discount_pct !== undefined) { sets.push(`yearly_discount_pct = $${idx++}`); params.push(Number(yearly_discount_pct)); }
+    if (is_active !== undefined)           { sets.push(`is_active = $${idx++}`);           params.push(Boolean(is_active)); }
+
+    if (!sets.length) return res.status(400).json({ error: 'Güncellenecek alan bulunamadı.' });
+
+    sets.push(`updated_at = NOW()`, `updated_by = $${idx++}`);
+    params.push(req.user.user_id);
+    params.push(plan_key);
+
+    const { rows: [updated] } = await pool.query(
+      `UPDATE plan_prices SET ${sets.join(', ')} WHERE plan_key = $${idx} RETURNING *`,
+      params
+    );
+
+    if (!updated) return res.status(404).json({ error: 'Plan bulunamadı.' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.sendSetupEmail = sendSetupEmail;

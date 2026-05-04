@@ -474,12 +474,27 @@ async function migrate() {
       ALTER TABLE ai_usage_logs ADD COLUMN IF NOT EXISTS plan_id    UUID REFERENCES tv_media_plans(id) ON DELETE SET NULL;
     `);
 
-    // Genişletilmiş plan listesi: brand_basic / brand_pro / brand_enterprise
-    await client.query(`
-      ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
-      ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
-        CHECK (plan IN ('starter','growth','scale','brand_direct','brand_basic','brand_pro','brand_enterprise'));
-    `);
+    // Genişletilmiş plan listesi — superseded by rename migration below; keep DROP only for idempotency
+    await client.query(`ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check`);
+
+    // ── Plan rename migration ─────────────────────────────────────────────────
+    // starter→agency_basic, growth→agency_pro, scale→agency_enterprise
+    // brand_direct→brand_pro, brand_pro→brand_enterprise
+    // NOTE: DROP constraint first so intermediate values are allowed.
+    //       brand_pro→brand_enterprise MUST run before brand_direct→brand_pro.
+    await client.query(`ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check`);
+    await client.query(`UPDATE subscriptions SET plan = 'agency_basic'      WHERE plan = 'starter'`);
+    await client.query(`UPDATE subscriptions SET plan = 'agency_pro'        WHERE plan = 'growth'`);
+    await client.query(`UPDATE subscriptions SET plan = 'agency_enterprise' WHERE plan = 'scale'`);
+    await client.query(`UPDATE subscriptions SET plan = 'brand_enterprise'  WHERE plan = 'brand_pro'`);
+    await client.query(`UPDATE subscriptions SET plan = 'brand_pro'         WHERE plan = 'brand_direct'`);
+    await client.query(`UPDATE payment_transactions SET plan = 'agency_basic'      WHERE plan = 'starter'`);
+    await client.query(`UPDATE payment_transactions SET plan = 'agency_pro'        WHERE plan = 'growth'`);
+    await client.query(`UPDATE payment_transactions SET plan = 'agency_enterprise' WHERE plan = 'scale'`);
+    await client.query(`UPDATE payment_transactions SET plan = 'brand_enterprise'  WHERE plan = 'brand_pro'`);
+    await client.query(`UPDATE payment_transactions SET plan = 'brand_pro'         WHERE plan = 'brand_direct'`);
+    await client.query(`ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
+      CHECK (plan IN ('agency_basic','agency_pro','agency_enterprise','brand_basic','brand_pro','brand_enterprise'))`);
 
     // ── Şifre sıfırlama token'ları ────────────────────────────────────────────
     await client.query(`
@@ -553,6 +568,38 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS campaign_logs_brand_idx ON campaign_logs (brand_company_id);
       CREATE INDEX IF NOT EXISTS campaign_logs_actor_idx ON campaign_logs (actor_company_id);
     `);
+
+    // ── Plan fiyatları tablosu ────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plan_prices (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        plan_key            VARCHAR(40) NOT NULL UNIQUE,
+        monthly_price       NUMERIC(12,2) NOT NULL,
+        yearly_price        NUMERIC(12,2) NOT NULL,
+        yearly_discount_pct NUMERIC(5,2) NOT NULL DEFAULT 20,
+        is_active           BOOLEAN NOT NULL DEFAULT true,
+        updated_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_by          UUID REFERENCES users(id) ON DELETE SET NULL
+      );
+    `);
+
+    // ── Seed: plan_prices (insert only if row missing) ────────────────────────
+    const planSeeds = [
+      ['agency_basic',      20000, 16000, 20],
+      ['agency_pro',        45000, 36000, 20],
+      ['agency_enterprise', 70000, 56000, 20],
+      ['brand_basic',       20000, 16000, 20],
+      ['brand_pro',          1500,  1200, 20],
+      ['brand_enterprise',  45000, 36000, 20],
+    ];
+    for (const [key, monthly, yearly, discount] of planSeeds) {
+      await client.query(
+        `INSERT INTO plan_prices (plan_key, monthly_price, yearly_price, yearly_discount_pct)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (plan_key) DO NOTHING`,
+        [key, monthly, yearly, discount]
+      );
+    }
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(

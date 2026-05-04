@@ -36,6 +36,8 @@ export const adminExportReport    = async (month) => {
 export const adminGetAiQueue      = ()      => api.get('/admin/ai-queue').then(r => r.data);
 export const adminClearAiQueue    = ()      => api.post('/admin/ai-queue/clear').then(r => r.data);
 export const adminSetAiConcurrency = (n)   => api.post('/admin/ai-queue/concurrency', { concurrency: n }).then(r => r.data);
+export const adminGetPlanPrices    = ()    => api.get('/admin/plan-prices').then(r => r.data);
+export const adminUpdatePlanPrice  = (key, data) => api.put(`/admin/plan-prices/${key}`, data).then(r => r.data);
 export const getAiUsageToday      = ()      => api.get('/ai/usage-today').then(r => r.data);
 export const getAiQueueStatus     = ()      => api.get('/ai/queue-status').then(r => r.data);
 

@@ -1,116 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { initiatePayment } from '../api';
+import { PLANS_BY_TYPE } from '../config/plans';
+import axios from 'axios';
 
-const PLANS_AGENCY = [
-  {
-    key: 'starter',
-    label: 'Basic',
-    desc: '0-5 marka',
-    monthly: 20000,
-    yearly: 16000,
-    color: '#0d9488',
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-    ],
-  },
-  {
-    key: 'growth',
-    label: 'Pro',
-    desc: '5-10 marka',
-    monthly: 45000,
-    yearly: 36000,
-    color: '#3b82f6',
-    popular: true,
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-      'Anomali uyarıları',
-      'Benchmark',
-    ],
-  },
-  {
-    key: 'scale',
-    label: 'Enterprise',
-    desc: '10+ marka',
-    monthly: 70000,
-    yearly: 56000,
-    color: '#8b5cf6',
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-      'Anomali uyarıları',
-      'Benchmark',
-      'TV Medya Planı ve İzleme',
-    ],
-  },
-];
-
-const PLANS_BRAND = [
-  {
-    key: 'brand_basic',
-    label: 'Basic',
-    desc: 'Marka hesabı',
-    monthly: 20000,
-    yearly: 16000,
-    color: '#0d9488',
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-    ],
-  },
-  {
-    key: 'brand_pro',
-    label: 'Pro',
-    desc: 'Marka hesabı',
-    monthly: 45000,
-    yearly: 36000,
-    color: '#3b82f6',
-    popular: true,
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-      'Anomali uyarıları',
-      'Benchmark',
-    ],
-  },
-  {
-    key: 'brand_enterprise',
-    label: 'Enterprise',
-    desc: 'Marka hesabı',
-    monthly: 70000,
-    yearly: 56000,
-    color: '#8b5cf6',
-    features: [
-      'Tüm entegrasyonlar',
-      'Bütçe planlama',
-      'Kanal analizi',
-      'AI raporları',
-      'Anomali uyarıları',
-      'Benchmark',
-      'TV Medya Planı ve İzleme',
-    ],
-  },
-];
+const API_URL = import.meta.env.VITE_API_URL;
+const PLANS_AGENCY = PLANS_BY_TYPE('agency');
+const PLANS_BRAND  = PLANS_BY_TYPE('brand');
 
 function PaymentModal({ plan, interval, onClose, onSuccess }) {
   const [form, setForm] = useState({ cc_holder_name: '', cc_no: '', expiry_month: '', expiry_year: '', cvv: '' });
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
-  const formRef = useState(null);
 
-  const amount = interval === 'yearly' ? plan.yearly : plan.monthly;
+  const amount = interval === 'yearly' ? plan.yearly_price : plan.monthly_price;
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -128,7 +31,6 @@ function PaymentModal({ plan, interval, onClose, onSuccess }) {
         expiry_year:    form.expiry_year,
         cvv:            form.cvv,
       });
-      // Sipay HTML formunu inject et ve auto-submit
       const div = document.createElement('div');
       div.innerHTML = html;
       div.style.display = 'none';
@@ -151,7 +53,7 @@ function PaymentModal({ plan, interval, onClose, onSuccess }) {
           <div>
             <div style={{ fontWeight: 700, fontSize: 17, color: '#f1f5f9' }}>{plan.label}</div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
-              ₺{amount} / {interval === 'yearly' ? 'ay (yıllık)' : 'ay'} · TRY
+              ₺{amount?.toLocaleString('tr-TR')} / {interval === 'yearly' ? 'ay (yıllık)' : 'ay'} · TRY
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
@@ -203,7 +105,7 @@ function PaymentModal({ plan, interval, onClose, onSuccess }) {
             fontWeight: 700, fontSize: 15, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'background .2s',
           }}>
-            {loading ? '3D Ödemeye Yönlendiriliyor...' : `₺${amount} Öde & Başlat`}
+            {loading ? '3D Ödemeye Yönlendiriliyor...' : `₺${amount?.toLocaleString('tr-TR')} Öde & Başlat`}
           </button>
         </form>
       </div>
@@ -221,9 +123,33 @@ export default function Pricing({ onNav }) {
   const { user } = useAuth();
   const [interval, setInterval] = useState('monthly');
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [prices, setPrices] = useState(null);
+  const [pricesError, setPricesError] = useState(false);
+
+  useEffect(() => {
+    axios.get(`${API_URL}/payments/plan-prices`)
+      .then(r => setPrices(r.data))
+      .catch(() => setPricesError(true));
+  }, []);
 
   const companyType = user?.company_type;
-  const plans = companyType === 'brand' ? PLANS_BRAND : PLANS_AGENCY;
+  const basePlans   = companyType === 'brand' ? PLANS_BRAND : PLANS_AGENCY;
+
+  // Merge DB prices into plan objects; fall back to config prices if not loaded yet
+  const plans = basePlans.map(p => {
+    if (!prices || !prices[p.key]) return p;
+    return {
+      ...p,
+      monthly_price:       prices[p.key].monthly_price,
+      yearly_price:        prices[p.key].yearly_price,
+      yearly_discount_pct: prices[p.key].yearly_discount_pct,
+    };
+  });
+
+  // Discount label from the first plan's discount pct (they're all the same unless customised)
+  const discountPct = prices
+    ? (plans[0] && prices[plans[0].key]?.yearly_discount_pct) || 20
+    : 20;
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px 60px' }}>
@@ -242,7 +168,6 @@ export default function Pricing({ onNav }) {
           {companyType === 'brand' ? 'Markanızın büyümesini hızlandırın.' : 'Ajansınız için en doğru planı seçin.'}
         </p>
 
-        {/* Monthly / Yearly toggle */}
         <div style={{ display: 'inline-flex', background: '#161b27', border: '1px solid #1e2535', borderRadius: 10, padding: 4, gap: 2 }}>
           {['monthly', 'yearly'].map(v => (
             <button key={v} onClick={() => setInterval(v)} style={{
@@ -254,13 +179,19 @@ export default function Pricing({ onNav }) {
               {v === 'monthly' ? 'Aylık' : 'Yıllık'}
               {v === 'yearly' && (
                 <span style={{ marginLeft: 6, fontSize: 11, background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 5 }}>
-                  %20 İndirim
+                  %{discountPct} İndirim
                 </span>
               )}
             </button>
           ))}
         </div>
       </div>
+
+      {pricesError && (
+        <div style={{ textAlign: 'center', color: '#f59e0b', fontSize: 13, marginBottom: 20 }}>
+          Fiyatlar yüklenemedi, kayıtlı fiyatlar gösteriliyor.
+        </div>
+      )}
 
       {/* Plan kartları */}
       <div style={{
@@ -271,7 +202,7 @@ export default function Pricing({ onNav }) {
         margin: '0 auto',
       }}>
         {plans.map(plan => {
-          const price = interval === 'yearly' ? plan.yearly : plan.monthly;
+          const price = interval === 'yearly' ? plan.yearly_price : plan.monthly_price;
           return (
             <div key={plan.key} style={{
               background: '#161b27',
@@ -294,10 +225,16 @@ export default function Pricing({ onNav }) {
               <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>{plan.desc}</div>
 
               <div style={{ marginBottom: 24 }}>
-                <span style={{ fontSize: 34, fontWeight: 800, color: plan.color }}>₺{price.toLocaleString('tr-TR')}</span>
-                <span style={{ fontSize: 13, color: '#64748b' }}>/{interval === 'yearly' ? 'ay*' : 'ay'}</span>
-                {interval === 'yearly' && (
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>*Yıllık ₺{(price * 12).toLocaleString('tr-TR')} olarak faturalandırılır</div>
+                {prices === null ? (
+                  <div style={{ height: 42, background: '#1e2535', borderRadius: 8, width: 120, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                ) : (
+                  <>
+                    <span style={{ fontSize: 34, fontWeight: 800, color: plan.color }}>₺{price.toLocaleString('tr-TR')}</span>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>/{interval === 'yearly' ? 'ay*' : 'ay'}</span>
+                    {interval === 'yearly' && (
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>*Yıllık ₺{(price * 12).toLocaleString('tr-TR')} olarak faturalandırılır</div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -312,15 +249,16 @@ export default function Pricing({ onNav }) {
 
               <button
                 onClick={() => setSelectedPlan(plan)}
+                disabled={prices === null}
                 style={{
                   width: '100%', padding: '12px 0', borderRadius: 10,
                   background: plan.popular ? plan.color : 'transparent',
                   border: `2px solid ${plan.color}`,
                   color: plan.popular ? '#fff' : plan.color,
-                  fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'all .2s',
-                  marginTop: 'auto',
+                  fontWeight: 700, fontSize: 14, cursor: prices === null ? 'not-allowed' : 'pointer',
+                  transition: 'all .2s', marginTop: 'auto', opacity: prices === null ? 0.5 : 1,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = plan.color; e.currentTarget.style.color = '#fff'; }}
+                onMouseEnter={e => { if (prices !== null) { e.currentTarget.style.background = plan.color; e.currentTarget.style.color = '#fff'; } }}
                 onMouseLeave={e => { e.currentTarget.style.background = plan.popular ? plan.color : 'transparent'; e.currentTarget.style.color = plan.popular ? '#fff' : plan.color; }}
               >
                 Bu Planı Seç
@@ -330,7 +268,6 @@ export default function Pricing({ onNav }) {
         })}
       </div>
 
-      {/* Güvenlik notu */}
       <div style={{ textAlign: 'center', marginTop: 36, color: '#475569', fontSize: 12 }}>
         🔒 256-bit SSL şifrelemesi · Sipay güvencesiyle güvenli ödeme · İstediğiniz zaman iptal edin
       </div>

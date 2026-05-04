@@ -3,18 +3,10 @@ const fs   = require('fs');
 const path = require('path');
 const pool = require('../db');
 
+const { PLAN_LABELS } = require('../config/plans');
+
 const INVOICE_DIR = path.join(__dirname, '../../uploads/invoices');
 const KDV_RATE    = 0.20;
-
-const PLAN_LABELS = {
-  starter:          'Ajans Basic',
-  growth:           'Ajans Pro',
-  scale:            'Ajans Enterprise',
-  brand_direct:     'Marka Direkt',
-  brand_basic:      'Marka Basic',
-  brand_pro:        'Marka Pro',
-  brand_enterprise: 'Marka Enterprise',
-};
 
 async function nextInvoiceNumber() {
   const year = new Date().getFullYear();

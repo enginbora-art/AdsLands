@@ -3,16 +3,7 @@ const router = express.Router();
 const ExcelJS = require('exceljs');
 const pool = require('../db');
 const { platformAdmin } = require('../middleware/auth');
-
-const PLAN_LABELS = {
-  starter:          'Ajans Basic',
-  growth:           'Ajans Pro',
-  scale:            'Ajans Enterprise',
-  brand_direct:     'Marka Direkt',
-  brand_basic:      'Marka Basic',
-  brand_pro:        'Marka Pro',
-  brand_enterprise: 'Marka Enterprise',
-};
+const { PLAN_LABELS }   = require('../config/plans');
 
 const PLAN_STATUS_LABELS = {
   active: 'Aktif',

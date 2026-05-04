@@ -334,7 +334,7 @@ function Step3Content({ selected, onChange, onPrev, onNext, reportType }) {
 
 // ── Step 4: Generate ───────────────────────────────────────────────────────────
 
-function Step4Generate({ onGenerate, generating, animStep, result, error, brandName }) {
+function Step4Generate({ onGenerate, generating, animStep, result, error, onClearError, brandName }) {
   const apiUrl = import.meta.env.VITE_API_URL;
   const done = animStep === 3 && result;
 
@@ -446,8 +446,11 @@ function Step4Generate({ onGenerate, generating, animStep, result, error, brandN
 
           {/* Error */}
           {error && (
-            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '14px 18px', marginBottom: 20, fontSize: 13, color: '#EF4444' }}>
-              ❌ {error}
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#EF4444', display: 'flex', alignItems: 'flex-start', gap: 10, justifyContent: 'space-between' }}>
+              <span>❌ {error}</span>
+              {onClearError && (
+                <button onClick={onClearError} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 0, opacity: 0.7 }}>×</button>
+              )}
             </div>
           )}
 
@@ -699,7 +702,7 @@ export default function AiReport({ onNav }) {
       });
 
       const data = await response.json();
-      if (response.status === 429) throw new Error((data.error || 'Günlük AI kullanım limitinize ulaştınız.') + ' Planınızı yükseltmek için Abonelik sayfasını ziyaret edin.');
+      if (response.status === 429) throw new Error(data.error || 'Bu ay için AI rapor limitinize ulaştınız. Planınızı yükseltmek için Abonelik sayfasını ziyaret edin.');
       if (!response.ok) throw new Error(data.error || 'Rapor oluşturulamadı');
 
       // Ensure at least 6 seconds has passed for animation
@@ -804,6 +807,7 @@ export default function AiReport({ onNav }) {
                     animStep={animStep}
                     result={result}
                     error={genError}
+                    onClearError={() => setGenError('')}
                     brandName={brandName}
                   />
                   {!generating && (

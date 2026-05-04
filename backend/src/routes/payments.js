@@ -6,11 +6,33 @@ const { v4: uuidv4 } = require('uuid');
 const pool     = require('../db');
 const auth     = require('../middleware/auth');
 const sipay    = require('../services/sipayService');
-const { PLANS, getAmount } = require('../config/plans');
+const { PLANS } = require('../config/plans');
 const { createInvoice } = require('../services/invoiceService');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:3001';
+
+// ── GET /api/payments/plan-prices — public, no auth ──────────────────────────
+router.get('/plan-prices', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT plan_key, monthly_price, yearly_price, yearly_discount_pct
+       FROM plan_prices WHERE is_active = true ORDER BY plan_key`
+    );
+    // Map to keyed object for easy frontend lookup
+    const prices = {};
+    for (const row of rows) {
+      prices[row.plan_key] = {
+        monthly_price:       Number(row.monthly_price),
+        yearly_price:        Number(row.yearly_price),
+        yearly_discount_pct: Number(row.yearly_discount_pct),
+      };
+    }
+    res.json(prices);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── POST /api/payments/initiate ───────────────────────────────────────────────
 router.post('/initiate', auth, async (req, res) => {
@@ -35,7 +57,12 @@ router.post('/initiate', auth, async (req, res) => {
       return res.status(403).json({ error: 'Bu plan marka hesapları içindir.' });
     }
 
-    const amount = getAmount(plan, interval);
+    const { rows: [priceRow] } = await pool.query(
+      `SELECT monthly_price, yearly_price FROM plan_prices WHERE plan_key = $1 AND is_active = true`,
+      [plan]
+    );
+    if (!priceRow) return res.status(400).json({ error: 'Plan fiyatı bulunamadı.' });
+    const amount = interval === 'yearly' ? Number(priceRow.yearly_price) : Number(priceRow.monthly_price);
     orderId = uuidv4();
 
     await pool.query(

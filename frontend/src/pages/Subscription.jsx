@@ -1,16 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSubscription, cancelSubscription, getPaymentHistory, downloadInvoice } from '../api';
 import { useAuth } from '../context/AuthContext';
-
-const PLAN_LABELS = {
-  starter:          'Basic',
-  growth:           'Pro',
-  scale:            'Enterprise',
-  brand_basic:      'Basic',
-  brand_pro:        'Pro',
-  brand_enterprise: 'Enterprise',
-  brand_direct:     'Direct',
-};
+import { PLAN_LABELS } from '../config/plans';
 
 const STATUS_CFG = {
   active:    { label: 'Aktif',       color: '#10b981', bg: 'rgba(16,185,129,0.1)' },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
+import { PLAN_RANK, PLAN_LABELS, ITEM_MIN_PLAN } from '../config/plans';
 
 const ICONS = {
   dashboard:    <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -95,20 +96,7 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
-// Hangi menü hangi minimum plana kilitli (ajans ve marka planları aynı rank yapısını paylaşır)
-const PLAN_RANK = {
-  starter: 1, growth: 2, scale: 3,
-  brand_basic: 1, brand_pro: 2, brand_enterprise: 3,
-};
-const PLAN_LABELS = {
-  starter: 'Basic', growth: 'Pro', scale: 'Enterprise',
-  brand_basic: 'Basic', brand_pro: 'Pro', brand_enterprise: 'Enterprise',
-};
-const ITEM_MIN_PLAN = {
-  anomalies: 'growth',
-  benchmark: 'growth',
-  tvplan:    'scale',
-};
+// PLAN_RANK, PLAN_LABELS, ITEM_MIN_PLAN — imported from config/plans.js
 
 function UpgradeModal({ item, requiredPlan, onClose, onUpgrade }) {
   return (

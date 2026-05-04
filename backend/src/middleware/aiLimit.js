@@ -1,16 +1,5 @@
 const pool = require('../db');
-
-const PLAN_DAILY_LIMITS = {
-  starter:          5,
-  growth:           20,
-  scale:            100,
-  brand_direct:     10,
-  brand_basic:      5,
-  brand_pro:        20,
-  brand_enterprise: 100,
-  trial:            3,
-  none:             3,
-};
+const { getAiLimit } = require('../config/plans');
 
 // $/M tokens per model
 const MODEL_RATES = {
@@ -18,38 +7,41 @@ const MODEL_RATES = {
   'claude-opus-4-7':   { input: 15, output: 75 },
 };
 
-async function getCompanyLimit(companyId) {
+async function getCompanyPlan(companyId) {
   const { rows: [sub] } = await pool.query(
     `SELECT plan, status FROM subscriptions
      WHERE company_id = $1 AND status IN ('active','trialing')
      ORDER BY created_at DESC LIMIT 1`,
     [companyId]
   );
-  if (!sub) return { plan: 'none', limit: PLAN_DAILY_LIMITS.none };
-  const plan = sub.status === 'trialing' ? 'trial' : sub.plan;
-  return { plan, limit: PLAN_DAILY_LIMITS[plan] ?? PLAN_DAILY_LIMITS.none };
+  if (!sub) return 'none';
+  return sub.status === 'trialing' ? 'trial' : sub.plan;
 }
 
 function checkAiLimit(feature) {
   return async (req, res, next) => {
+    const companyId = req.user.company_id;
     try {
-      const companyId = req.user.company_id;
-      const { plan, limit } = await getCompanyLimit(companyId);
+      const plan  = await getCompanyPlan(companyId);
+      const limit = getAiLimit(plan, feature);
 
       const { rows: [row] } = await pool.query(
         `SELECT COUNT(*)::int AS count FROM ai_usage_logs
-         WHERE company_id = $1 AND created_at >= CURRENT_DATE`,
-        [companyId]
+         WHERE company_id = $1
+           AND feature    = $2
+           AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [companyId, feature]
       );
       const used = row?.count ?? 0;
 
       if (used >= limit) {
         return res.status(429).json({
-          error: 'Günlük AI kullanım limitinize ulaştınız.',
+          error:       'Bu ay için AI kullanım limitinize ulaştınız.',
+          feature,
           limit,
           used,
           plan,
-          reset: 'yarın',
+          reset:       'ay başı',
           upgrade_url: '/pricing',
         });
       }
@@ -58,17 +50,18 @@ function checkAiLimit(feature) {
       next();
     } catch (err) {
       console.error('[aiLimit]', err.message);
-      next();
+      // Conservative fallback — block on error instead of allowing through
+      return res.status(503).json({ error: 'Kullanım limiti kontrol edilemedi, lütfen tekrar deneyin.' });
     }
   };
 }
 
 async function logAiUsage(companyId, userId, feature, inputTokens, outputTokens, model, timing = {}, context = {}) {
   try {
-    const usdRate = parseFloat(process.env.USDTRY_RATE) || 38;
-    const rates = MODEL_RATES[model] || MODEL_RATES['claude-sonnet-4-6'];
-    const costUsd = (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
-    const costTry = costUsd * usdRate;
+    const usdRate   = parseFloat(process.env.USDTRY_RATE) || 38;
+    const rates     = MODEL_RATES[model] || MODEL_RATES['claude-sonnet-4-6'];
+    const costUsd   = (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
+    const costTry   = costUsd * usdRate;
     const { waitMs = null, processMs = null, status = 'completed' } = timing;
     const { plan_id = null } = context;
     await pool.query(
@@ -82,4 +75,4 @@ async function logAiUsage(companyId, userId, feature, inputTokens, outputTokens,
   }
 }
 
-module.exports = { checkAiLimit, logAiUsage, PLAN_DAILY_LIMITS, getCompanyLimit };
+module.exports = { checkAiLimit, logAiUsage, getCompanyPlan };

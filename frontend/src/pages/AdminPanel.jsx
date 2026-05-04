@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency, adminExportReport } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency, adminExportReport, adminGetPlanPrices, adminUpdatePlanPrice } from '../api';
+import { PLAN_LABELS, PLAN_FILTER_OPTIONS, PLAN_RANK } from '../config/plans';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
 
@@ -8,16 +9,6 @@ const SECTORS = [
   'Gıda & İçecek', 'Turizm & Seyahat', 'Teknoloji & SaaS',
   'Sağlık & Güzellik', 'Eğitim', 'Gayrimenkul', 'Medya & Eğlence', 'Diğer',
 ];
-
-const PLAN_LABELS = {
-  starter:          'Basic',
-  growth:           'Pro',
-  scale:            'Enterprise',
-  brand_direct:     'Marka Direkt',
-  brand_basic:      'Basic',
-  brand_pro:        'Pro',
-  brand_enterprise: 'Enterprise',
-};
 
 const inp = {
   padding: '9px 12px', background: 'var(--bg)', border: '1px solid var(--border2)',
@@ -587,18 +578,7 @@ function AiUsageTab() {
 const now0 = new Date();
 const defaultMonth = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
 
-const PLAN_FILTER_OPTIONS = [
-  { key: 'all',              label: 'Tümü' },
-  { key: 'starter',          label: 'Ajans Basic' },
-  { key: 'growth',           label: 'Ajans Pro' },
-  { key: 'scale',            label: 'Ajans Enterprise' },
-  { key: 'brand_basic',      label: 'Marka Basic' },
-  { key: 'brand_pro',        label: 'Marka Pro' },
-  { key: 'brand_enterprise', label: 'Marka Enterprise' },
-  { key: 'brand_direct',     label: 'Marka Direkt' },
-  { key: 'trial',            label: 'Trial' },
-  { key: 'pasif',            label: 'Pasif' },
-];
+// PLAN_FILTER_OPTIONS — imported from config/plans.js
 
 function matchesPlan(c, planFilter) {
   if (planFilter === 'all') return true;
@@ -608,13 +588,149 @@ function matchesPlan(c, planFilter) {
 }
 
 function getSortFn(sortBy) {
-  const planRank = { scale: 4, growth: 3, brand_direct: 2, starter: 1 };
+  const planRank = PLAN_RANK;
   switch (sortBy) {
     case 'activity': return (a, b) => (parseInt(b.months_active) || 0) - (parseInt(a.months_active) || 0);
     case 'plan':     return (a, b) => (planRank[b.plan] || 0) - (planRank[a.plan] || 0);
     case 'revenue':  return (a, b) => (Number(b.monthly_amount) || 0) - (Number(a.monthly_amount) || 0);
     default:         return (a, b) => new Date(b.created_at) - new Date(a.created_at);
   }
+}
+
+const PLAN_TYPE_LABELS = {
+  agency_basic: 'Ajans', agency_pro: 'Ajans', agency_enterprise: 'Ajans',
+  brand_basic: 'Marka', brand_pro: 'Marka', brand_enterprise: 'Marka',
+};
+
+function PlanPricesTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [edits, setEdits] = useState({});
+  const [saving, setSaving] = useState({});
+  const [msgs, setMsgs] = useState({});
+
+  useEffect(() => {
+    adminGetPlanPrices()
+      .then(data => { setRows(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const setField = (key, field, val) =>
+    setEdits(p => ({ ...p, [key]: { ...(p[key] || {}), [field]: val } }));
+
+  const getValue = (row, field) =>
+    edits[row.plan_key]?.[field] !== undefined
+      ? edits[row.plan_key][field]
+      : (field === 'yearly_discount_pct' ? Number(row.yearly_discount_pct) : Number(row[field]));
+
+  const handleSave = async (planKey) => {
+    const patch = edits[planKey];
+    if (!patch || !Object.keys(patch).length) return;
+    setSaving(p => ({ ...p, [planKey]: true }));
+    setMsgs(p => ({ ...p, [planKey]: '' }));
+    try {
+      const updated = await adminUpdatePlanPrice(planKey, patch);
+      setRows(prev => prev.map(r => r.plan_key === planKey ? { ...r, ...updated } : r));
+      setEdits(p => { const n = { ...p }; delete n[planKey]; return n; });
+      setMsgs(p => ({ ...p, [planKey]: 'ok' }));
+      setTimeout(() => setMsgs(p => ({ ...p, [planKey]: '' })), 2000);
+    } catch (err) {
+      setMsgs(p => ({ ...p, [planKey]: err.response?.data?.error || 'Hata' }));
+    } finally {
+      setSaving(p => ({ ...p, [planKey]: false }));
+    }
+  };
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+  if (loading) return <div style={{ color: 'var(--text3)', padding: 40, textAlign: 'center' }}>Yükleniyor…</div>;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>Plan Fiyatları</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>Değişiklikler anında yansır, deploy gerekmez.</div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {rows.map(row => {
+          const key = row.plan_key;
+          const dirty = !!(edits[key] && Object.keys(edits[key]).length);
+          const isSaving = !!saving[key];
+          const msg = msgs[key];
+          return (
+            <div key={key} style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 12, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>{PLAN_LABELS[key] || key}</span>
+                  <span style={{ fontSize: 11, background: 'var(--bg2)', color: 'var(--text3)', padding: '2px 8px', borderRadius: 5 }}>
+                    {PLAN_TYPE_LABELS[key] || ''}
+                  </span>
+                  {!row.is_active && (
+                    <span style={{ fontSize: 11, background: 'rgba(239,68,68,0.12)', color: '#ef4444', padding: '2px 8px', borderRadius: 5 }}>
+                      Pasif
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {msg === 'ok' && <span style={{ fontSize: 12, color: '#22c55e' }}>✓ Kaydedildi</span>}
+                  {msg && msg !== 'ok' && <span style={{ fontSize: 12, color: '#ef4444' }}>{msg}</span>}
+                  <button
+                    onClick={() => handleSave(key)}
+                    disabled={!dirty || isSaving}
+                    style={{
+                      padding: '6px 16px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 700, cursor: dirty ? 'pointer' : 'not-allowed',
+                      background: dirty ? 'var(--teal)' : 'var(--bg2)',
+                      color: dirty ? '#0B1219' : 'var(--text3)',
+                      transition: 'all .2s',
+                    }}
+                  >
+                    {isSaving ? 'Kaydediliyor…' : 'Kaydet'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <div>
+                  <label style={fieldLabel}>Aylık Fiyat (₺)</label>
+                  <input
+                    type="number" min="0" step="1"
+                    value={getValue(row, 'monthly_price')}
+                    onChange={e => setField(key, 'monthly_price', Number(e.target.value))}
+                    style={{ ...inp, fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={fieldLabel}>Yıllık Fiyat (₺/ay)</label>
+                  <input
+                    type="number" min="0" step="1"
+                    value={getValue(row, 'yearly_price')}
+                    onChange={e => setField(key, 'yearly_price', Number(e.target.value))}
+                    style={{ ...inp, fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={fieldLabel}>Yıllık İndirim (%)</label>
+                  <input
+                    type="number" min="0" max="100" step="1"
+                    value={getValue(row, 'yearly_discount_pct')}
+                    onChange={e => setField(key, 'yearly_discount_pct', Number(e.target.value))}
+                    style={{ ...inp, fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text3)' }}>
+                Son güncelleme: {fmtDate(row.updated_at)}
+                {row.updated_by_email && ` · ${row.updated_by_email}`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminPanel({ onLogout }) {
@@ -717,8 +833,9 @@ export default function AdminPanel({ onLogout }) {
         {/* Ana sekmeler */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border2)', paddingBottom: 0 }}>
           {[
-            { key: 'companies', label: 'Şirketler' },
-            { key: 'ai',        label: 'AI Kullanımı' },
+            { key: 'companies',   label: 'Şirketler' },
+            { key: 'ai',          label: 'AI Kullanımı' },
+            { key: 'plan-prices', label: 'Plan Fiyatları' },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setTab(key)}
               style={{ padding: '8px 18px', borderRadius: '6px 6px 0 0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -732,6 +849,8 @@ export default function AdminPanel({ onLogout }) {
 
         {tab === 'ai' ? (
           <AiUsageTab />
+        ) : tab === 'plan-prices' ? (
+          <PlanPricesTab />
         ) : (
           <>
         {/* Şirket filtre sekmeleri */}
