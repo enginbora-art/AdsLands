@@ -124,8 +124,12 @@ export const deleteReport  = (id) => api.delete(`/reports/${id}`).then(r => r.da
 export const buildReport   = (data) => api.post('/reports/build', data).then(r => r.data);
 
 // ── Kanallar ──────────────────────────────────────────────────────────────────
-export const getChannelData = (days, platform, brandId) =>
-  api.get(`/channels?days=${days}&platform=${platform || 'all'}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
+export const getChannelData = (days, platform, brandId, startDate, endDate) => {
+  const dateParam = startDate && endDate
+    ? `start_date=${startDate}&end_date=${endDate}`
+    : `days=${days}`;
+  return api.get(`/channels?${dateParam}&platform=${platform || 'all'}${brandId ? `&brand_id=${brandId}` : ''}`).then(r => r.data);
+};
 
 // ── MCC ───────────────────────────────────────────────────────────────────────
 export const getMccAuthUrl = () => api.get('/mcc/connect').then(r => r.data);

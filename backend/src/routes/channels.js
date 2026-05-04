@@ -22,19 +22,47 @@ async function resolveCompanyId(user, brandId) {
 }
 
 // GET /api/channels?days=30&platform=all&brand_id=xxx
+// OR:  ?start_date=2026-04-01&end_date=2026-04-30&platform=all&brand_id=xxx
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user, req.query.brand_id);
-    const days = Math.min(parseInt(req.query.days) || 30, 90);
     const platformFilter = req.query.platform && VALID_PLATFORMS.includes(req.query.platform)
       ? req.query.platform : null;
+
+    // Resolve date range — explicit start/end takes priority over days
+    let startDate, endDate, prevStartDate, prevEndDate;
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (req.query.start_date && req.query.end_date
+        && DATE_RE.test(req.query.start_date) && DATE_RE.test(req.query.end_date)) {
+      startDate = req.query.start_date;
+      endDate   = req.query.end_date;
+      const s   = new Date(startDate);
+      const e   = new Date(endDate);
+      if (isNaN(s) || isNaN(e) || e < s) return res.status(400).json({ error: 'Geçersiz tarih aralığı.' });
+      const diffMs  = e.getTime() - s.getTime();
+      const prevE   = new Date(s.getTime() - 86400000);
+      const prevS   = new Date(prevE.getTime() - diffMs);
+      prevStartDate = prevS.toISOString().split('T')[0];
+      prevEndDate   = prevE.toISOString().split('T')[0];
+    } else {
+      const days = Math.min(parseInt(req.query.days) || 30, 365);
+      const now  = new Date();
+      const s    = new Date(now); s.setDate(now.getDate() - days);
+      const pS   = new Date(now); pS.setDate(now.getDate() - days * 2);
+      const pE   = new Date(now); pE.setDate(now.getDate() - days - 1);
+      startDate     = s.toISOString().split('T')[0];
+      endDate       = now.toISOString().split('T')[0];
+      prevStartDate = pS.toISOString().split('T')[0];
+      prevEndDate   = pE.toISOString().split('T')[0];
+    }
 
     const { rows: [company] } = await pool.query(
       'SELECT sector FROM companies WHERE id = $1', [companyId]
     );
 
-    const platformClause = platformFilter ? 'AND i.platform = $3' : '';
-    const params = platformFilter ? [days, companyId, platformFilter] : [days, companyId];
+    const platformClause = platformFilter ? 'AND i.platform = $4' : '';
+    const params     = platformFilter ? [startDate, endDate, companyId, platformFilter] : [startDate, endDate, companyId];
+    const prevParams = platformFilter ? [prevStartDate, prevEndDate, companyId, platformFilter] : [prevStartDate, prevEndDate, companyId];
 
     const { rows: integrations } = await pool.query(`
       SELECT i.id, i.platform, i.account_id,
@@ -45,8 +73,8 @@ router.get('/', authMiddleware, async (req, res) => {
         COALESCE(SUM(m.impressions), 0)::int    AS total_impressions
       FROM integrations i
       LEFT JOIN ad_metrics m ON m.integration_id = i.id
-        AND m.date >= CURRENT_DATE - ($1 || ' days')::interval
-      WHERE i.company_id = $2 AND i.is_active = true ${platformClause}
+        AND m.date >= $1 AND m.date <= $2
+      WHERE i.company_id = $3 AND i.is_active = true ${platformClause}
       GROUP BY i.id
     `, params);
 
@@ -58,11 +86,10 @@ router.get('/', authMiddleware, async (req, res) => {
         COALESCE(SUM(m.clicks), 0)::int            AS total_clicks
       FROM integrations i
       LEFT JOIN ad_metrics m ON m.integration_id = i.id
-        AND m.date >= CURRENT_DATE - ($1 * 2 || ' days')::interval
-        AND m.date <  CURRENT_DATE - ($1 || ' days')::interval
-      WHERE i.company_id = $2 AND i.is_active = true ${platformClause}
+        AND m.date >= $1 AND m.date <= $2
+      WHERE i.company_id = $3 AND i.is_active = true ${platformClause}
       GROUP BY i.id
-    `, params);
+    `, prevParams);
 
     const { rows: dailyMetrics } = await pool.query(`
       SELECT m.date::text, i.platform,
@@ -71,19 +98,19 @@ router.get('/', authMiddleware, async (req, res) => {
       FROM ad_metrics m
       JOIN integrations i ON i.id = m.integration_id
       WHERE i.company_id = $1
-        AND m.date >= CURRENT_DATE - ($2 || ' days')::interval
+        AND m.date >= $2 AND m.date <= $3
         AND i.is_active = true
       GROUP BY m.date, i.platform
       ORDER BY m.date
-    `, [companyId, days]);
+    `, [companyId, startDate, endDate]);
 
     const { rows: anomalyRows } = await pool.query(`
       SELECT DISTINCT a.detected_at::date::text AS date
       FROM anomalies a
       JOIN integrations i ON a.integration_id = i.id
       WHERE a.company_id = $1
-        AND a.detected_at >= CURRENT_DATE - ($2 || ' days')::interval
-    `, [companyId, days]);
+        AND a.detected_at::date >= $2 AND a.detected_at::date <= $3
+    `, [companyId, startDate, endDate]);
 
     // Bu ayın KPI hedefleri — platform filtresi bağımsız, her zaman tümü gelir
     const now = new Date();

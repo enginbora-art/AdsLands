@@ -498,6 +498,13 @@ export default function Channels({ onNav }) {
   const [gateModal, setGateModal] = useState(false);
 
   const [days, setDays]             = useState(30);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd]     = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerStart, setPickerStart] = useState('');
+  const [pickerEnd, setPickerEnd]     = useState('');
+  const datePickerRef = useRef(null);
+
   const [platFilter, setPlatFilter] = useState('all');
   const [data, setData]             = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -528,14 +535,22 @@ export default function Channels({ onNav }) {
   const brandId    = isAgency ? selectedBrand?.id : undefined;
   const kpiBrandId = isAgency ? selectedBrand?.id : user?.company_id;
 
+  const useCustom     = !!(customStart && customEnd);
+  const effectiveDays = useCustom
+    ? Math.max(1, Math.round((new Date(customEnd) - new Date(customStart)) / 86400000) + 1)
+    : days;
+  const MONTHS_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const fmtDateShort = (d) => { const dt = new Date(d); return `${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}`; };
+  const periodLabel   = useCustom ? `${fmtDateShort(customStart)} – ${fmtDateShort(customEnd)}` : `Son ${days} gün`;
+
   const load = useCallback(() => {
     if (needsBrand) { setLoading(false); return; }
     setLoading(true);
-    getChannelData(days, platFilter, brandId)
+    getChannelData(days, platFilter, brandId, useCustom ? customStart : null, useCustom ? customEnd : null)
       .then(setData)
       .catch(() => setData({ sector: null, integrations: [], prevIntegrations: [], dailyMetrics: [], anomalyDates: [] }))
       .finally(() => setLoading(false));
-  }, [days, platFilter, brandId, needsBrand]);
+  }, [days, useCustom, customStart, customEnd, platFilter, brandId, needsBrand]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { getAiUsageToday().then(setAiUsage).catch(() => {}); }, []);
@@ -555,6 +570,15 @@ export default function Channels({ onNav }) {
     const id = setInterval(() => { getAiQueueStatus().then(setQueueInfo).catch(() => {}); }, 3000);
     return () => clearInterval(id);
   }, [aiLoading, kpiLoading]);
+
+  useEffect(() => {
+    if (!showDatePicker) return;
+    function onClickOutside(e) {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target)) setShowDatePicker(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [showDatePicker]);
 
   if (needsBrand) return (
     <div className="fade-in">
@@ -688,7 +712,7 @@ export default function Channels({ onNav }) {
         platform: PLATFORM_LABELS[i.platform] || i.platform,
         spend: i.total_spend, roas: Number(i.avg_roas).toFixed(2),
         cpa: calcCpa(i)?.toFixed(0) || null, ctr: calcCtr(i).toFixed(2),
-        conversions: i.total_conversions, days,
+        conversions: i.total_conversions, days: effectiveDays,
       }));
     if (!aiMetrics.length) { setAiError('Analiz için yeterli veri yok. Entegrasyon bağlandıktan sonra tekrar deneyin.'); return; }
     const benchmarks = adIntegrations.map(i => {
@@ -701,7 +725,7 @@ export default function Channels({ onNav }) {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/channels/ai-analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ metrics: aiMetrics, sector, benchmarks, days }),
+        body: JSON.stringify({ metrics: aiMetrics, sector, benchmarks, days: effectiveDays }),
       });
       if (res.status === 403) { setLimitReached('subscription'); setAiError('Bu özellik için aktif abonelik gereklidir.'); return; }
       if (res.status === 429) { const e = await res.json().catch(() => ({})); setLimitReached(true); setAiError(e.error || 'Günlük AI kullanım limitinize ulaştınız.'); return; }
@@ -785,16 +809,60 @@ export default function Channels({ onNav }) {
               style={{ ...s.select, fontWeight: selectedCampaignFilter ? 600 : 400, borderColor: selectedCampaignFilter ? 'var(--teal)' : 'var(--border2)', color: selectedCampaignFilter ? 'var(--teal)' : 'var(--text2)' }}
             >
               <option value="">Tüm Kampanyalar</option>
-              {campaignsList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {campaignsList.map(c => {
+                const budgetPct = c.total_budget > 0 ? ((c.total_spend / c.total_budget) * 100).toFixed(1) : null;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{budgetPct !== null ? ` (%${budgetPct})` : ''}
+                  </option>
+                );
+              })}
             </select>
           )}
-          <div style={s.filterGroup}>
-            {[7, 30, 90].map(d => (
-              <button key={d} onClick={() => setDays(d)}
-                style={{ ...s.filterBtn, background: days === d ? 'var(--teal)' : 'transparent', color: days === d ? '#0B1219' : 'var(--text2)' }}>
-                {d} gün
+          <div style={{ position: 'relative' }} ref={datePickerRef}>
+            <div style={s.filterGroup}>
+              {[7, 30, 90].map(d => (
+                <button key={d}
+                  onClick={() => { setDays(d); setCustomStart(''); setCustomEnd(''); setShowDatePicker(false); }}
+                  style={{ ...s.filterBtn, background: !useCustom && days === d ? 'var(--teal)' : 'transparent', color: !useCustom && days === d ? '#0B1219' : 'var(--text2)' }}>
+                  {d} gün
+                </button>
+              ))}
+              <button
+                onClick={() => { setPickerStart(customStart || ''); setPickerEnd(customEnd || ''); setShowDatePicker(p => !p); }}
+                style={{ ...s.filterBtn, background: useCustom ? 'var(--teal)' : showDatePicker ? 'rgba(13,148,136,0.15)' : 'transparent', color: useCustom ? '#0B1219' : 'var(--teal)', borderLeft: '1px solid var(--border2)' }}>
+                {useCustom ? `${fmtDateShort(customStart)} – ${fmtDateShort(customEnd)}` : 'Özel'}
               </button>
-            ))}
+            </div>
+            {showDatePicker && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', zIndex: 200, minWidth: 240, boxShadow: '0 6px 24px rgba(0,0,0,0.5)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Tarih Aralığı</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Başlangıç</div>
+                    <input type="date" value={pickerStart} onChange={e => setPickerStart(e.target.value)}
+                      style={{ ...s.select, width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Bitiş</div>
+                    <input type="date" value={pickerEnd} min={pickerStart || undefined} onChange={e => setPickerEnd(e.target.value)}
+                      style={{ ...s.select, width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                    <button
+                      disabled={!pickerStart || !pickerEnd || pickerEnd < pickerStart}
+                      onClick={() => { setCustomStart(pickerStart); setCustomEnd(pickerEnd); setShowDatePicker(false); }}
+                      style={{ flex: 1, padding: '6px 0', background: pickerStart && pickerEnd && pickerEnd >= pickerStart ? 'var(--teal)' : 'var(--bg)', border: 'none', borderRadius: 6, color: pickerStart && pickerEnd && pickerEnd >= pickerStart ? '#0B1219' : 'var(--text3)', fontWeight: 700, fontSize: 12, cursor: pickerStart && pickerEnd && pickerEnd >= pickerStart ? 'pointer' : 'default' }}>
+                      Uygula
+                    </button>
+                    <button onClick={() => setShowDatePicker(false)}
+                      style={{ padding: '6px 12px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>
+                      İptal
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <select value={platFilter} onChange={e => setPlatFilter(e.target.value)} style={s.select}>
             <option value="all">Tüm Kanallar</option>
@@ -936,7 +1004,7 @@ export default function Channels({ onNav }) {
         {/* ── BÖLÜM 2: Kanal Karşılaştırma (Bar Chart) ───────────────────── */}
         <SectionCard
           title="Kanal Karşılaştırma"
-          subtitle={`Son ${days} gün · metrik seç`}
+          subtitle={`${periodLabel} · metrik seç`}
           action={
             <div style={s.filterGroup}>
               {BAR_METRICS.map(m => (
@@ -988,7 +1056,7 @@ export default function Channels({ onNav }) {
             <div className="card">
               <div className="card-header">
                 <div className="card-title">Harcama Trendi</div>
-                <div className="card-subtitle">Son {days} gün · kırmızı nokta: anomali</div>
+                <div className="card-subtitle">{periodLabel} · kırmızı nokta: anomali</div>
               </div>
               <div className="card-body">
                 {chartData.length === 0 ? (
@@ -1016,7 +1084,7 @@ export default function Channels({ onNav }) {
             <div className="card">
               <div className="card-header">
                 <div className="card-title">ROAS Trendi</div>
-                <div className="card-subtitle">Son {days} gün{hasKpiTargets ? ' · kesikli: KPI hedefi' : ''}</div>
+                <div className="card-subtitle">{periodLabel}{hasKpiTargets ? ' · kesikli: KPI hedefi' : ''}</div>
               </div>
               <div className="card-body">
                 {chartData.length === 0 ? (
@@ -1169,7 +1237,7 @@ export default function Channels({ onNav }) {
               <>
                 {!aiText && !aiLoading && !aiError && (
                   <div style={{ textAlign: 'center', padding: '20px 16px' }}>
-                    <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>Son {days} günün performansı sektör benchmarklarıyla karşılaştırılarak analiz edilecek.</div>
+                    <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>{periodLabel} performansı sektör benchmarklarıyla karşılaştırılarak analiz edilecek.</div>
                     <button onClick={() => { if (!isActive) { setGateModal(true); return; } runAi(); }} style={{ padding: '10px 28px', background: 'linear-gradient(135deg, #7C3AED, #0EA5E9)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                       ✦ AI Analiz Et
                     </button>
