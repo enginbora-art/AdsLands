@@ -597,10 +597,113 @@ function getSortFn(sortBy) {
   }
 }
 
-const PLAN_TYPE_LABELS = {
-  agency_basic: 'Ajans', agency_pro: 'Ajans', agency_enterprise: 'Ajans',
-  brand_basic: 'Marka', brand_pro: 'Marka', brand_enterprise: 'Marka',
-};
+// focus-aware Turkish number input: shows 20.000 when blurred, 20000 when focused
+function PriceInput({ value, onChange, label, suffix = '₺', step = 1, max }) {
+  const [focused, setFocused] = useState(false);
+  const raw = String(value ?? '').replace(/\./g, '').replace(/[^0-9]/g, '');
+  const displayed = focused ? raw : (raw ? parseInt(raw, 10).toLocaleString('tr-TR') : '');
+  return (
+    <div>
+      <label style={fieldLabel}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        {!focused && raw && (
+          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--text3)', pointerEvents: 'none' }}>{suffix}</span>
+        )}
+        <input
+          inputMode="numeric"
+          value={displayed}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onChange={e => {
+            const cleaned = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+            const num = cleaned === '' ? 0 : parseInt(cleaned, 10);
+            if (max !== undefined && num > max) return;
+            onChange(num);
+          }}
+          style={{ ...inp, fontFamily: 'monospace', paddingLeft: !focused && raw ? 22 : 9 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PlanPriceCard({ row, edits, onField, onSave, saving, msg }) {
+  const key = row.plan_key;
+  const dirty = !!(edits[key] && Object.keys(edits[key]).length);
+  const isSaving = !!saving[key];
+
+  const getValue = (field) =>
+    edits[key]?.[field] !== undefined
+      ? edits[key][field]
+      : (field === 'yearly_discount_pct' ? Number(row.yearly_discount_pct) : Number(row[field]));
+
+  const fmtDate = (d) => d
+    ? new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  return (
+    <div style={{
+      background: 'var(--bg)', border: `1px solid ${dirty ? 'rgba(13,148,136,0.4)' : 'var(--border2)'}`,
+      borderRadius: 10, padding: '14px 16px',
+      transition: 'border-color .2s',
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>{PLAN_LABELS[key] || key}</span>
+          {!row.is_active && (
+            <span style={{ fontSize: 10, background: 'rgba(239,68,68,0.12)', color: '#ef4444', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>Pasif</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {msg === 'ok' && <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ Kaydedildi</span>}
+          {msg && msg !== 'ok' && <span style={{ fontSize: 11, color: '#ef4444' }}>{msg}</span>}
+          <button
+            onClick={() => onSave(key)}
+            disabled={!dirty || isSaving}
+            style={{
+              padding: '5px 14px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 700,
+              cursor: dirty && !isSaving ? 'pointer' : 'not-allowed',
+              background: dirty ? 'var(--teal)' : 'var(--bg2)',
+              color: dirty ? '#0B1219' : 'var(--text3)',
+              transition: 'all .2s', whiteSpace: 'nowrap',
+            }}
+          >
+            {isSaving ? '…' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+
+      {/* 3 inputs in one row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 10 }}>
+        <PriceInput
+          label="Aylık (₺)"
+          value={getValue('monthly_price')}
+          onChange={v => onField(key, 'monthly_price', v)}
+        />
+        <PriceInput
+          label="Yıllık (₺/ay)"
+          value={getValue('yearly_price')}
+          onChange={v => onField(key, 'yearly_price', v)}
+        />
+        <div>
+          <label style={fieldLabel}>İndirim %</label>
+          <input
+            type="number" min="0" max="100" step="1"
+            value={getValue('yearly_discount_pct')}
+            onChange={e => onField(key, 'yearly_discount_pct', Number(e.target.value))}
+            style={{ ...inp, fontFamily: 'monospace' }}
+          />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text3)' }}>
+        {fmtDate(row.updated_at)}{row.updated_by_email ? ` · ${row.updated_by_email}` : ''}
+      </div>
+    </div>
+  );
+}
 
 function PlanPricesTab() {
   const [rows, setRows] = useState([]);
@@ -618,11 +721,6 @@ function PlanPricesTab() {
   const setField = (key, field, val) =>
     setEdits(p => ({ ...p, [key]: { ...(p[key] || {}), [field]: val } }));
 
-  const getValue = (row, field) =>
-    edits[row.plan_key]?.[field] !== undefined
-      ? edits[row.plan_key][field]
-      : (field === 'yearly_discount_pct' ? Number(row.yearly_discount_pct) : Number(row[field]));
-
   const handleSave = async (planKey) => {
     const patch = edits[planKey];
     if (!patch || !Object.keys(patch).length) return;
@@ -633,7 +731,7 @@ function PlanPricesTab() {
       setRows(prev => prev.map(r => r.plan_key === planKey ? { ...r, ...updated } : r));
       setEdits(p => { const n = { ...p }; delete n[planKey]; return n; });
       setMsgs(p => ({ ...p, [planKey]: 'ok' }));
-      setTimeout(() => setMsgs(p => ({ ...p, [planKey]: '' })), 2000);
+      setTimeout(() => setMsgs(p => ({ ...p, [planKey]: '' })), 2500);
     } catch (err) {
       setMsgs(p => ({ ...p, [planKey]: err.response?.data?.error || 'Hata' }));
     } finally {
@@ -641,9 +739,25 @@ function PlanPricesTab() {
     }
   };
 
-  const fmtDate = (d) => d ? new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-
   if (loading) return <div style={{ color: 'var(--text3)', padding: 40, textAlign: 'center' }}>Yükleniyor…</div>;
+
+  const agencyRows = rows.filter(r => r.plan_key.startsWith('agency_'));
+  const brandRows  = rows.filter(r => r.plan_key.startsWith('brand_'));
+
+  const colProps = { edits, onField: setField, onSave: handleSave, saving, msgs };
+
+  const Column = ({ title, accent, plans }) => (
+    <div style={{ flex: 1, minWidth: 280 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: accent, marginBottom: 10, paddingBottom: 6, borderBottom: `2px solid ${accent}33` }}>
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {plans.map(row => (
+          <PlanPriceCard key={row.plan_key} row={row} {...colProps} msg={msgs[row.plan_key]} />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -652,82 +766,9 @@ function PlanPricesTab() {
         <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>Değişiklikler anında yansır, deploy gerekmez.</div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {rows.map(row => {
-          const key = row.plan_key;
-          const dirty = !!(edits[key] && Object.keys(edits[key]).length);
-          const isSaving = !!saving[key];
-          const msg = msgs[key];
-          return (
-            <div key={key} style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 12, padding: '18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)' }}>{PLAN_LABELS[key] || key}</span>
-                  <span style={{ fontSize: 11, background: 'var(--bg2)', color: 'var(--text3)', padding: '2px 8px', borderRadius: 5 }}>
-                    {PLAN_TYPE_LABELS[key] || ''}
-                  </span>
-                  {!row.is_active && (
-                    <span style={{ fontSize: 11, background: 'rgba(239,68,68,0.12)', color: '#ef4444', padding: '2px 8px', borderRadius: 5 }}>
-                      Pasif
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {msg === 'ok' && <span style={{ fontSize: 12, color: '#22c55e' }}>✓ Kaydedildi</span>}
-                  {msg && msg !== 'ok' && <span style={{ fontSize: 12, color: '#ef4444' }}>{msg}</span>}
-                  <button
-                    onClick={() => handleSave(key)}
-                    disabled={!dirty || isSaving}
-                    style={{
-                      padding: '6px 16px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 700, cursor: dirty ? 'pointer' : 'not-allowed',
-                      background: dirty ? 'var(--teal)' : 'var(--bg2)',
-                      color: dirty ? '#0B1219' : 'var(--text3)',
-                      transition: 'all .2s',
-                    }}
-                  >
-                    {isSaving ? 'Kaydediliyor…' : 'Kaydet'}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                <div>
-                  <label style={fieldLabel}>Aylık Fiyat (₺)</label>
-                  <input
-                    type="number" min="0" step="1"
-                    value={getValue(row, 'monthly_price')}
-                    onChange={e => setField(key, 'monthly_price', Number(e.target.value))}
-                    style={{ ...inp, fontFamily: 'monospace' }}
-                  />
-                </div>
-                <div>
-                  <label style={fieldLabel}>Yıllık Fiyat (₺/ay)</label>
-                  <input
-                    type="number" min="0" step="1"
-                    value={getValue(row, 'yearly_price')}
-                    onChange={e => setField(key, 'yearly_price', Number(e.target.value))}
-                    style={{ ...inp, fontFamily: 'monospace' }}
-                  />
-                </div>
-                <div>
-                  <label style={fieldLabel}>Yıllık İndirim (%)</label>
-                  <input
-                    type="number" min="0" max="100" step="1"
-                    value={getValue(row, 'yearly_discount_pct')}
-                    onChange={e => setField(key, 'yearly_discount_pct', Number(e.target.value))}
-                    style={{ ...inp, fontFamily: 'monospace' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text3)' }}>
-                Son güncelleme: {fmtDate(row.updated_at)}
-                {row.updated_by_email && ` · ${row.updated_by_email}`}
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <Column title="Ajans Planları" accent="#0d9488" plans={agencyRows} />
+        <Column title="Marka Planları" accent="#8b5cf6" plans={brandRows} />
       </div>
     </div>
   );
