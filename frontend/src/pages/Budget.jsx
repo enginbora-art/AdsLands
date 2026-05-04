@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import {
-  getBudgetPlan, saveBudgetPlan, getBudgetLogs, getBudgetBrands,
+  getBudgetPlan, saveBudgetPlan, getBudgetBrands,
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getCampaign, addCampaignChannel, removeCampaignChannel,
   getPlatformCampaigns,
@@ -75,67 +75,6 @@ const fmtInput = (v) => {
 };
 const parseRaw = (v) => String(v).replace(/\./g, '').replace(/[^0-9]/g, '');
 
-function timeAgo(ts) {
-  if (!ts) return 'Bilinmiyor';
-  const date = new Date(ts);
-  if (isNaN(date.getTime())) return 'Bilinmiyor';
-  const diff = Math.floor((Date.now() - date) / 1000);
-  if (diff < 60) return 'az önce';
-  if (diff < 3600) return `${Math.floor(diff / 60)} dk önce`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} saat önce`;
-  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function logMessage(log) {
-  const actor = log.user_name || log.actor_company_name || '—';
-  const brand = log.brand_name;
-  const isSelf = log.actor_company_name === brand;
-  const who = isSelf ? actor : `${actor} (${brand} adına)`;
-  const camp = log.campaign_name ? `'${log.campaign_name}'` : '';
-  const plat = log.platform ? (PLATFORM_LABELS[log.platform] || log.platform) : '';
-
-  // ── Campaign & channel actions ───────────────────────────────────────────────
-  if (log.log_type === 'campaign') {
-    switch (log.action) {
-      case 'campaign_created': return `${who}, ${camp} kampanyasını oluşturdu.`;
-      case 'campaign_updated': return `${who}, ${camp} kampanyasını güncelledi.`;
-      case 'campaign_deleted': return `${who}, ${camp} kampanyasını sildi.`;
-      case 'channel_added':   return `${who}, ${camp} kampanyasına ${plat} kanalı ekledi.`;
-      case 'channel_updated': return `${who}, ${camp} kampanyasında ${plat} kanalını güncelledi.`;
-      case 'channel_removed': return `${who}, ${camp} kampanyasından ${plat} kanalını kaldırdı.`;
-      default: return `${who} bir işlem yaptı.`;
-    }
-  }
-
-  // ── Budget actions ───────────────────────────────────────────────────────────
-  const mon = `${MONTHS[(log.month || 1) - 1]} ${log.year}`;
-  if (log.action === 'created') return `${who}, ${mon} bütçesini ₺${fmt(log.new_value?.total_budget)} olarak belirledi.`;
-  if (Array.isArray(log.new_value?.channels)) {
-    const changes = [];
-    const oldTotal = log.old_value?.total_budget, newTotal = log.new_value?.total_budget;
-    if (oldTotal !== newTotal) changes.push(`Toplam bütçeyi ₺${fmt(oldTotal)} → ₺${fmt(newTotal)}`);
-    const oldCh = log.old_value?.channels || [], newCh = log.new_value?.channels || [];
-    newCh.forEach(nc => {
-      const oc = oldCh.find(c => c.platform === nc.platform);
-      if (!oc) changes.push(`${PLATFORM_MAP[nc.platform]?.label || nc.platform} eklendi`);
-      else if (oc.amount !== nc.amount) changes.push(`${PLATFORM_MAP[nc.platform]?.label || nc.platform} ₺${fmt(oc.amount)} → ₺${fmt(nc.amount)}`);
-    });
-    oldCh.forEach(oc => { if (!newCh.find(nc => nc.platform === oc.platform)) changes.push(`${PLATFORM_MAP[oc.platform]?.label || oc.platform} kaldırıldı`); });
-    if (!changes.length) return `${who} bütçeyi güncelledi.`;
-    if (changes.length === 1) return `${who}, ${changes[0]} olarak güncelledi.`;
-    return `${who}, ${mon} bütçesinde ${changes.length} kalem güncelledi.`;
-  }
-  const LEGACY_LABELS = { total_budget: 'Toplam bütçeyi', google_ads_budget: 'Google Ads bütçesini', meta_ads_budget: 'Meta bütçesini', tiktok_ads_budget: 'TikTok bütçesini' };
-  const changes = [];
-  for (const f of Object.keys(LEGACY_LABELS)) {
-    const o = log.old_value?.[f], n = log.new_value?.[f];
-    if (o !== n) changes.push(`${LEGACY_LABELS[f]} ₺${fmt(o)} → ₺${fmt(n)}`);
-  }
-  if (!changes.length) return `${who} bütçeyi güncelledi.`;
-  if (changes.length === 1) return `${who}, ${changes[0]} olarak güncelledi.`;
-  return `${who}, ${mon} bütçesinde ${changes.length} kalem güncelledi.`;
-}
-
 // ── Helper Components ─────────────────────────────────────────────────────────
 function ProgressBar({ pct, color = '#00C9A7' }) {
   const [w, setW] = useState(0);
@@ -194,40 +133,6 @@ function CurrencyInput({ value, onChange, style, placeholder, ...rest }) {
         onChange(cleaned);
       }}
     />
-  );
-}
-
-// ── Log Panel ─────────────────────────────────────────────────────────────────
-function LogPanel() {
-  const [logs, setLogs]     = useState([]);
-  const [open, setOpen]     = useState(false);
-  const [loading, setLoading] = useState(false);
-  const load = useCallback(async () => {
-    try { setLoading(true); setLogs(await getBudgetLogs(20)); } catch (_) {}
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
-  return (
-    <div style={lp.wrap}>
-      <button style={lp.toggle} onClick={() => setOpen(o => !o)}>
-        <span>📋</span><span>Değişiklik Logu</span>
-        {logs.length > 0 && <span style={lp.badge}>{logs.length}</span>}
-        {loading && <span style={{ fontSize: 10, opacity: 0.6 }}>↻</span>}
-        <span style={{ marginLeft: 'auto', opacity: 0.6 }}>{open ? '▼' : '▲'}</span>
-      </button>
-      {open && (
-        <div style={lp.panel}>
-          {logs.length === 0
-            ? <div style={lp.empty}>Henüz değişiklik kaydı yok.</div>
-            : logs.map(log => (
-              <div key={log.id} style={lp.row}>
-                <div style={lp.msg}>{logMessage(log)}</div>
-                <div style={lp.time}>{timeAgo(log.created_at)}</div>
-              </div>
-            ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -1186,7 +1091,6 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         </div>
         {budgetSection}
         {campaignSection}
-        <LogPanel />
       </>
     );
   }
@@ -1220,7 +1124,6 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
           {campaignSection}
         </div>
       </div>
-      <LogPanel />
     </div>
   );
 }
@@ -1252,13 +1155,3 @@ const ms = {
   saveBtn:   { padding: '8px 24px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' },
 };
 
-const lp = {
-  wrap:   { position: 'fixed', bottom: 24, right: 24, zIndex: 500, width: 360, maxWidth: 'calc(100vw - 48px)' },
-  toggle: { width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text1)', boxShadow: '0 4px 16px rgba(0,0,0,0.3)' },
-  badge:  { background: 'var(--teal)', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 700 },
-  panel:  { background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: '0 0 10px 10px', borderTop: 'none', maxHeight: 320, overflowY: 'auto' },
-  row:    { padding: '10px 14px', borderBottom: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', gap: 3 },
-  msg:    { fontSize: 12, color: 'var(--text1)', lineHeight: 1.4 },
-  time:   { fontSize: 11, color: 'var(--text3)' },
-  empty:  { padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' },
-};

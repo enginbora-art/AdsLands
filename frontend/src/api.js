@@ -138,6 +138,10 @@ export const saveBudgetPlan = (data) => api.post('/budgets', data).then(r => r.d
 export const getBudgetLogs = (limit = 10) => api.get(`/budgets/logs?limit=${limit}`).then(r => r.data);
 export const getBudgetBrands = () => api.get('/budgets/brands').then(r => r.data);
 
+// ── Activity Logs ─────────────────────────────────────────────────────────────
+export const getLogs      = (params = {}) => api.get('/logs', { params }).then(r => r.data);
+export const getLogsUsers = ()            => api.get('/logs/users').then(r => r.data);
+
 // ── Şirket Listeleri ──────────────────────────────────────────────────────────
 export const listBrands = () => api.get('/brands').then(r => r.data);
 export const listAgencies = () => api.get('/agencies').then(r => r.data);

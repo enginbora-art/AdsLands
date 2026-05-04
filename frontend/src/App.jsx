@@ -17,6 +17,7 @@ import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import Connections from './pages/Connections';
+import Logs from './pages/Logs';
 import Pricing from './pages/Pricing';
 import Subscription from './pages/Subscription';
 import PaymentResult from './pages/PaymentResult';
@@ -62,6 +63,7 @@ const PAGES = {
   settings:     Settings,
   users:        UserManagement,
   connections:   Connections,
+  logs:          Logs,
   pricing:       Pricing,
   subscription:  Subscription,
   'payment-result': PaymentResult,
@@ -81,6 +83,7 @@ const PAGE_URL = {
   tvplan:       'tvplan',
   benchmark:    'benchmark',
   connections:      'connections',
+  logs:             'logs',
   pricing:          'pricing',
   subscription:     'subscription',
   'payment-result': 'payment/result',
