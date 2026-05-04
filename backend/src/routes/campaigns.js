@@ -9,6 +9,19 @@ const PLATFORM_LABELS = {
   linkedin: 'LinkedIn Ads', adform: 'Adform', appsflyer: 'AppsFlyer', adjust: 'Adjust',
 };
 
+async function logCampaignAction(user, campaignId, brandCompanyId, action, campaignName, platform, newValue) {
+  try {
+    await pool.query(
+      `INSERT INTO campaign_logs
+         (campaign_id, user_id, brand_company_id, actor_company_id, action, campaign_name, platform, new_value)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [campaignId, user.id, brandCompanyId, user.company_id,
+       action, campaignName, platform || null,
+       newValue != null ? JSON.stringify(newValue) : null]
+    );
+  } catch (e) { console.error('[campaign_logs]', e.message); }
+}
+
 function stringSimilarity(s1, s2) {
   const a = (s1 || '').toLowerCase().trim();
   const b = (s2 || '').toLowerCase().trim();
@@ -145,6 +158,8 @@ router.post('/', authMiddleware, requireActiveSubscription, async (req, res) => 
       INSERT INTO campaigns (brand_id, name, total_budget, start_date, end_date, status, created_by)
       VALUES ($1, $2, $3, $4, $5, 'draft', $6) RETURNING *
     `, [companyId, name.trim(), total_budget, start_date, end_date, req.user.id]);
+    logCampaignAction(req.user, campaign.id, companyId, 'campaign_created', campaign.name, null,
+      { total_budget: Number(total_budget), start_date, end_date });
     res.status(201).json(campaign);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -237,6 +252,8 @@ router.put('/:id', authMiddleware, requireActiveSubscription, async (req, res) =
           end_date = COALESCE($4, end_date)
       WHERE id = $5 RETURNING *
     `, [name?.trim() || null, total_budget || null, start_date || null, end_date || null, req.params.id]);
+    logCampaignAction(req.user, updated.id, updated.brand_id, 'campaign_updated', updated.name, null,
+      { total_budget: Number(updated.total_budget), start_date: updated.start_date, end_date: updated.end_date });
     res.json(updated);
   } catch (err) {
     console.error('[campaigns PUT /:id]', err);
@@ -247,11 +264,13 @@ router.put('/:id', authMiddleware, requireActiveSubscription, async (req, res) =
 // DELETE /api/campaigns/:id
 router.delete('/:id', authMiddleware, requireActiveSubscription, async (req, res) => {
   try {
-    const { rowCount } = await pool.query(
-      'DELETE FROM campaigns WHERE id = $1 AND brand_id = $2',
+    const { rows: [c] } = await pool.query(
+      'SELECT id, name, brand_id FROM campaigns WHERE id = $1 AND brand_id = $2',
       [req.params.id, req.user.company_id]
     );
-    if (!rowCount) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+    if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+    await pool.query('DELETE FROM campaigns WHERE id = $1', [req.params.id]);
+    logCampaignAction(req.user, null, c.brand_id, 'campaign_deleted', c.name, null, null);
     res.json({ success: true });
   } catch (err) {
     console.error('[campaigns DELETE /:id]', err);
@@ -270,6 +289,12 @@ router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (r
       [req.params.id, companyId]
     );
     if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+
+    const { rows: [existingCh] } = await pool.query(
+      'SELECT id FROM campaign_channels WHERE campaign_id = $1 AND platform = $2',
+      [req.params.id, platform]
+    );
+    const isChannelUpdate = !!existingCh;
 
     const { rows: [channel] } = await pool.query(`
       INSERT INTO campaign_channels
@@ -294,6 +319,10 @@ router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (r
     ]);
 
     await autoUpdateStatus(req.params.id);
+    logCampaignAction(req.user, req.params.id, c.brand_id,
+      isChannelUpdate ? 'channel_updated' : 'channel_added',
+      c.name, platform,
+      { external_campaign_id: external_campaign_id || null, allocated_budget: allocated_budget || 0 });
     res.status(201).json(channel);
   } catch (err) {
     console.error('[campaigns POST /:id/channels]', err);
@@ -306,17 +335,20 @@ router.delete('/:id/channels/:channelId', authMiddleware, requireActiveSubscript
   try {
     const companyId = req.user.company_id;
     const { rows: [c] } = await pool.query(
-      'SELECT id FROM campaigns WHERE id = $1 AND brand_id = $2',
+      'SELECT id, name, brand_id FROM campaigns WHERE id = $1 AND brand_id = $2',
       [req.params.id, companyId]
     );
     if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
 
-    const { rowCount } = await pool.query(
-      'DELETE FROM campaign_channels WHERE id = $1 AND campaign_id = $2',
+    const { rows: [ch] } = await pool.query(
+      'SELECT platform FROM campaign_channels WHERE id = $1 AND campaign_id = $2',
       [req.params.channelId, req.params.id]
     );
-    if (!rowCount) return res.status(404).json({ error: 'Kanal bulunamadı.' });
+    if (!ch) return res.status(404).json({ error: 'Kanal bulunamadı.' });
+
+    await pool.query('DELETE FROM campaign_channels WHERE id = $1', [req.params.channelId]);
     await autoUpdateStatus(req.params.id);
+    logCampaignAction(req.user, req.params.id, c.brand_id, 'channel_removed', c.name, ch.platform, null);
     res.json({ success: true });
   } catch (err) {
     console.error('[campaigns DELETE /:id/channels/:channelId]', err);

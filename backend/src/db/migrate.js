@@ -537,6 +537,22 @@ async function migrate() {
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_impression BIGINT;
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS kpi_conversion INTEGER;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_logs (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id      UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+        user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        brand_company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        actor_company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        action           VARCHAR(50) NOT NULL,
+        campaign_name    VARCHAR(255),
+        platform         VARCHAR(30),
+        new_value        JSONB,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS campaign_logs_brand_idx ON campaign_logs (brand_company_id);
+      CREATE INDEX IF NOT EXISTS campaign_logs_actor_idx ON campaign_logs (actor_company_id);
+    `);
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const { rows: [adminUser] } = await client.query(

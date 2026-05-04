@@ -91,6 +91,23 @@ function logMessage(log) {
   const brand = log.brand_name;
   const isSelf = log.actor_company_name === brand;
   const who = isSelf ? actor : `${actor} (${brand} adına)`;
+  const camp = log.campaign_name ? `'${log.campaign_name}'` : '';
+  const plat = log.platform ? (PLATFORM_LABELS[log.platform] || log.platform) : '';
+
+  // ── Campaign & channel actions ───────────────────────────────────────────────
+  if (log.log_type === 'campaign') {
+    switch (log.action) {
+      case 'campaign_created': return `${who}, ${camp} kampanyasını oluşturdu.`;
+      case 'campaign_updated': return `${who}, ${camp} kampanyasını güncelledi.`;
+      case 'campaign_deleted': return `${who}, ${camp} kampanyasını sildi.`;
+      case 'channel_added':   return `${who}, ${camp} kampanyasına ${plat} kanalı ekledi.`;
+      case 'channel_updated': return `${who}, ${camp} kampanyasında ${plat} kanalını güncelledi.`;
+      case 'channel_removed': return `${who}, ${camp} kampanyasından ${plat} kanalını kaldırdı.`;
+      default: return `${who} bir işlem yaptı.`;
+    }
+  }
+
+  // ── Budget actions ───────────────────────────────────────────────────────────
   const mon = `${MONTHS[(log.month || 1) - 1]} ${log.year}`;
   if (log.action === 'created') return `${who}, ${mon} bütçesini ₺${fmt(log.new_value?.total_budget)} olarak belirledi.`;
   if (Array.isArray(log.new_value?.channels)) {
@@ -184,7 +201,7 @@ function LogPanel() {
   const [open, setOpen]     = useState(false);
   const [loading, setLoading] = useState(false);
   const load = useCallback(async () => {
-    try { setLoading(true); setLogs(await getBudgetLogs(10)); } catch (_) {}
+    try { setLoading(true); setLogs(await getBudgetLogs(20)); } catch (_) {}
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);

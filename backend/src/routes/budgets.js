@@ -44,35 +44,61 @@ router.get('/brands', authMiddleware, async (req, res) => {
 
 // GET /api/budgets/logs
 router.get('/logs', authMiddleware, async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   try {
-    let query, params;
-    const baseSelect = `
-      SELECT bl.*,
-             b.month, b.year,
-             brand_c.name AS brand_name,
-             actor_c.name AS actor_company_name,
-             COALESCE(u.full_name, u.email) AS user_name
-      FROM budget_logs bl
-      JOIN budgets b ON b.id = bl.budget_id
-      JOIN companies brand_c ON brand_c.id = b.company_id
-      JOIN companies actor_c ON actor_c.id = bl.company_id
-      JOIN users u ON u.id = bl.user_id`;
+    const isBrand = req.user.company_type === 'brand';
+    const cid = req.user.company_id;
 
-    if (req.user.company_type === 'brand') {
-      query = `${baseSelect}
-        WHERE b.company_id = $1
-        ORDER BY bl.created_at DESC LIMIT $2`;
-      params = [req.user.company_id, limit];
-    } else {
-      query = `${baseSelect}
-        WHERE b.company_id IN (
-          SELECT brand_company_id FROM connections WHERE agency_company_id = $1
-        ) OR bl.company_id = $1
-        ORDER BY bl.created_at DESC LIMIT $2`;
-      params = [req.user.company_id, limit];
-    }
-    const { rows } = await pool.query(query, params);
+    const budgetFilter = isBrand
+      ? 'b.company_id = $1'
+      : '(b.company_id IN (SELECT brand_company_id FROM connections WHERE agency_company_id = $1) OR bl.company_id = $1)';
+
+    const campFilter = isBrand
+      ? 'cl.brand_company_id = $1'
+      : '(cl.brand_company_id IN (SELECT brand_company_id FROM connections WHERE agency_company_id = $1) OR cl.actor_company_id = $1)';
+
+    const query = `
+      SELECT id, action, old_value, new_value, created_at,
+             month, year, brand_name, actor_company_name, user_name,
+             NULL::varchar AS campaign_name, NULL::varchar AS platform, 'budget' AS log_type
+      FROM (
+        SELECT bl.id, bl.action, bl.old_value, bl.new_value, bl.created_at,
+               b.month, b.year,
+               brand_c.name AS brand_name,
+               actor_c.name AS actor_company_name,
+               COALESCE(u.full_name, u.email) AS user_name
+        FROM budget_logs bl
+        JOIN budgets b ON b.id = bl.budget_id
+        JOIN companies brand_c ON brand_c.id = b.company_id
+        JOIN companies actor_c ON actor_c.id = bl.company_id
+        JOIN users u ON u.id = bl.user_id
+        WHERE ${budgetFilter}
+      ) budget_rows
+
+      UNION ALL
+
+      SELECT id, action, NULL AS old_value, new_value, created_at,
+             NULL::int AS month, NULL::int AS year,
+             brand_name, actor_company_name, user_name,
+             campaign_name, platform, 'campaign' AS log_type
+      FROM (
+        SELECT cl.id, cl.action, cl.new_value, cl.created_at,
+               brand_c.name AS brand_name,
+               actor_c.name AS actor_company_name,
+               COALESCE(u.full_name, u.email) AS user_name,
+               cl.campaign_name, cl.platform
+        FROM campaign_logs cl
+        JOIN companies brand_c ON brand_c.id = cl.brand_company_id
+        JOIN companies actor_c ON actor_c.id = cl.actor_company_id
+        JOIN users u ON u.id = cl.user_id
+        WHERE ${campFilter}
+      ) campaign_rows
+
+      ORDER BY created_at DESC
+      LIMIT $2
+    `;
+
+    const { rows } = await pool.query(query, [cid, limit]);
     res.json(rows);
   } catch (err) {
     console.error(err);
