@@ -37,6 +37,35 @@ function stringSimilarity(s1, s2) {
   return intersection / union;
 }
 
+function scoreCandidate(campaign, candidate) {
+  const nameSim = stringSimilarity(campaign.name, candidate.name);
+
+  const campaignBudget  = parseFloat(campaign.total_budget) || 0;
+  const candidateBudget = parseFloat(candidate.budget)      || 0;
+  let budgetScore = 0;
+  if (campaignBudget > 0 && candidateBudget > 0) {
+    const diff = Math.abs(campaignBudget - candidateBudget) / Math.max(campaignBudget, candidateBudget);
+    budgetScore = Math.max(0, 1 - diff * 2);
+  }
+
+  let dateScore = 0;
+  if (campaign.start_date && campaign.end_date && candidate.startDate && candidate.endDate) {
+    const cs = new Date(campaign.start_date).getTime();
+    const ce = new Date(campaign.end_date).getTime();
+    const ds = new Date(candidate.startDate).getTime();
+    const de = new Date(candidate.endDate).getTime();
+    const overlapStart = Math.max(cs, ds);
+    const overlapEnd   = Math.min(ce, de);
+    if (overlapEnd > overlapStart) {
+      const overlapDays  = (overlapEnd - overlapStart) / 86400000;
+      const campaignDays = Math.max((ce - cs) / 86400000, 1);
+      dateScore = Math.min(1, overlapDays / campaignDays);
+    }
+  }
+
+  return nameSim * 0.5 + budgetScore * 0.3 + dateScore * 0.2;
+}
+
 async function resolveCompanyId(user, brand_id) {
   if (user.company_type === 'agency' && brand_id) {
     const { rows } = await pool.query(
@@ -360,42 +389,113 @@ router.delete('/:id/channels/:channelId', authMiddleware, requireActiveSubscript
   }
 });
 
+const PLATFORM_TO_INTEGRATION = { google: 'google_ads', youtube: 'google_ads' };
+const MANUAL_ONLY_PLATFORMS   = new Set(['programatik', 'display', 'video', 'x', 'other']);
+
 // GET /api/campaigns/:id/platform-campaigns?platform=xxx
 router.get('/:id/platform-campaigns', authMiddleware, requireActiveSubscription, async (req, res) => {
   const { platform } = req.query;
   if (!platform) return res.status(400).json({ error: 'Platform gerekli.' });
   try {
     const companyId = req.user.company_id;
-    const { rows: [campaign] } = await pool.query(
-      'SELECT * FROM campaigns WHERE id = $1 AND brand_id = $2',
-      [req.params.id, companyId]
-    );
+    const { rows: [campaign] } = await pool.query(`
+      SELECT c.* FROM campaigns c
+      WHERE c.id = $1 AND (
+        c.brand_id = $2
+        OR EXISTS (SELECT 1 FROM connections WHERE agency_company_id = $2 AND brand_company_id = c.brand_id)
+      )
+    `, [req.params.id, companyId]);
     if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
 
+    if (MANUAL_ONLY_PLATFORMS.has(platform)) {
+      return res.json({ campaigns: [], manual: true, message: 'Bu platform için kampanya ID\'sini manuel olarak girin.' });
+    }
+
+    const integrationPlatform = PLATFORM_TO_INTEGRATION[platform] || platform;
+    const isYoutube = platform === 'youtube';
+
     const { rows: [integration] } = await pool.query(
-      'SELECT id FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true',
-      [companyId, platform]
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [campaign.brand_id, integrationPlatform]
     );
-
     if (!integration) {
-      return res.json({ campaigns: [], manual: true, message: `${PLATFORM_LABELS[platform] || platform} entegrasyonu bulunamadı.` });
+      return res.json({ campaigns: [], manual: true, message: `${PLATFORM_LABELS[integrationPlatform] || platform} entegrasyonu bulunamadı.` });
     }
 
-    // Return empty list with manual flag — real platform API calls can be added per platform
-    // Provide fuzzy-match suggestion based on campaign name if user provides search term
-    const { search } = req.query;
-    if (search) {
-      const score = stringSimilarity(campaign.name, search);
-      return res.json({
-        campaigns: score >= 0.3 ? [{ id: search, name: search, similarity: Math.round(score * 100) }] : [],
-        manual: true,
-      });
+    const { decryptIntegration } = require('../services/tokenEncryption');
+    const tokens = decryptIntegration(integration);
+    if (tokens.access_token === 'mock_token') {
+      return res.json({ campaigns: [], manual: true, message: 'Demo entegrasyon — kampanya ID\'sini manuel olarak girin.' });
     }
 
-    res.json({ campaigns: [], manual: true, message: 'Kampanya ID\'sini platform panelinden alıp manuel olarak girin.' });
+    let candidates = [];
+
+    if (integrationPlatform === 'google_ads') {
+      const customerId = integration.extra?.customer_id || integration.extra?.customerId;
+      if (!customerId) {
+        return res.json({ campaigns: [], manual: true, message: 'Google Ads müşteri ID\'si bulunamadı.' });
+      }
+      const { listAdsCampaigns } = require('../services/googleService');
+      candidates = await listAdsCampaigns(tokens, customerId, isYoutube, integration.id);
+    } else {
+      return res.json({ campaigns: [], manual: true, message: `${PLATFORM_LABELS[integrationPlatform] || platform} için otomatik eşleştirme henüz desteklenmiyor.` });
+    }
+
+    const scored = candidates
+      .map(c => ({ ...c, score: scoreCandidate(campaign, c) }))
+      .sort((a, b) => b.score - a.score);
+
+    res.json({ campaigns: scored, manual: false });
   } catch (err) {
     console.error('[campaigns GET /:id/platform-campaigns]', err);
     res.status(500).json({ error: 'Platform kampanyaları yüklenemedi.' });
+  }
+});
+
+// PUT /api/campaigns/:id/channels/:platform/match
+router.put('/:id/channels/:platform/match', authMiddleware, requireActiveSubscription, async (req, res) => {
+  const { external_campaign_id, external_campaign_name, match_status } = req.body;
+  if (!match_status || !['matched', 'skipped'].includes(match_status)) {
+    return res.status(400).json({ error: 'match_status "matched" veya "skipped" olmalı.' });
+  }
+  try {
+    const companyId = req.user.company_id;
+    const { rows: [campaign] } = await pool.query(`
+      SELECT c.* FROM campaigns c
+      WHERE c.id = $1 AND (
+        c.brand_id = $2
+        OR EXISTS (SELECT 1 FROM connections WHERE agency_company_id = $2 AND brand_company_id = c.brand_id)
+      )
+    `, [req.params.id, companyId]);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+
+    const { rows: [channel] } = await pool.query(
+      'SELECT id FROM campaign_channels WHERE campaign_id = $1 AND platform = $2',
+      [req.params.id, req.params.platform]
+    );
+    if (!channel) return res.status(404).json({ error: 'Kanal bulunamadı.' });
+
+    const { rows: [updated] } = await pool.query(`
+      UPDATE campaign_channels
+      SET external_campaign_id   = $1,
+          external_campaign_name = $2,
+          match_status           = $3
+      WHERE id = $4
+      RETURNING *
+    `, [
+      match_status === 'matched' ? (external_campaign_id || null) : null,
+      match_status === 'matched' ? (external_campaign_name || null) : null,
+      match_status,
+      channel.id,
+    ]);
+
+    logCampaignAction(req.user, req.params.id, campaign.brand_id, 'channel_matched',
+      campaign.name, req.params.platform,
+      { external_campaign_id: external_campaign_id || null, match_status });
+    res.json(updated);
+  } catch (err) {
+    console.error('[campaigns PUT /:id/channels/:platform/match]', err);
+    res.status(500).json({ error: 'Eşleştirme kaydedilemedi.' });
   }
 });
 

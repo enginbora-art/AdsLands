@@ -560,6 +560,7 @@ async function migrate() {
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS targeting          TEXT;
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS frequency          VARCHAR(50);
       ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS imported_from_plan BOOLEAN DEFAULT false;
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS match_status       VARCHAR(10) DEFAULT NULL;
     `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS campaign_logs (

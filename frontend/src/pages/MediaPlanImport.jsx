@@ -416,10 +416,10 @@ export default function MediaPlanImport({ onClose, brandId, onCampaignCreated })
 
   const handleCreated = (id, name) => {
     setCreatedId(id); setCreatedName(name); setStep(3);
+    onCampaignCreated?.(id, name);
   };
 
   const handleNav = (campaignId) => {
-    onCampaignCreated?.(campaignId);
     onClose();
   };
 

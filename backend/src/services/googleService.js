@@ -302,6 +302,54 @@ async function listMccCustomers(tokens) {
   return customers;
 }
 
+async function listAdsCampaigns(tokens, customerId, isYoutube = false, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
+  const client = createClient();
+  client.setCredentials(fresh);
+  const { token } = await client.getAccessToken();
+  const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken || devToken === 'your_developer_token') return [];
+
+  const cleanId = String(customerId).replace(/-/g, '');
+  const channelFilter = isYoutube ? `AND campaign.advertising_channel_type = 'VIDEO'` : '';
+
+  const resp = await fetch(
+    `https://googleads.googleapis.com/v18/customers/${cleanId}/googleAds:search`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'developer-token': devToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `
+          SELECT campaign.id, campaign.name, campaign.start_date, campaign.end_date,
+                 campaign.status, campaign_budget.amount_micros
+          FROM campaign
+          WHERE campaign.status != 'REMOVED'
+          ${channelFilter}
+          ORDER BY campaign.name
+          LIMIT 200
+        `,
+      }),
+    }
+  );
+
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  return (data.results || []).map(r => ({
+    id: String(r.campaign?.id || ''),
+    name: r.campaign?.name || '',
+    startDate: r.campaign?.startDate || null,
+    endDate: r.campaign?.endDate || null,
+    status: r.campaign?.status || 'UNKNOWN',
+    budget: r.campaignBudget?.amountMicros
+      ? parseInt(r.campaignBudget.amountMicros) / 1_000_000
+      : null,
+  })).filter(c => c.id && c.name);
+}
+
 module.exports = {
   createGoogleClient: createClient,
   getAuthUrl,
@@ -311,6 +359,7 @@ module.exports = {
   getAnalyticsData,
   getAdsData,
   listAdsCustomers,
+  listAdsCampaigns,
   getUserInfo,
   getAdsCustomerName,
   getMccAuthUrl,

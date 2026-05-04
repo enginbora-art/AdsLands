@@ -218,3 +218,5 @@ export const importMediaPlan       = (file, filename) =>
   api.post('/campaigns/import-plan', { file, filename }).then(r => r.data);
 export const confirmMediaPlanImport = (data) =>
   api.post('/campaigns/import-confirm', data).then(r => r.data);
+export const matchCampaignChannel  = (campaignId, platform, data) =>
+  api.put(`/campaigns/${campaignId}/channels/${platform}/match`, data).then(r => r.data);

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSelectedBrand } from '../context/BrandContext';
 import MediaPlanImport from './MediaPlanImport';
+import CampaignMatchModal from './CampaignMatchModal';
 import {
   getBudgetPlan, saveBudgetPlan, getBudgetBrands,
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
@@ -727,6 +728,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const [campPage, setCampPage]     = useState(1);
   const [createModal, setCreateModal]     = useState(false);
   const [importModal, setImportModal]     = useState(false);
+  const [matchCampaign, setMatchCampaign] = useState(null); // { id, name }
   const [editModal, setEditModal]         = useState(null);
   const [detailId, setDetailId]           = useState(null);
   const [deleting, setDeleting]           = useState(null);
@@ -1070,7 +1072,19 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         <MediaPlanImport
           brandId={effectiveBrandId || user?.company_id}
           onClose={() => setImportModal(false)}
-          onCampaignCreated={(id) => { setImportModal(false); loadCampaigns(); setDetailId(id); }}
+          onCampaignCreated={(id, name) => {
+            setImportModal(false);
+            loadCampaigns();
+            setMatchCampaign({ id, name });
+          }}
+        />
+      )}
+      {matchCampaign && (
+        <CampaignMatchModal
+          campaignId={matchCampaign.id}
+          campaignName={matchCampaign.name}
+          onDone={() => { const id = matchCampaign.id; setMatchCampaign(null); setDetailId(id); }}
+          onClose={() => { const id = matchCampaign.id; setMatchCampaign(null); setDetailId(id); }}
         />
       )}
       {editModal && (
