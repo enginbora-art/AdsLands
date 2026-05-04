@@ -31,6 +31,15 @@ const metricsRoutes    = require('./routes/metrics');
 const campaignRoutes   = require('./routes/campaigns');
 const logsRoutes       = require('./routes/logs');
 
+// ── Zorunlu env var kontrolü ──────────────────────────────────────────────────
+const REQUIRED_ENV = ['FROM_EMAIL', 'ADMIN_EMAIL'];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length) {
+  console.error(`[startup] Eksik zorunlu env var(lar): ${missingEnv.join(', ')}`);
+  console.error('[startup] .env dosyanızı kontrol edin ve uygulamayı yeniden başlatın.');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 

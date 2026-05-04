@@ -25,8 +25,8 @@ async function sendCriticalNotif(size) {
     const { Resend } = require('resend');
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
-      to: process.env.ADMIN_EMAIL || 'enginborasahin@gmail.com',
+      from: `AdsLands <${process.env.FROM_EMAIL}>`,
+      to: process.env.ADMIN_EMAIL,
       subject: `⚠️ AI Queue Kritik: ${size} istek bekliyor`,
       html: `<div style="font-family:sans-serif;max-width:480px;padding:24px">
         <p>AI Queue kritik seviyede: <strong>${size}</strong> istek bekliyor.</p>

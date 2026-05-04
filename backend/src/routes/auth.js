@@ -337,7 +337,7 @@ router.post('/forgot-password', async (req, res) => {
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+      from: `AdsLands <${process.env.FROM_EMAIL}>`,
       to: email,
       subject: 'AdsLands - Şifre Sıfırlama',
       html: `

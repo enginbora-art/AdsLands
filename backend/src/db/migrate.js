@@ -602,21 +602,29 @@ async function migrate() {
     }
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
-    const { rows: [adminUser] } = await client.query(
-      `SELECT id FROM users WHERE email = 'enginborasahin@gmail.com'`
-    );
+    const adminEmail    = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_SEED_PASSWORD;
 
-    if (!adminUser) {
-      const passwordHash = await bcrypt.hash('Admin2026!', 12);
-      const { rows: [company] } = await client.query(
-        `INSERT INTO companies (name, type) VALUES ('AdsLands', 'admin') RETURNING id`
+    if (!adminEmail) {
+      console.warn('[migrate] ADMIN_EMAIL tanımlı değil — platform admin seed atlandı.');
+    } else {
+      const { rows: [adminUser] } = await client.query(
+        `SELECT id FROM users WHERE email = $1`, [adminEmail]
       );
-      await client.query(
-        `INSERT INTO users (company_id, email, password_hash, is_platform_admin, is_company_admin, is_active)
-         VALUES ($1, 'enginborasahin@gmail.com', $2, true, true, true)`,
-        [company.id, passwordHash]
-      );
-      console.log('✅ Platform admin oluşturuldu: enginborasahin@gmail.com / Admin2026!');
+
+      if (!adminUser) {
+        if (!adminPassword) throw new Error('ADMIN_SEED_PASSWORD env var zorunludur (ilk kurulum).');
+        const passwordHash = await bcrypt.hash(adminPassword, 12);
+        const { rows: [company] } = await client.query(
+          `INSERT INTO companies (name, type) VALUES ('AdsLands', 'admin') RETURNING id`
+        );
+        await client.query(
+          `INSERT INTO users (company_id, email, password_hash, is_platform_admin, is_company_admin, is_active)
+           VALUES ($1, $2, $3, true, true, true)`,
+          [company.id, adminEmail, passwordHash]
+        );
+        console.log(`✅ Platform admin oluşturuldu: ${adminEmail}`);
+      }
     }
 
     console.log('✅ Veritabanı şeması hazır.');

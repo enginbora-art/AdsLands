@@ -109,7 +109,7 @@ async function sendAnomalyEmail(integration, actualSpend, expectedSpend, platfor
   `;
 
   const recipients = [...users, ...partners];
-  const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  const fromEmail = process.env.FROM_EMAIL;
 
   for (const r of recipients) {
     await resend.emails.send({
@@ -188,7 +188,7 @@ async function sendCampaignAnomalyEmail(companyId, campaignName, anomalyTitle, a
      WHERE u.company_id = $1 AND u.is_active = true AND u.is_company_admin = true`,
     [companyId]
   );
-  const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  const fromEmail = process.env.FROM_EMAIL;
   const html = `
     <div style="font-family:sans-serif;max-width:540px;margin:0 auto;background:#0B1219;color:#F0F5F3;padding:40px;border-radius:12px;">
       <div style="margin-bottom:24px;"><span style="font-size:18px;font-weight:700;">Ads<span style="color:#00BFA6;">Lands</span></span></div>

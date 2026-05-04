@@ -55,7 +55,7 @@ async function markDisconnected(integrationId, companyId, platform) {
         const { Resend } = require('resend');
         const resend = new Resend(process.env.RESEND_API_KEY);
         await resend.emails.send({
-          from:    `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+          from:    `AdsLands <${process.env.FROM_EMAIL}>`,
           to:      admin.email,
           subject: title,
           html: `

@@ -213,7 +213,7 @@ router.post('/send', authMiddleware, async (req, res) => {
     const setupLink = `${FRONTEND_URL}/setup/${token}?company_name=${encodeURIComponent(company_name.trim())}`;
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+      from: `AdsLands <${process.env.FROM_EMAIL}>`,
       to: receiver_email,
       subject: `${senderCompany.name} sizi AdsLands'e davet etti`,
       html: `

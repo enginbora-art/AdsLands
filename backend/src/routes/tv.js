@@ -73,7 +73,7 @@ async function notifyBrand(planId, agencyCompanyId, brandId, planName, month, ye
   const resend = new Resend(process.env.RESEND_API_KEY);
   try {
     await resend.emails.send({
-      from: `AdsLands <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+      from: `AdsLands <${process.env.FROM_EMAIL}>`,
       to: recipient.email,
       subject: `${agencyName} TV Medya Planı Hazırladı`,
       html: `
