@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { Resend } = require('resend');
 const pool = require('../db');
 const { platformAdmin } = require('../middleware/auth');
+const { getSetting, invalidateCache } = require('../config/appSettings');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://adslands.com';
 
@@ -143,10 +144,11 @@ router.post('/companies', platformAdmin, async (req, res) => {
     }
 
     const finalSector = sector || (type === 'agency' ? 'Ajans' : null);
+    const trialDays = await getSetting('trial_duration_days', 30);
     const { rows: [company] } = await pool.query(
       `INSERT INTO companies (name, type, sector, trial_ends_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '30 days') RETURNING *`,
-      [name.trim(), type, finalSector]
+       VALUES ($1, $2, $3, NOW() + make_interval(days => $4)) RETURNING *`,
+      [name.trim(), type, finalSector, trialDays]
     );
 
     const setupToken = uuidv4();
@@ -403,6 +405,81 @@ router.put('/plan-prices/:plan_key', platformAdmin, async (req, res) => {
     );
 
     if (!updated) return res.status(404).json({ error: 'Plan bulunamadı.' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/admin/app-settings ───────────────────────────────────────────────
+router.get('/app-settings', platformAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.*, u.email AS updated_by_email
+       FROM app_settings s
+       LEFT JOIN users u ON u.id = s.updated_by
+       ORDER BY s.key`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/admin/app-settings/:key ──────────────────────────────────────────
+router.put('/app-settings/:key', platformAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || value === null || String(value).trim() === '') {
+      return res.status(400).json({ error: 'value zorunludur.' });
+    }
+    const { rows: [updated] } = await pool.query(
+      `UPDATE app_settings
+       SET value = $1, updated_at = NOW(), updated_by = $2
+       WHERE key = $3
+       RETURNING *`,
+      [String(value).trim(), req.user.user_id, key]
+    );
+    if (!updated) return res.status(404).json({ error: 'Ayar bulunamadı.' });
+    invalidateCache();
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/admin/benchmarks ─────────────────────────────────────────────────
+router.get('/benchmarks', platformAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT b.*, u.email AS updated_by_email
+       FROM sector_benchmarks b
+       LEFT JOIN users u ON u.id = b.updated_by
+       ORDER BY b.sector, b.metric`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/admin/benchmarks/:id ─────────────────────────────────────────────
+router.put('/benchmarks/:id', platformAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value)) || Number(value) < 0) {
+      return res.status(400).json({ error: 'Geçerli bir sayısal değer girin.' });
+    }
+    const { rows: [updated] } = await pool.query(
+      `UPDATE sector_benchmarks
+       SET value = $1, updated_at = NOW(), updated_by = $2
+       WHERE id = $3
+       RETURNING *`,
+      [Number(value), req.user.user_id, id]
+    );
+    if (!updated) return res.status(404).json({ error: 'Benchmark bulunamadı.' });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -38,6 +38,10 @@ export const adminClearAiQueue    = ()      => api.post('/admin/ai-queue/clear')
 export const adminSetAiConcurrency = (n)   => api.post('/admin/ai-queue/concurrency', { concurrency: n }).then(r => r.data);
 export const adminGetPlanPrices    = ()    => api.get('/admin/plan-prices').then(r => r.data);
 export const adminUpdatePlanPrice  = (key, data) => api.put(`/admin/plan-prices/${key}`, data).then(r => r.data);
+export const adminGetAppSettings   = ()    => api.get('/admin/app-settings').then(r => r.data);
+export const adminUpdateAppSetting = (key, value) => api.put(`/admin/app-settings/${key}`, { value }).then(r => r.data);
+export const adminGetBenchmarks    = ()    => api.get('/admin/benchmarks').then(r => r.data);
+export const adminUpdateBenchmark  = (id, value)  => api.put(`/admin/benchmarks/${id}`, { value }).then(r => r.data);
 export const getAiUsageToday      = ()      => api.get('/ai/usage-today').then(r => r.data);
 export const getAiQueueStatus     = ()      => api.get('/ai/queue-status').then(r => r.data);
 

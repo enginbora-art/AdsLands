@@ -66,13 +66,14 @@ app.use(helmet({
 }));
 app.disable('x-powered-by');
 
-// ── Rate limiting ─────────────────────────────────────────────────────────────
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 dakika
+// ── Rate limiting (değerler migrate'den sonra app_settings'ten okunur) ─────────
+// Başlangıçta güvenli varsayılanlar; migrate() tamamlandıktan sonra güncellenir.
+let authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Çok fazla deneme. 15 dakika sonra tekrar deneyin.' },
+  message: { error: 'Çok fazla deneme. Lütfen daha sonra tekrar deneyin.' },
   skip: (req) => process.env.NODE_ENV === 'test',
 });
 
@@ -124,7 +125,25 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().
 
 app.listen(PORT, () => {
   console.log(`AdsLands API running on http://localhost:${PORT}`);
+  const { getSetting, invalidateCache } = require('./config/appSettings');
   migrate()
-    .then(() => startCronJobs())
+    .then(async () => {
+      // Rate limiter'ı DB'den gelen değerlerle yeniden oluştur
+      invalidateCache();
+      const [maxReq, windowMin] = await Promise.all([
+        getSetting('auth_rate_limit_max', 20),
+        getSetting('auth_rate_limit_window_minutes', 15),
+      ]);
+      authLimiter = rateLimit({
+        windowMs: windowMin * 60 * 1000,
+        max: maxReq,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: `Çok fazla deneme. ${windowMin} dakika sonra tekrar deneyin.` },
+        skip: (req) => process.env.NODE_ENV === 'test',
+      });
+      console.log(`[startup] Auth rate limit: max=${maxReq} / ${windowMin}dk`);
+      startCronJobs();
+    })
     .catch((err) => console.error('⚠️ Migration hatası:', err.message));
 });

@@ -1,19 +1,25 @@
 const express = require('express');
 const router = express.Router();
+const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 
-const SECTOR_BENCHMARKS = {
-  'E-Ticaret':   { roas: 2.9,  cpa: 85,  ctr: 2.5, convRate: 2.8 },
-  'Finans':      { roas: 2.1,  cpa: 220, ctr: 1.8, convRate: 1.5 },
-  'Perakende':   { roas: 3.2,  cpa: 65,  ctr: 2.8, convRate: 3.1 },
-  'Teknoloji':   { roas: 2.5,  cpa: 150, ctr: 1.9, convRate: 2.1 },
-  'Sağlık':      { roas: 2.3,  cpa: 130, ctr: 2.0, convRate: 2.0 },
-  'Turizm':      { roas: 2.7,  cpa: 95,  ctr: 2.3, convRate: 2.4 },
-  'Eğitim':      { roas: 2.0,  cpa: 110, ctr: 2.2, convRate: 1.8 },
-  'Otomotiv':    { roas: 1.8,  cpa: 180, ctr: 1.5, convRate: 1.2 },
-  'Gayrimenkul': { roas: 1.9,  cpa: 250, ctr: 1.4, convRate: 1.0 },
-};
 const DEFAULT_BENCH = { roas: 2.5, cpa: 120, ctr: 2.2, convRate: 2.5 };
+
+async function getSectorBenchmarks() {
+  try {
+    const { rows } = await pool.query('SELECT sector, metric, value FROM sector_benchmarks ORDER BY sector');
+    const map = {};
+    for (const { sector, metric, value } of rows) {
+      if (!map[sector]) map[sector] = {};
+      // DB stores conv_rate, code uses convRate
+      const key = metric === 'conv_rate' ? 'convRate' : metric;
+      map[sector][key] = Number(value);
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
 
 // POST /api/benchmark/analyze — SSE streaming AI analysis
 router.post('/analyze', authMiddleware, async (req, res) => {
@@ -33,6 +39,7 @@ router.post('/analyze', authMiddleware, async (req, res) => {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const sectorName = sector || 'Genel';
+    const SECTOR_BENCHMARKS = await getSectorBenchmarks();
     const bench = SECTOR_BENCHMARKS[sectorName] || DEFAULT_BENCH;
 
     const hasData = metrics && (metrics.roas != null || metrics.cpa != null);

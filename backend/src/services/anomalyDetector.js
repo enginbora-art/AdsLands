@@ -2,6 +2,7 @@ const { Resend } = require('resend');
 const pool = require('../db');
 const getPlatformService = require('./platforms');
 const { checkCompanyActive } = require('./subscriptionService');
+const { getSetting } = require('../config/appSettings');
 
 const PLATFORM_LABELS = {
   google_ads: 'Google Ads',
@@ -12,16 +13,22 @@ const PLATFORM_LABELS = {
   adform: 'Adform',
 };
 
-// Read company-specific settings; fall back to safe defaults if table doesn't exist yet
+// Read company-specific settings; fall back to app_settings globals, then hardcoded emergency defaults
 async function getSettings(companyId) {
+  const [budgetDelta, cpaDelta, roasDelta] = await Promise.all([
+    getSetting('anomaly_budget_delta', 50),
+    getSetting('anomaly_cpa_delta', 30),
+    getSetting('anomaly_roas_delta', 25),
+  ]);
+  const globalDefaults = { budget_delta: budgetDelta, cpa_delta: cpaDelta, roas_delta: roasDelta, email_on: true, platform_on: true };
   try {
     const { rows: [s] } = await pool.query(
       'SELECT * FROM anomaly_settings WHERE company_id = $1',
       [companyId]
     );
-    return s || { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true };
+    return s || globalDefaults;
   } catch {
-    return { budget_delta: 50, cpa_delta: 30, roas_delta: 25, email_on: true, platform_on: true };
+    return globalDefaults;
   }
 }
 

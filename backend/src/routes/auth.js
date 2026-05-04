@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db');
 const auth = require('../middleware/auth');
 const { ALL_PERMISSIONS } = require('../constants');
+const { getSetting } = require('../config/appSettings');
 
 async function buildToken(userId) {
   const { rows: [user] } = await pool.query(
@@ -41,7 +42,7 @@ async function buildToken(userId) {
       permissions,
     },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: await getSetting('jwt_expires_in', '7d') }
   );
 }
 
@@ -171,13 +172,14 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/setup/:token — token bilgisini getir
 router.get('/setup/:token', async (req, res) => {
   try {
-    // Kullanıcı setup token'ı (72 saat içinde geçerli)
+    const setupHours = await getSetting('setup_link_expiry_hours', 72);
+    // Kullanıcı setup token'ı (varsayılan 72 saat içinde geçerli)
     const { rows: [userRow] } = await pool.query(
       `SELECT u.email, c.name AS company_name, c.type AS company_type
        FROM users u LEFT JOIN companies c ON u.company_id = c.id
        WHERE u.setup_token = $1
-         AND u.created_at >= NOW() - INTERVAL '72 hours'`,
-      [req.params.token]
+         AND u.created_at >= NOW() - make_interval(hours => $2)`,
+      [req.params.token, setupHours]
     );
     if (userRow) return res.json(userRow);
 
@@ -213,11 +215,12 @@ router.post('/setup', async (req, res) => {
   try {
     const password_hash = await bcrypt.hash(password, 12);
 
-    // Platform admin / şirket admin setup akışı (users.setup_token, 72 saat geçerli)
+    const setupHours = await getSetting('setup_link_expiry_hours', 72);
+    // Platform admin / şirket admin setup akışı
     const { rows: [found] } = await pool.query(
       `SELECT * FROM users WHERE setup_token = $1
-         AND created_at >= NOW() - INTERVAL '72 hours'`,
-      [token]
+         AND created_at >= NOW() - make_interval(hours => $2)`,
+      [token, setupHours]
     );
     if (found) {
       const { rows: [updated] } = await pool.query(
@@ -320,7 +323,8 @@ router.post('/forgot-password', async (req, res) => {
     const { Resend } = require('resend');
 
     const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 saat
+    const resetHours = await getSetting('password_reset_expiry_hours', 1);
+    const expiresAt = new Date(Date.now() + resetHours * 60 * 60 * 1000);
 
     // Önceki süresi dolmamış token'ları iptal et
     await pool.query(

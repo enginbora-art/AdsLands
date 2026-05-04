@@ -601,6 +601,74 @@ async function migrate() {
       );
     }
 
+    // ── Uygulama ayarları tablosu ─────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key         VARCHAR(80) PRIMARY KEY,
+        value       TEXT NOT NULL,
+        description TEXT,
+        updated_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_by  UUID REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    const appSeeds = [
+      ['trial_duration_days',             '30',   'Yeni şirket trial süresi (gün)'],
+      ['kdv_rate',                         '0.20', 'Fatura KDV oranı (0.20 = %20)'],
+      ['jwt_expires_in',                   '7d',   'JWT token geçerlilik süresi (ör: 7d, 24h)'],
+      ['setup_link_expiry_hours',          '72',   'Şirket kurulum linki geçerlilik süresi (saat)'],
+      ['password_reset_expiry_hours',      '1',    'Şifre sıfırlama linki geçerlilik süresi (saat)'],
+      ['auth_rate_limit_max',              '20',   'Auth endpoint başına 15 dakikada max istek sayısı'],
+      ['auth_rate_limit_window_minutes',   '15',   'Auth rate limit penceresi (dakika)'],
+      ['notification_dedup_hours',         '20',   'Aynı bildirim tekrar gönderim engeli (saat)'],
+      ['meta_token_warning_days',          '15',   'Meta token süresi dolmadan kaç gün önce uyarı'],
+      ['trial_warning_days',               '7',    'Trial bitiminden kaç gün önce uyarı'],
+      ['anomaly_budget_delta',             '50',   'Anomali: bütçe sapma eşiği (%)'],
+      ['anomaly_cpa_delta',                '30',   'Anomali: CPA sapma eşiği (%)'],
+      ['anomaly_roas_delta',               '25',   'Anomali: ROAS sapma eşiği (%)'],
+    ];
+    for (const [key, value, description] of appSeeds) {
+      await client.query(
+        `INSERT INTO app_settings (key, value, description)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (key) DO NOTHING`,
+        [key, value, description]
+      );
+    }
+
+    // ── Sektör benchmarkları tablosu ──────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sector_benchmarks (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sector     VARCHAR(60) NOT NULL,
+        metric     VARCHAR(30) NOT NULL,
+        value      NUMERIC(10,4) NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE (sector, metric)
+      )
+    `);
+
+    const benchSeeds = [
+      ['E-Ticaret',   'roas', 2.9],  ['E-Ticaret',   'cpa', 85],  ['E-Ticaret',   'ctr', 2.5], ['E-Ticaret',   'conv_rate', 2.8],
+      ['Finans',      'roas', 2.1],  ['Finans',      'cpa', 220], ['Finans',      'ctr', 1.8], ['Finans',      'conv_rate', 1.5],
+      ['Perakende',   'roas', 3.2],  ['Perakende',   'cpa', 65],  ['Perakende',   'ctr', 2.8], ['Perakende',   'conv_rate', 3.1],
+      ['Teknoloji',   'roas', 2.5],  ['Teknoloji',   'cpa', 150], ['Teknoloji',   'ctr', 1.9], ['Teknoloji',   'conv_rate', 2.1],
+      ['Sağlık',      'roas', 2.3],  ['Sağlık',      'cpa', 130], ['Sağlık',      'ctr', 2.0], ['Sağlık',      'conv_rate', 2.0],
+      ['Turizm',      'roas', 2.7],  ['Turizm',      'cpa', 95],  ['Turizm',      'ctr', 2.3], ['Turizm',      'conv_rate', 2.4],
+      ['Eğitim',      'roas', 2.0],  ['Eğitim',      'cpa', 110], ['Eğitim',      'ctr', 2.2], ['Eğitim',      'conv_rate', 1.8],
+      ['Otomotiv',    'roas', 1.8],  ['Otomotiv',    'cpa', 180], ['Otomotiv',    'ctr', 1.5], ['Otomotiv',    'conv_rate', 1.2],
+      ['Gayrimenkul', 'roas', 1.9],  ['Gayrimenkul', 'cpa', 250], ['Gayrimenkul', 'ctr', 1.4], ['Gayrimenkul', 'conv_rate', 1.0],
+    ];
+    for (const [sector, metric, value] of benchSeeds) {
+      await client.query(
+        `INSERT INTO sector_benchmarks (sector, metric, value)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (sector, metric) DO NOTHING`,
+        [sector, metric, value]
+      );
+    }
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const adminEmail    = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_SEED_PASSWORD;

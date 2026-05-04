@@ -4,9 +4,9 @@ const path = require('path');
 const pool = require('../db');
 
 const { PLAN_LABELS } = require('../config/plans');
+const { getSetting } = require('../config/appSettings');
 
 const INVOICE_DIR = path.join(__dirname, '../../uploads/invoices');
-const KDV_RATE    = 0.20;
 
 async function nextInvoiceNumber() {
   const year = new Date().getFullYear();
@@ -29,6 +29,7 @@ async function generateInvoicePdf({ invoiceNumber, companyName, planKey, amount,
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
+  const KDV_RATE = await getSetting('kdv_rate', 0.20);
   const base    = amount / (1 + KDV_RATE);
   const kdv     = amount - base;
   const fmtTRY  = (n) => `₺${Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`;

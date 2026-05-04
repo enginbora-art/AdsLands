@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const pool = require('../db');
 const { fetchYesterdayMetrics, fetchTodayMetrics } = require('../services/metricsFetcher');
 const { markDisconnected, markExpiring, refreshWithBackoff } = require('../services/tokenRefresh');
+const { getSetting } = require('../config/appSettings');
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.adslands.com';
 
 const PLATFORM_LABELS = {
@@ -10,13 +11,14 @@ const PLATFORM_LABELS = {
 };
 
 async function sendExpiryNotification(row, daysLeft) {
+  const dedupHours = await getSetting('notification_dedup_hours', 20);
   const { rows: [existing] } = await pool.query(`
     SELECT id FROM notifications
     WHERE company_id = $1 AND type = 'token_expiry_warning'
       AND meta->>'integration_id' = $2
-      AND created_at >= NOW() - INTERVAL '20 hours'
+      AND created_at >= NOW() - make_interval(hours => $3)
     LIMIT 1
-  `, [row.company_id, row.id]);
+  `, [row.company_id, row.id, dedupHours]);
   if (existing) return;
 
   const platformLabel = PLATFORM_LABELS[row.platform] || row.platform;
@@ -56,7 +58,12 @@ async function sendExpiryNotification(row, daysLeft) {
 }
 
 async function checkExpiringTokens() {
-  // ── 1. Tüm platformlar: 7 gün içinde dolacak tokenlar ──────────────────────
+  const [trialWarnDays, metaWarnDays] = await Promise.all([
+    getSetting('trial_warning_days', 7),
+    getSetting('meta_token_warning_days', 15),
+  ]);
+
+  // ── 1. Tüm platformlar: N gün içinde dolacak tokenlar ───────────────────────
   const { rows: expiring } = await pool.query(`
     SELECT i.id, i.company_id, i.platform, i.token_expiry, i.refresh_token,
            CEIL(EXTRACT(EPOCH FROM (i.token_expiry - NOW())) / 86400)::int AS days_left
@@ -64,9 +71,9 @@ async function checkExpiringTokens() {
     WHERE i.is_active = true
       AND i.status != 'disconnected'
       AND i.token_expiry IS NOT NULL
-      AND i.token_expiry < NOW() + INTERVAL '7 days'
+      AND i.token_expiry < NOW() + make_interval(days => $1)
       AND i.token_expiry > NOW()
-  `);
+  `, [trialWarnDays]);
 
   for (const row of expiring) {
     // Google ve TikTok: refresh_token varsa otomatik yenile
@@ -107,9 +114,9 @@ async function checkExpiringTokens() {
       AND i.is_active = true
       AND i.status != 'disconnected'
       AND i.token_expiry IS NOT NULL
-      AND i.token_expiry < NOW() + INTERVAL '15 days'
+      AND i.token_expiry < NOW() + make_interval(days => $1)
       AND i.token_expiry > NOW()
-  `);
+  `, [metaWarnDays]);
 
   for (const row of metaOld) {
     const daysLeft = Math.ceil((new Date(row.token_expiry) - Date.now()) / 86400000);
@@ -148,31 +155,35 @@ function startCronJobs() {
   cron.schedule('0 9 * * *', async () => {
     console.log('⏰ Cron: trial uyarı kontrolü...');
     try {
-      // Aktif aboneliği olmayan, trial'ı 7 gün içinde bitecek şirketler
+      const [trialWarnDays, dedupHours] = await Promise.all([
+        getSetting('trial_warning_days', 7),
+        getSetting('notification_dedup_hours', 20),
+      ]);
+
+      // Aktif aboneliği olmayan, trial'ı N gün içinde bitecek şirketler
       const { rows: companies } = await pool.query(`
         SELECT c.id AS company_id, c.trial_ends_at,
                CEIL(EXTRACT(EPOCH FROM (c.trial_ends_at - NOW())) / 86400)::int AS days_left
         FROM companies c
         WHERE c.trial_ends_at IS NOT NULL
           AND c.trial_ends_at > NOW()
-          AND c.trial_ends_at <= NOW() + INTERVAL '7 days'
+          AND c.trial_ends_at <= NOW() + make_interval(days => $1)
           AND NOT EXISTS (
             SELECT 1 FROM subscriptions s
             WHERE s.company_id = c.id
               AND s.status = 'active'
               AND (s.cancel_at_period_end = false OR s.cancel_at_period_end IS NULL)
           )
-      `);
+      `, [trialWarnDays]);
 
       for (const comp of companies) {
-        // Bugün zaten bildirim gönderildiyse atla
         const { rows: [existing] } = await pool.query(`
           SELECT id FROM notifications
           WHERE company_id = $1
             AND type = 'trial_warning'
-            AND created_at >= NOW() - INTERVAL '20 hours'
+            AND created_at >= NOW() - make_interval(hours => $2)
           LIMIT 1
-        `, [comp.company_id]);
+        `, [comp.company_id, dedupHours]);
         if (existing) continue;
 
         // Şirketin admin kullanıcılarına bildirim ekle

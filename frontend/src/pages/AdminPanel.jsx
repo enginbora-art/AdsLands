@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency, adminExportReport, adminGetPlanPrices, adminUpdatePlanPrice } from '../api';
+import { adminGetCompanies, adminCreateCompany, adminUpdateCompany, adminGetAiUsage, adminGetAiQueue, adminClearAiQueue, adminSetAiConcurrency, adminExportReport, adminGetPlanPrices, adminUpdatePlanPrice, adminGetAppSettings, adminUpdateAppSetting, adminGetBenchmarks, adminUpdateBenchmark } from '../api';
 import { PLAN_LABELS, PLAN_FILTER_OPTIONS, PLAN_RANK } from '../config/plans';
 
 const fmt = (d) => new Date(d).toLocaleDateString('tr-TR');
@@ -733,6 +733,195 @@ function PlanPricesTab() {
   );
 }
 
+function AppSettingsTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [edits, setEdits] = useState({});
+  const [saving, setSaving] = useState({});
+  const [msgs, setMsgs] = useState({});
+
+  useEffect(() => {
+    adminGetAppSettings()
+      .then(data => { setRows(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const getValue = (row) => edits[row.key] !== undefined ? edits[row.key] : row.value;
+  const setField = (key, val) => setEdits(p => ({ ...p, [key]: val }));
+
+  const handleSave = async (key) => {
+    if (edits[key] === undefined) return;
+    setSaving(p => ({ ...p, [key]: true }));
+    setMsgs(p => ({ ...p, [key]: '' }));
+    try {
+      const updated = await adminUpdateAppSetting(key, edits[key]);
+      setRows(prev => prev.map(r => r.key === key ? { ...r, ...updated } : r));
+      setEdits(p => { const n = { ...p }; delete n[key]; return n; });
+      setMsgs(p => ({ ...p, [key]: 'ok' }));
+      setTimeout(() => setMsgs(p => ({ ...p, [key]: '' })), 2000);
+    } catch (err) {
+      setMsgs(p => ({ ...p, [key]: err.response?.data?.error || 'Hata' }));
+    } finally {
+      setSaving(p => ({ ...p, [key]: false }));
+    }
+  };
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+  if (loading) return <div style={{ color: 'var(--text3)', padding: 40, textAlign: 'center' }}>Yükleniyor…</div>;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>Uygulama Ayarları</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>Değişiklikler 5 dakika içinde tüm servislere yansır (JWT hariç — restart gerekir).</div>
+      </div>
+
+      <div style={{ border: '1px solid var(--border2)', borderRadius: 10, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border2)' }}>
+              {['Ayar', 'Değer', 'Açıklama', 'Son Güncelleme', ''].map(h => (
+                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => {
+              const dirty = edits[row.key] !== undefined;
+              const msg = msgs[row.key];
+              return (
+                <tr key={row.key} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--border2)' : 'none', background: dirty ? 'rgba(13,148,136,0.04)' : 'transparent' }}>
+                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: 'var(--teal)', whiteSpace: 'nowrap' }}>{row.key}</td>
+                  <td style={{ padding: '10px 14px', minWidth: 140 }}>
+                    <input
+                      value={getValue(row)}
+                      onChange={e => setField(row.key, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSave(row.key); }}
+                      style={{ ...inp, width: 130, fontFamily: 'monospace', fontSize: 13 }}
+                    />
+                  </td>
+                  <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text3)', maxWidth: 280 }}>{row.description || '—'}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
+                    {fmtDate(row.updated_at)}
+                    {row.updated_by_email && <div style={{ fontSize: 10 }}>{row.updated_by_email}</div>}
+                  </td>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    {msg === 'ok' && <span style={{ fontSize: 12, color: '#22c55e' }}>✓</span>}
+                    {msg && msg !== 'ok' && <span style={{ fontSize: 11, color: '#ef4444' }}>{msg}</span>}
+                    <button
+                      onClick={() => handleSave(row.key)}
+                      disabled={!dirty || saving[row.key]}
+                      style={{ marginLeft: 8, padding: '4px 12px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 700, cursor: dirty ? 'pointer' : 'not-allowed', background: dirty ? 'var(--teal)' : 'var(--bg2)', color: dirty ? '#0B1219' : 'var(--text3)', transition: 'all .2s' }}
+                    >
+                      {saving[row.key] ? '…' : 'Kaydet'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BenchmarksTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [edits, setEdits] = useState({});
+  const [saving, setSaving] = useState({});
+  const [msgs, setMsgs] = useState({});
+
+  useEffect(() => {
+    adminGetBenchmarks()
+      .then(data => { setRows(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const getValue = (row) => edits[row.id] !== undefined ? edits[row.id] : Number(row.value);
+  const setField = (id, val) => setEdits(p => ({ ...p, [id]: val }));
+
+  const handleSave = async (id) => {
+    if (edits[id] === undefined) return;
+    setSaving(p => ({ ...p, [id]: true }));
+    setMsgs(p => ({ ...p, [id]: '' }));
+    try {
+      const updated = await adminUpdateBenchmark(id, edits[id]);
+      setRows(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
+      setEdits(p => { const n = { ...p }; delete n[id]; return n; });
+      setMsgs(p => ({ ...p, [id]: 'ok' }));
+      setTimeout(() => setMsgs(p => ({ ...p, [id]: '' })), 2000);
+    } catch (err) {
+      setMsgs(p => ({ ...p, [id]: err.response?.data?.error || 'Hata' }));
+    } finally {
+      setSaving(p => ({ ...p, [id]: false }));
+    }
+  };
+
+  const METRIC_LABELS = { roas: 'ROAS (x)', cpa: 'CPA (₺)', ctr: 'CTR (%)', conv_rate: 'Dönüşüm (%)' };
+  const METRIC_ORDER  = ['roas', 'cpa', 'ctr', 'conv_rate'];
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+  if (loading) return <div style={{ color: 'var(--text3)', padding: 40, textAlign: 'center' }}>Yükleniyor…</div>;
+
+  // Group by sector
+  const sectors = [...new Set(rows.map(r => r.sector))].sort();
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>Sektör Benchmarkları</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>Benchmark analizi ve PPT raporlarında kullanılan sektör ortalama değerleri.</div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {sectors.map(sector => {
+          const sectorRows = METRIC_ORDER.map(m => rows.find(r => r.sector === sector && r.metric === m)).filter(Boolean);
+          return (
+            <div key={sector} style={{ background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 20px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text1)', marginBottom: 12 }}>{sector}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                {sectorRows.map(row => {
+                  const dirty = edits[row.id] !== undefined;
+                  const msg = msgs[row.id];
+                  return (
+                    <div key={row.id} style={{ background: dirty ? 'rgba(13,148,136,0.06)' : 'var(--bg2)', borderRadius: 8, padding: '10px 12px', border: `1px solid ${dirty ? 'rgba(13,148,136,0.3)' : 'var(--border2)'}` }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                        {METRIC_LABELS[row.metric] || row.metric}
+                      </div>
+                      <input
+                        type="number" step="0.01" min="0"
+                        value={getValue(row)}
+                        onChange={e => setField(row.id, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSave(row.id); }}
+                        style={{ ...inp, fontFamily: 'monospace', fontSize: 14, fontWeight: 700, marginBottom: 6, padding: '6px 8px' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => handleSave(row.id)}
+                          disabled={!dirty || saving[row.id]}
+                          style={{ flex: 1, padding: '4px 0', borderRadius: 5, border: 'none', fontSize: 11, fontWeight: 700, cursor: dirty ? 'pointer' : 'not-allowed', background: dirty ? 'var(--teal)' : 'var(--bg)', color: dirty ? '#0B1219' : 'var(--text3)', transition: 'all .2s' }}
+                        >
+                          {saving[row.id] ? '…' : 'Kaydet'}
+                        </button>
+                        {msg === 'ok' && <span style={{ fontSize: 11, color: '#22c55e' }}>✓</span>}
+                        {msg && msg !== 'ok' && <span style={{ fontSize: 11, color: '#ef4444' }}>!</span>}
+                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 4 }}>{fmtDate(row.updated_at)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({ onLogout }) {
   const [data, setData] = useState({ agencies: [], independent_brands: [] });
   const [tab, setTab] = useState('companies');
@@ -833,9 +1022,11 @@ export default function AdminPanel({ onLogout }) {
         {/* Ana sekmeler */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border2)', paddingBottom: 0 }}>
           {[
-            { key: 'companies',   label: 'Şirketler' },
-            { key: 'ai',          label: 'AI Kullanımı' },
-            { key: 'plan-prices', label: 'Plan Fiyatları' },
+            { key: 'companies',    label: 'Şirketler' },
+            { key: 'ai',           label: 'AI Kullanımı' },
+            { key: 'plan-prices',  label: 'Plan Fiyatları' },
+            { key: 'app-settings', label: 'Uygulama Ayarları' },
+            { key: 'benchmarks',   label: 'Sektör Benchmarkları' },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setTab(key)}
               style={{ padding: '8px 18px', borderRadius: '6px 6px 0 0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -851,6 +1042,10 @@ export default function AdminPanel({ onLogout }) {
           <AiUsageTab />
         ) : tab === 'plan-prices' ? (
           <PlanPricesTab />
+        ) : tab === 'app-settings' ? (
+          <AppSettingsTab />
+        ) : tab === 'benchmarks' ? (
+          <BenchmarksTab />
         ) : (
           <>
         {/* Şirket filtre sekmeleri */}
