@@ -10,7 +10,7 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 6;
 
 const BUDGET_PLATFORMS = [
   { platform: 'google_ads', label: 'Google Ads',   color: '#4285F4' },
@@ -138,11 +138,13 @@ function logMessage(log) {
 
 // ── Helper Components ─────────────────────────────────────────────────────────
 function ProgressBar({ pct, color = '#00C9A7' }) {
+  const [w, setW] = useState(0);
   const p = Math.min(Math.max(pct || 0, 0), 100);
-  const c = p >= 90 ? '#EF4444' : p >= 70 ? '#F59E0B' : color;
+  const c = p >= 100 ? '#EF4444' : p >= 80 ? '#F59E0B' : color;
+  useEffect(() => { const t = setTimeout(() => setW(p), 40); return () => clearTimeout(t); }, [p]);
   return (
     <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${p}%`, background: c, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      <div style={{ height: '100%', width: `${w}%`, background: c, borderRadius: 3, transition: 'width 0.8s ease-out, background 0.3s ease' }} />
     </div>
   );
 }
@@ -691,12 +693,14 @@ function CampaignCard({ campaign, onClick }) {
   const pct = campaign.total_budget > 0 ? (campaign.total_spend / campaign.total_budget) * 100 : 0;
   const now = new Date();
   const daysLeft = Math.max(Math.ceil((new Date(campaign.end_date) - now) / 86400000), 0);
+  const accentColor = campaign.status === 'active' ? '#00C9A7' : campaign.status === 'completed' ? '#818CF8' : '#475569';
+  const borderBase  = campaign.status === 'active' ? 'rgba(0,201,167,0.18)' : 'var(--border2)';
 
   return (
     <div onClick={onClick}
-      style={{ background: 'var(--bg2)', border: `1px solid ${campaign.status === 'active' ? 'rgba(0,201,167,0.2)' : 'var(--border2)'}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s', position: 'relative', opacity: campaign.status === 'draft' ? 0.75 : 1 }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = '#00C9A7'; e.currentTarget.style.background = 'rgba(0,201,167,0.03)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = campaign.status === 'active' ? 'rgba(0,201,167,0.2)' : 'var(--border2)'; e.currentTarget.style.background = 'var(--bg2)'; }}
+      style={{ background: 'var(--bg2)', border: `1px solid ${borderBase}`, borderLeft: `3px solid ${accentColor}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease', position: 'relative', opacity: campaign.status === 'draft' ? 0.82 : 1 }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 10px 28px rgba(0,0,0,0.3), 0 0 0 1px ${accentColor}44`; e.currentTarget.style.borderColor = `${accentColor}66`; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = borderBase; }}
     >
       {campaign.has_anomaly && (
         <div title="Aktif uyarı" style={{ position: 'absolute', top: 14, right: 14, width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', boxShadow: '0 0 0 3px rgba(245,158,11,0.2)' }} />
@@ -891,6 +895,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const remaining     = totalBudget != null ? totalBudget - totalSpent : null;
   const spentPct      = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
   const remainColor   = totalBudget != null && totalSpent > totalBudget ? '#EF4444' : spentPct >= 80 ? '#F59E0B' : '#00C9A7';
+  const remainBg      = remainColor === '#EF4444' ? 'rgba(239,68,68,0.06)' : remainColor === '#F59E0B' ? 'rgba(245,158,11,0.05)' : 'rgba(0,201,167,0.04)';
   const activeList    = campList.filter(c => c.status === 'active' || c.status === 'draft');
   const completedList = campList.filter(c => c.status === 'completed');
   const tabList      = campTab === 'active' ? activeList : completedList;
@@ -921,20 +926,26 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
-          <div className="metric-card teal">
+          <div className="metric-card teal" style={{
+            background: 'linear-gradient(var(--bg2), var(--bg2)) padding-box, linear-gradient(135deg, rgba(0,201,167,0.55) 0%, rgba(10,102,194,0.25) 100%) border-box',
+            border: '1px solid transparent',
+            boxShadow: '0 0 18px rgba(0,201,167,0.07), 0 2px 6px rgba(0,0,0,0.25)',
+          }}>
             <div className="metric-label">Toplam Bütçe</div>
             <div className="metric-value">₺{fmt(totalBudget)}</div>
             <div className="metric-sub">{MONTHS[selMonth - 1]} {selYear}</div>
           </div>
-          <div className="metric-card" style={{ borderColor: `${remainColor}33` }}>
+          <div className="metric-card" style={{
+            background: `linear-gradient(${remainBg}, ${remainBg}) padding-box, linear-gradient(135deg, ${remainColor}88 0%, ${remainColor}22 100%) border-box`,
+            border: '1px solid transparent',
+            boxShadow: `0 0 18px ${remainColor}11, 0 2px 6px rgba(0,0,0,0.25)`,
+          }}>
             <div className="metric-label" style={{ color: remainColor }}>Kalan Bütçe</div>
             <div className="metric-value" style={{ color: remainColor, fontSize: 22 }}>
               {remaining != null ? (remaining < 0 ? '-' : '') + '₺' + fmt(Math.abs(remaining)) : '—'}
             </div>
             <div style={{ margin: '8px 0 4px' }}>
-              <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${spentPct}%`, background: remainColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
-              </div>
+              <ProgressBar pct={spentPct} color={remainColor} />
             </div>
             <div className="metric-sub">Harcanan: ₺{fmt(totalSpent)} · %{Math.round(spentPct)}</div>
           </div>
@@ -964,10 +975,18 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text1)' }}>Kampanyalar</div>
-          {campList.length > 0 && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{campList.length} kampanya</div>}
+          {campList.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+              {filtered.length > PAGE_SIZE
+                ? `${filtered.length} kampanyadan ${(campPage - 1) * PAGE_SIZE + 1}–${Math.min(campPage * PAGE_SIZE, filtered.length)} gösteriliyor`
+                : `${campList.length} kampanya`}
+            </div>
+          )}
         </div>
         <button onClick={() => setCreateModal(true)}
-          style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)' }}>
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(0,201,167,0.22), 0 4px 12px rgba(0,201,167,0.25)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+          style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}>
           + Yeni Kampanya
         </button>
       </div>
@@ -986,12 +1005,17 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
         {[
-          { id: 'active',    label: `Aktif${activeList.length > 0 ? ` (${activeList.length})` : ''}` },
-          { id: 'completed', label: `Tamamlandı${completedList.length > 0 ? ` (${completedList.length})` : ''}` },
+          { id: 'active',    label: 'Aktif',      count: activeList.length },
+          { id: 'completed', label: 'Tamamlandı', count: completedList.length },
         ].map(t => (
           <button key={t.id} onClick={() => { setCampTab(t.id); setCampPage(1); }}
-            style={{ padding: '8px 20px', background: 'none', border: 'none', fontFamily: 'var(--font)', borderBottom: campTab === t.id ? '2px solid var(--teal)' : '2px solid transparent', color: campTab === t.id ? 'var(--teal)' : 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: -1 }}>
+            style={{ padding: '8px 16px', background: 'none', border: 'none', fontFamily: 'var(--font)', borderBottom: campTab === t.id ? '2px solid var(--teal)' : '2px solid transparent', color: campTab === t.id ? 'var(--teal)' : 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 7 }}>
             {t.label}
+            {t.count > 0 && (
+              <span style={{ background: campTab === t.id ? '#00C9A7' : 'rgba(148,163,184,0.15)', color: campTab === t.id ? '#0B1219' : 'var(--text3)', borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 700, lineHeight: '16px' }}>
+                {t.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
