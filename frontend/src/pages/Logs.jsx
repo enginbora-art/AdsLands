@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { getLogs, getLogsUsers } from '../api';
 
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -70,59 +70,50 @@ export default function Logs() {
   const [logs,    setLogs]    = useState([]);
   const [total,   setTotal]   = useState(0);
   const [page,    setPage]    = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [users,   setUsers]   = useState([]);
   const [filters, setFilters] = useState(INIT_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
 
-  const [searchInput,    setSearchInput]    = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const searchTimer = useRef(null);
+  // null = never searched; object = last committed query params
+  const [committedQuery, setCommittedQuery] = useState(null);
 
   useEffect(() => {
     getLogsUsers().then(setUsers).catch(() => {});
   }, []);
 
+  // Fetch only when committedQuery is set (after first "Ara" click)
+  // or when page changes (user already searched)
   useEffect(() => {
+    if (!committedQuery) return;
     let cancelled = false;
     setLoading(true);
-    const params = { page, limit: PAGE_SIZE };
-    if (debouncedSearch)      params.search      = debouncedSearch;
-    if (filters.user_id)      params.user_id     = filters.user_id;
-    if (filters.module)       params.module      = filters.module;
-    if (filters.action_type)  params.action_type = filters.action_type;
-    if (filters.start_date)   params.start_date  = filters.start_date;
-    if (filters.end_date)     params.end_date    = filters.end_date;
-
-    getLogs(params)
+    getLogs({ ...committedQuery, page, limit: PAGE_SIZE })
       .then(data => { if (!cancelled) { setLogs(data.logs || []); setTotal(data.total || 0); setLoading(false); } })
       .catch(() => { if (!cancelled) { setLogs([]); setLoading(false); } });
-
     return () => { cancelled = true; };
-  }, [page, filters, debouncedSearch]);
+  }, [committedQuery, page]);
 
-  const handleSearchChange = (val) => {
-    setSearchInput(val);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      setDebouncedSearch(val);
-      setPage(1);
-    }, 500);
-  };
-
-  const setFilter = (key, val) => {
-    setFilters(prev => ({ ...prev, [key]: val }));
+  const handleSearch = () => {
+    const q = {};
+    if (searchInput.trim())  q.search      = searchInput.trim();
+    if (filters.user_id)     q.user_id     = filters.user_id;
+    if (filters.module)      q.module      = filters.module;
+    if (filters.action_type) q.action_type = filters.action_type;
+    if (filters.start_date)  q.start_date  = filters.start_date;
+    if (filters.end_date)    q.end_date    = filters.end_date;
     setPage(1);
+    setCommittedQuery(q);
   };
 
   const clearFilters = () => {
     setFilters(INIT_FILTERS);
     setSearchInput('');
-    setDebouncedSearch('');
-    setPage(1);
+    // results stay until next "Ara" click
   };
 
-  const hasActiveFilter = searchInput || Object.values(filters).some(v => v);
+  const hasActiveFilterInput = searchInput || Object.values(filters).some(v => v);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const pageNums = (() => {
@@ -144,9 +135,9 @@ export default function Logs() {
       </div>
 
       <div className="content">
-        {/* ── Filters ── */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-          <select style={sel} value={filters.user_id} onChange={e => setFilter('user_id', e.target.value)}>
+        {/* ── Filters + Search + Ara ── */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20, alignItems: 'center' }}>
+          <select style={sel} value={filters.user_id} onChange={e => setFilters(f => ({ ...f, user_id: e.target.value }))}>
             <option value="">Tüm Kullanıcılar</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>
@@ -155,7 +146,7 @@ export default function Logs() {
             ))}
           </select>
 
-          <select style={sel} value={filters.module} onChange={e => setFilter('module', e.target.value)}>
+          <select style={sel} value={filters.module} onChange={e => setFilters(f => ({ ...f, module: e.target.value }))}>
             <option value="">Tüm Modüller</option>
             <option value="budget">Bütçe</option>
             <option value="campaign">Kampanya</option>
@@ -166,7 +157,7 @@ export default function Logs() {
             <option value="ai_report">AI Rapor</option>
           </select>
 
-          <select style={sel} value={filters.action_type} onChange={e => setFilter('action_type', e.target.value)}>
+          <select style={sel} value={filters.action_type} onChange={e => setFilters(f => ({ ...f, action_type: e.target.value }))}>
             <option value="">Tüm İşlemler</option>
             <option value="created">Oluşturuldu</option>
             <option value="updated">Güncellendi</option>
@@ -176,41 +167,43 @@ export default function Logs() {
             <option value="login">Giriş Yapıldı</option>
           </select>
 
-          <input
-            type="date" style={sel}
-            value={filters.start_date}
-            onChange={e => setFilter('start_date', e.target.value)}
-          />
-          <input
-            type="date" style={sel}
-            value={filters.end_date}
-            onChange={e => setFilter('end_date', e.target.value)}
-          />
+          <input type="date" style={sel} value={filters.start_date} onChange={e => setFilters(f => ({ ...f, start_date: e.target.value }))} />
+          <input type="date" style={sel} value={filters.end_date}   onChange={e => setFilters(f => ({ ...f, end_date: e.target.value }))} />
 
-          {hasActiveFilter && (
+          {/* Search input */}
+          <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+            <input
+              type="text"
+              placeholder="Kullanıcı, marka veya kampanya ara..."
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              style={{ ...sel, cursor: 'text', width: '100%', paddingLeft: 32, boxSizing: 'border-box' }}
+            />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </div>
+
+          {/* Primary search button */}
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            style={{ padding: '7px 20px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: 'var(--font)', flexShrink: 0, opacity: loading ? 0.7 : 1 }}
+          >
+            {loading ? '...' : 'Ara'}
+          </button>
+
+          {hasActiveFilterInput && (
             <button
               onClick={clearFilters}
-              style={{ padding: '7px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 8, color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
+              style={{ padding: '7px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 8, color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', flexShrink: 0 }}
             >
               Filtreleri Temizle
             </button>
           )}
-        </div>
-
-        {/* ── Search ── */}
-        <div style={{ position: 'relative', marginBottom: 20 }}>
-          <input
-            type="text"
-            placeholder="Kullanıcı, marka veya kampanya adında ara..."
-            value={searchInput}
-            onChange={e => handleSearchChange(e.target.value)}
-            style={{ ...sel, cursor: 'text', width: '100%', paddingLeft: 36, boxSizing: 'border-box' }}
-          />
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round"
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
         </div>
 
         {/* ── Table ── */}
@@ -228,12 +221,16 @@ export default function Logs() {
             <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
               Yükleniyor...
             </div>
+          ) : !committedQuery ? (
+            <div style={{ padding: '64px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>🔍</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Filtrele ve Arayın</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Filtreleri ayarlayıp "Ara" butonuna basın.</div>
+            </div>
           ) : logs.length === 0 ? (
             <div style={{ padding: '64px 20px', textAlign: 'center' }}>
               <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.4 }}>📋</div>
-              <div style={{ fontSize: 14, color: 'var(--text3)' }}>
-                {hasActiveFilter ? 'Filtrelerle eşleşen kayıt bulunamadı.' : 'Henüz işlem kaydı yok.'}
-              </div>
+              <div style={{ fontSize: 14, color: 'var(--text3)' }}>Filtrelerle eşleşen kayıt bulunamadı.</div>
             </div>
           ) : (
             logs.map((log, i) => (
@@ -243,7 +240,7 @@ export default function Logs() {
         </div>
 
         {/* ── Footer: count + pagination ── */}
-        {!loading && total > 0 && (
+        {!loading && committedQuery && total > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               {total} kayıttan {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} gösteriliyor
