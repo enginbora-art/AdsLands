@@ -5,6 +5,7 @@ import {
   getBudgetPlan, saveBudgetPlan, getBudgetLogs, getBudgetBrands,
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getCampaign, addCampaignChannel, removeCampaignChannel,
+  getPlatformCampaigns,
 } from '../api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -154,6 +155,29 @@ function PlatformIcon({ platform, size = 20 }) {
   );
 }
 
+// ── Currency Input (format on blur, raw on focus) ────────────────────────────
+function CurrencyInput({ value, onChange, style, placeholder, ...rest }) {
+  const [focused, setFocused] = useState(false);
+  const raw = String(value || '').replace(/\./g, '').replace(/[^0-9]/g, '');
+  const displayed = focused ? raw : (raw ? parseInt(raw).toLocaleString('tr-TR') : '');
+  return (
+    <input
+      {...rest}
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={displayed}
+      style={style}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={e => {
+        const cleaned = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+        onChange(cleaned);
+      }}
+    />
+  );
+}
+
 // ── Log Panel ─────────────────────────────────────────────────────────────────
 function LogPanel() {
   const [logs, setLogs]     = useState([]);
@@ -188,7 +212,7 @@ function LogPanel() {
   );
 }
 
-// ── Budget Modal (simplified — no KPI) ───────────────────────────────────────
+// ── Budget Modal (only total budget) ─────────────────────────────────────────
 function BudgetModal({ role, brands, month, year, existing, onSave, onClose, forceBrandId }) {
   const [form, setForm] = useState({
     brand_id:     brands?.[0]?.id ?? '',
@@ -196,38 +220,23 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
     year:         existing?.year  ?? year,
     total_budget: existing?.total_budget ? String(Math.round(Number(existing.total_budget))) : '',
   });
-  const [channels, setChannels] = useState(() => {
-    if (existing?.channels?.length > 0) {
-      return existing.channels.map(ch => ({ platform: ch.platform, amount: String(Math.round(Number(ch.amount))) }));
-    }
-    return LEGACY_CHANNELS.filter(lc => Number(existing?.[lc.key]) > 0)
-      .map(lc => ({ platform: lc.platform, amount: String(Math.round(Number(existing[lc.key]))) }));
-  });
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const set         = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const usedPlats   = channels.map(c => c.platform).filter(Boolean);
-  const availableFor = (cur) => BUDGET_PLATFORMS.filter(p => p.platform === cur || !usedPlats.includes(p.platform));
-  const addChannel  = () => setChannels(p => [...p, { platform: '', amount: '' }]);
-  const removeChannel = (i) => setChannels(p => p.filter((_, idx) => idx !== i));
-  const updateCh    = (i, k, v) => setChannels(p => p.map((ch, idx) => idx === i ? { ...ch, [k]: v } : ch));
-
-  const channelSum = channels.reduce((s, ch) => s + (parseInt(ch.amount) || 0), 0);
-  const total      = parseInt(form.total_budget) || 0;
-  const remaining  = total - channelSum;
-  const overBudget = remaining < 0;
-  const allOk      = total > 0 && remaining === 0;
-
-  const doSave = async (totalOverride) => {
-    setSaving(true); setError(''); setShowConfirm(false);
+  const handleSave = async () => {
+    if (!form.total_budget) return;
+    setSaving(true); setError('');
     try {
+      // Preserve existing channel allocation; only total_budget is edited here
+      const existingChannels = existing?.channels?.length > 0
+        ? existing.channels
+        : LEGACY_CHANNELS.filter(lc => Number(existing?.[lc.key]) > 0)
+            .map(lc => ({ platform: lc.platform, amount: Number(existing[lc.key]), kpi: {} }));
       const payload = {
         month: parseInt(form.month), year: parseInt(form.year),
-        total_budget: totalOverride ?? total,
-        channels: channels.filter(ch => ch.platform && parseInt(ch.amount) > 0)
-          .map(ch => ({ platform: ch.platform, amount: parseInt(ch.amount), kpi: {} })),
+        total_budget: parseInt(form.total_budget) || 0,
+        channels: existingChannels,
       };
       if (role === 'agency') payload.brand_id = forceBrandId || form.brand_id;
       onSave(await saveBudgetPlan(payload));
@@ -236,19 +245,11 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
     } finally { setSaving(false); }
   };
 
-  const handleSave = () => {
-    if (!form.total_budget) return;
-    const ttl = parseInt(form.total_budget) || 0;
-    const sum = channels.reduce((s, ch) => s + (parseInt(ch.amount) || 0), 0);
-    if (sum > ttl && sum > 0) { setShowConfirm(true); return; }
-    doSave();
-  };
-
   return (
     <div style={ms.overlay} onClick={onClose}>
-      <div style={ms.modal} onClick={e => e.stopPropagation()}>
+      <div style={{ ...ms.modal, maxHeight: '60vh' }} onClick={e => e.stopPropagation()}>
         <div style={ms.header}>
-          <span style={ms.title}>Bütçeyi Düzenle</span>
+          <span style={ms.title}>Aylık Bütçeyi Düzenle</span>
           <button onClick={onClose} style={ms.close}>✕</button>
         </div>
         <div style={ms.body}>
@@ -276,51 +277,9 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
           </div>
           <div style={ms.field}>
             <label style={ms.label}>Toplam Aylık Bütçe (₺)</label>
-            <input style={ms.input} type="text" inputMode="numeric" placeholder="örn: 150.000"
-              value={fmtInput(form.total_budget)} onChange={e => set('total_budget', parseRaw(e.target.value))} />
+            <CurrencyInput value={form.total_budget} onChange={v => set('total_budget', v)}
+              style={ms.input} placeholder="örn: 150.000" />
           </div>
-          <div style={ms.divider} />
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ ...ms.label, fontSize: 11 }}>Kanal Bazında Dağılım <span style={{ color: 'var(--text3)', fontWeight: 400, textTransform: 'none' }}>(opsiyonel)</span></span>
-            </div>
-            {channels.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '10px 0 8px', color: 'var(--text3)', fontSize: 12 }}>Henüz platform eklenmedi</div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {channels.map((ch, i) => {
-                const info = PLATFORM_MAP[ch.platform];
-                return (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-                    <select style={{ ...ms.select, color: info ? 'var(--teal)' : 'var(--text3)', fontWeight: info ? 600 : 400 }}
-                      value={ch.platform} onChange={e => updateCh(i, 'platform', e.target.value)}>
-                      <option value="">— Platform Seç</option>
-                      {availableFor(ch.platform).map(p => <option key={p.platform} value={p.platform}>{p.label}</option>)}
-                    </select>
-                    <input style={ms.input} type="text" inputMode="numeric" placeholder="0"
-                      value={fmtInput(ch.amount)} onChange={e => updateCh(i, 'amount', parseRaw(e.target.value))} />
-                    <button onClick={() => removeChannel(i)} title="Kaldır"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, padding: '4px', lineHeight: 1 }}>🗑</button>
-                  </div>
-                );
-              })}
-            </div>
-            <button onClick={addChannel} disabled={channels.length >= BUDGET_PLATFORMS.length}
-              style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px dashed var(--border2)', borderRadius: 7, color: 'var(--teal)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-              + Platform Ekle
-            </button>
-          </div>
-          {total > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 13px', borderRadius: 8, border: '1px solid', fontSize: 12, fontWeight: 600,
-              background: overBudget ? 'rgba(255,107,90,0.08)' : allOk ? 'rgba(52,211,153,0.08)' : 'rgba(0,191,166,0.06)',
-              borderColor: overBudget ? 'rgba(255,107,90,0.3)' : allOk ? 'rgba(52,211,153,0.35)' : 'rgba(0,191,166,0.2)' }}>
-              <span style={{ color: 'var(--text3)' }}>Dağıtılan:</span>
-              <span>₺{fmt(channelSum)} / ₺{fmt(total)}</span>
-              <span style={{ color: overBudget ? 'var(--coral)' : allOk ? 'var(--success)' : 'var(--teal)' }}>
-                {overBudget ? `₺${fmt(Math.abs(remaining))} fazla` : allOk ? '✓ Tüm bütçe dağıtıldı' : `₺${fmt(remaining)} kaldı`}
-              </span>
-            </div>
-          )}
           {error && <div style={{ background: 'rgba(255,107,90,0.12)', border: '1px solid rgba(255,107,90,0.3)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--coral)', fontWeight: 600 }}>⚠ {error}</div>}
         </div>
         <div style={ms.footer}>
@@ -329,25 +288,6 @@ function BudgetModal({ role, brands, month, year, existing, onSave, onClose, for
             {saving ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
-        {showConfirm && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, borderRadius: 14 }} onClick={e => e.stopPropagation()}>
-            <div style={{ background: '#1a1f2e', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 14, padding: 28, width: 340, maxWidth: '90%' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>⚠️ Bütçe Aşımı</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 24 }}>
-                Dağıtılan toplam (<strong>₺{fmt(channelSum)}</strong>), belirlenen bütçeyi (<strong>₺{fmt(total)}</strong>) aşıyor. Ne yapmak istersiniz?
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                <button onClick={() => doSave(channelSum)} style={{ padding: '10px', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B1219', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                  Bütçeyi ₺{fmt(channelSum)} Olarak Güncelle
-                </button>
-                <button onClick={() => setShowConfirm(false)} style={{ padding: '10px', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                  Kanalları Düzenle
-                </button>
-                <button onClick={onClose} style={{ padding: '10px', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>İptal</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -388,7 +328,7 @@ function CampaignFormModal({ existing, onClose, onSave, brandId }) {
         </label>
         <label style={{ display: 'block', marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Toplam Bütçe (₺)</div>
-          <input type="number" min="0" value={budget} onChange={e => setBudget(e.target.value)} placeholder="ör. 50000" style={inp} />
+          <CurrencyInput value={budget} onChange={setBudget} placeholder="örn: 50.000" style={inp} />
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           <label>
@@ -413,19 +353,54 @@ function CampaignFormModal({ existing, onClose, onSave, brandId }) {
 
 // ── Add Channel Modal ─────────────────────────────────────────────────────────
 function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose, onSave }) {
-  const [platform, setPlatform]   = useState('');
-  const [extId, setExtId]         = useState('');
-  const [extName, setExtName]     = useState('');
+  const [platform, setPlatform]     = useState('');
+  const [extId, setExtId]           = useState('');
+  const [extName, setExtName]       = useState('');
   const [allocBudget, setAllocBudget] = useState('');
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState('');
+  const [kpiValues, setKpiValues]   = useState({});
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching]   = useState(false);
+  const [showSugg, setShowSugg]     = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState('');
+  const searchTimer                 = useRef(null);
   const available = ALL_CAMPAIGN_PLATFORMS.filter(p => !existingPlatforms.includes(p));
+
+  useEffect(() => {
+    setExtId(''); setExtName(''); setSuggestions([]); setKpiValues({});
+  }, [platform]);
+
+  const handleExtIdChange = (val) => {
+    setExtId(val);
+    setShowSugg(true);
+    clearTimeout(searchTimer.current);
+    if (!val.trim()) { setSuggestions([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try { setSuggestions((await getPlatformCampaigns(campaignId, platform, val)) || []); } catch { setSuggestions([]); }
+      finally { setSearching(false); }
+    }, 400);
+  };
+
+  const selectSuggestion = (s) => {
+    setExtId(s.id || s.external_id || s.campaign_id || s.extId || '');
+    setExtName(s.name || s.campaign_name || s.extName || '');
+    setShowSugg(false); setSuggestions([]);
+  };
+
+  const setKpi = (key, val) => setKpiValues(prev => ({ ...prev, [key]: val }));
 
   const handleSave = async () => {
     if (!platform) return setError('Platform seçin.');
+    if (!extId.trim()) return setError('Kampanya ID zorunludur.');
+    if (!allocBudget || Number(allocBudget) <= 0) return setError('Ayrılan bütçe zorunludur.');
     setError(''); setSaving(true);
+    const kpi = {};
+    for (const [key, val] of Object.entries(kpiValues)) {
+      if (val && String(val).trim()) kpi[key] = val;
+    }
     try {
-      await onSave({ platform, external_campaign_id: extId || null, external_campaign_name: extName || null, allocated_budget: Number(allocBudget) || 0 });
+      await onSave({ platform, external_campaign_id: extId.trim(), external_campaign_name: extName.trim() || null, allocated_budget: Number(allocBudget), kpi });
       onClose();
     } catch (e) {
       setError(e?.response?.data?.error || 'Kanal eklenemedi.');
@@ -433,12 +408,16 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
   };
 
   const inp = { width: '100%', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, padding: '9px 12px', color: 'var(--text1)', fontSize: 13, fontFamily: 'var(--font)', boxSizing: 'border-box' };
+  const kpiFields = platform ? getKpiFields(platform) : [];
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1010, padding: 16 }} onClick={onClose}>
-      <div style={{ background: '#1a1f2e', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 16, padding: '32px 28px', maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1010, padding: '24px 16px', overflowY: 'auto' }} onClick={onClose}>
+      <div style={{ background: '#1a1f2e', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 16, padding: '28px', maxWidth: 480, width: '100%', marginTop: 24, marginBottom: 24 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Kanal Ekle</div>
-        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 24 }}>{campaignName}</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 20 }}>{campaignName}</div>
         {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#ef4444', marginBottom: 16 }}>{error}</div>}
+
+        {/* Platform */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>Platform</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -451,30 +430,71 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
             {available.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)' }}>Tüm platformlar eklenmiş.</div>}
           </div>
         </div>
+
         {platform && (
           <>
-            <div style={{ background: 'rgba(0,201,167,0.05)', border: '1px solid rgba(0,201,167,0.15)', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
-              💡 {PLATFORM_LABELS[platform]} panelinden kampanya ID'sini alıp aşağıya yapıştırın.
+            {/* Campaign ID with fuzzy search */}
+            <div style={{ marginBottom: 14, position: 'relative' }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Kampanya ID</div>
+              <input value={extId} onChange={e => handleExtIdChange(e.target.value)}
+                placeholder={`${PLATFORM_LABELS[platform]} kampanya ID'si`}
+                style={inp}
+                onBlur={() => setTimeout(() => setShowSugg(false), 160)} />
+              {searching && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Aranıyor...</div>}
+              {showSugg && suggestions.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1f2e', border: '1px solid var(--border2)', borderRadius: 8, zIndex: 20, maxHeight: 160, overflowY: 'auto', marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+                  {suggestions.map((s, i) => (
+                    <div key={i} onClick={() => selectSuggestion(s)}
+                      style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: i < suggestions.length - 1 ? '1px solid var(--border2)' : 'none' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,201,167,0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)' }}>{s.name || s.campaign_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'monospace' }}>{s.id || s.external_id || s.campaign_id}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Kampanya ID (opsiyonel)</div>
-              <input value={extId} onChange={e => setExtId(e.target.value)} placeholder="Platform kampanya ID'si" style={inp} />
-            </label>
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Kampanya Adı (opsiyonel)</div>
-              <input value={extName} onChange={e => setExtName(e.target.value)} placeholder="Platform üzerindeki kampanya adı" style={inp} />
-            </label>
-            <label style={{ display: 'block', marginBottom: 24 }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Ayrılan Bütçe ₺ (opsiyonel)</div>
-              <input type="number" min="0" value={allocBudget} onChange={e => setAllocBudget(e.target.value)} placeholder="0" style={inp} />
-            </label>
+
+            {/* Campaign Name */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Kampanya Adı</div>
+              <input value={extName} onChange={e => setExtName(e.target.value)}
+                placeholder="Platform üzerindeki kampanya adı" style={inp} />
+            </div>
+
+            {/* Budget */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Ayrılan Bütçe (₺)</div>
+              <CurrencyInput value={allocBudget} onChange={setAllocBudget}
+                placeholder="örn: 25.000" style={inp} />
+            </div>
+
+            {/* Inline KPI fields */}
+            {kpiFields.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>KPI Hedefleri</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                  {kpiFields.map(({ key, label, placeholder, step }) => (
+                    <div key={key}>
+                      <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{label}</div>
+                      <input type="number" step={step} min="0" placeholder={placeholder}
+                        value={kpiValues[key] || ''}
+                        onChange={e => setKpi(key, e.target.value)}
+                        style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 6, padding: '7px 10px', color: 'var(--text1)', fontSize: 12, fontFamily: 'var(--font)', boxSizing: 'border-box' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
+
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '11px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 10, color: 'var(--text3)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>İptal</button>
           <button onClick={handleSave} disabled={saving || !platform || available.length === 0}
             style={{ flex: 2, padding: '11px 0', background: 'rgba(0,201,167,0.12)', border: '1px solid rgba(0,201,167,0.3)', borderRadius: 10, color: '#00C9A7', fontWeight: 700, fontSize: 13, cursor: saving || !platform ? 'default' : 'pointer', fontFamily: 'var(--font)', opacity: (!platform || saving) ? 0.5 : 1 }}>
-            {saving ? 'Ekleniyor...' : 'Ekle'}
+            {saving ? 'Ekleniyor...' : 'Kaydet'}
           </button>
         </div>
       </div>
@@ -482,15 +502,12 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, onClose,
   );
 }
 
-// ── Campaign Detail Modal (with KPI section) ──────────────────────────────────
-function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, budgetPlan, onKpiSave }) {
+// ── Campaign Detail Modal ─────────────────────────────────────────────────────
+function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh }) {
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [showAddCh, setShowAddCh] = useState(false);
   const [removing, setRemoving]   = useState(null);
-  const [kpiEdit, setKpiEdit]     = useState(false);
-  const [kpiValues, setKpiValues] = useState({});
-  const [kpiSaving, setKpiSaving] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -498,25 +515,6 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
   }, [campaignId]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Pre-fill KPI values from budget plan when campaign data arrives
-  useEffect(() => {
-    if (!data || !budgetPlan?.channels) return;
-    const initial = {};
-    for (const ch of data.channels || []) {
-      const planCh = budgetPlan.channels.find(c => c.platform === ch.platform);
-      if (planCh) {
-        initial[ch.platform] = {
-          roas:       planCh.kpi_roas       != null ? String(planCh.kpi_roas)       : '',
-          cpa:        planCh.kpi_cpa        != null ? String(planCh.kpi_cpa)        : '',
-          ctr:        planCh.kpi_ctr        != null ? String(planCh.kpi_ctr)        : '',
-          impression: planCh.kpi_impression != null ? String(planCh.kpi_impression) : '',
-          conversion: planCh.kpi_conversion != null ? String(planCh.kpi_conversion) : '',
-        };
-      }
-    }
-    setKpiValues(initial);
-  }, [data, budgetPlan]);
 
   const handleAddChannel = async (channelData) => {
     await addCampaignChannel(campaignId, { ...channelData, brand_id: brandId });
@@ -527,31 +525,6 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
     try { await removeCampaignChannel(campaignId, channelId); load(); onRefresh(); } catch {}
     finally { setRemoving(null); }
   };
-
-  const handleKpiSave = async () => {
-    if (!onKpiSave) return;
-    setKpiSaving(true);
-    try {
-      const updated = (budgetPlan?.channels || []).map(c => ({ ...c }));
-      for (const [platform, kpi] of Object.entries(kpiValues)) {
-        const idx = updated.findIndex(c => c.platform === platform);
-        const kpiClean = {};
-        if (kpi.roas?.trim())       kpiClean.roas       = kpi.roas;
-        if (kpi.cpa?.trim())        kpiClean.cpa        = kpi.cpa;
-        if (kpi.ctr?.trim())        kpiClean.ctr        = kpi.ctr;
-        if (kpi.impression?.trim()) kpiClean.impression = kpi.impression;
-        if (kpi.conversion?.trim()) kpiClean.conversion = kpi.conversion;
-        if (idx >= 0) updated[idx] = { ...updated[idx], kpi: kpiClean };
-        else updated.push({ platform, amount: 0, kpi: kpiClean });
-      }
-      await onKpiSave(updated);
-      setKpiEdit(false);
-    } catch {}
-    finally { setKpiSaving(false); }
-  };
-
-  const setKpiField = (platform, key, val) =>
-    setKpiValues(prev => ({ ...prev, [platform]: { ...(prev[platform] || {}), [key]: val } }));
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '24px 16px', overflowY: 'auto' }} onClick={onClose}>
@@ -612,7 +585,7 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
             </div>
 
             {/* Channels */}
-            <div style={{ marginBottom: (data.channels || []).length > 0 && onKpiSave ? 24 : 0 }}>
+            <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>Kanallar ({(data.channels || []).length})</div>
                 {data.status !== 'completed' && (data.channels || []).length < ALL_CAMPAIGN_PLATFORMS.length && (
@@ -657,63 +630,6 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
               )}
             </div>
 
-            {/* KPI Hedefleri — only shown when there are channels and a budget plan */}
-            {(data.channels || []).length > 0 && onKpiSave && (
-              <div style={{ borderTop: '1px solid var(--border2)', paddingTop: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>KPI Hedefleri</div>
-                  {!kpiEdit ? (
-                    <button onClick={() => setKpiEdit(true)}
-                      style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--teal)', fontFamily: 'var(--font)' }}>
-                      Düzenle
-                    </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => setKpiEdit(false)} style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text3)', fontFamily: 'var(--font)' }}>İptal</button>
-                      <button onClick={handleKpiSave} disabled={kpiSaving} style={{ padding: '5px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)', opacity: kpiSaving ? 0.7 : 1 }}>
-                        {kpiSaving ? 'Kaydediliyor...' : 'Kaydet'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {data.channels.map(ch => {
-                    const fields = getKpiFields(ch.platform);
-                    const vals = kpiValues[ch.platform] || {};
-                    const hasAny = fields.some(f => vals[f.key]);
-                    if (!kpiEdit && !hasAny) return null;
-                    return (
-                      <div key={ch.platform} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--border2)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                          <PlatformIcon platform={ch.platform} size={18} />
-                          <span style={{ fontSize: 12, fontWeight: 700, color: PLATFORM_COLORS[ch.platform] || 'var(--text2)' }}>{PLATFORM_LABELS[ch.platform]}</span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                          {fields.map(({ key, label, placeholder, step }) => (
-                            <div key={key}>
-                              <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{label}</div>
-                              {kpiEdit ? (
-                                <input type="number" step={step} min="0" placeholder={placeholder}
-                                  value={vals[key] || ''}
-                                  onChange={e => setKpiField(ch.platform, key, e.target.value)}
-                                  style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 10px', color: 'var(--text1)', fontSize: 12, fontFamily: 'var(--font)', boxSizing: 'border-box' }} />
-                              ) : (
-                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>
-                                  {vals[key] ? vals[key] : <span style={{ color: 'var(--text3)' }}>—</span>}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {!kpiEdit && !data.channels.some(ch => (getKpiFields(ch.platform).some(f => (kpiValues[ch.platform] || {})[f.key]))) && (
-                    <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '4px 0 8px' }}>KPI hedefi girilmemiş. "Düzenle" ile ekleyebilirsiniz.</div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -868,16 +784,6 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     finally { setDeleting(null); }
   };
 
-  const handleKpiSave = useCallback(async (updatedChannels) => {
-    const saved = await saveBudgetPlan({
-      month: selMonth, year: selYear,
-      total_budget: Number(budgetPlan?.total_budget || 0),
-      channels: updatedChannels,
-      ...(isAgency ? { brand_id: effectiveBrandId } : {}),
-    });
-    setBudgetPlan(saved);
-  }, [budgetPlan, selMonth, selYear, effectiveBrandId, isAgency]);
-
   // ── Early returns ──
   if (isAgency && !isEmbedded && !selectedBrand && brands.length === 0 && budgetPlan === undefined) {
     return (
@@ -930,8 +836,8 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     ? { company_name: resolvedBrandName }
     : brands.find(b => b.id === selBrandId);
 
-  // Campaign filtering + pagination
-  const campList     = campaigns || [];
+  // Campaign filtering + pagination — hide the auto-created "Genel Bütçe" placeholder
+  const campList     = (campaigns || []).filter(c => c.name !== 'Genel Bütçe');
   const activeList   = campList.filter(c => c.status === 'active' || c.status === 'draft');
   const completedList = campList.filter(c => c.status === 'completed');
   const tabList      = campTab === 'active' ? activeList : completedList;
@@ -1110,8 +1016,6 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
         <CampaignDetailModal
           campaignId={detailId}
           brandId={effectiveBrandId || user?.company_id}
-          budgetPlan={budgetPlan}
-          onKpiSave={budgetPlan ? handleKpiSave : null}
           onClose={() => setDetailId(null)}
           onEdit={() => {
             const c = campList.find(x => x.id === detailId);
