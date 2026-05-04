@@ -614,8 +614,7 @@ function PriceInput({ value, onChange, label, suffix = '₺', max }) {
     const cleaned = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
     if (max !== undefined && cleaned !== '' && parseInt(cleaned, 10) > max) return;
     setLocalStr(cleaned);
-    // propagate as string while typing; parent stores it in edits as-is
-    onChange(cleaned === '' ? '' : parseInt(cleaned, 10));
+    // don't propagate during typing — parent is notified only on blur
   };
 
   const handleBlur = () => {
@@ -646,6 +645,28 @@ function PriceInput({ value, onChange, label, suffix = '₺', max }) {
           style={{ ...inp, fontFamily: 'monospace', paddingLeft: !isFocused && displayed ? 22 : 9 }}
         />
       </div>
+    </div>
+  );
+}
+
+function DiscountInput({ value, onChange }) {
+  const [local, setLocal] = useState(null); // null = blurred
+  const displayed = local !== null ? local : String(value ?? 0);
+  return (
+    <div>
+      <label style={fieldLabel}>İndirim %</label>
+      <input
+        type="number" min="0" max="100" step="1"
+        value={displayed}
+        onFocus={() => setLocal(String(value ?? 0))}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={() => {
+          const parsed = Math.min(100, Math.max(0, Number(local) || 0));
+          setLocal(null);
+          onChange(parsed);
+        }}
+        style={{ ...inp, fontFamily: 'monospace' }}
+      />
     </div>
   );
 }
@@ -709,15 +730,10 @@ function PlanPriceCard({ row, edits, onField, onSave, saving, msg }) {
           value={getValue('yearly_price')}
           onChange={v => onField(key, 'yearly_price', v)}
         />
-        <div>
-          <label style={fieldLabel}>İndirim %</label>
-          <input
-            type="number" min="0" max="100" step="1"
-            value={getValue('yearly_discount_pct')}
-            onChange={e => onField(key, 'yearly_discount_pct', Number(e.target.value))}
-            style={{ ...inp, fontFamily: 'monospace' }}
-          />
-        </div>
+        <DiscountInput
+          value={getValue('yearly_discount_pct')}
+          onChange={v => onField(key, 'yearly_discount_pct', v)}
+        />
       </div>
 
       {/* Footer */}
@@ -742,7 +758,23 @@ function PlanPricesTab() {
   }, []);
 
   const setField = (key, field, val) =>
-    setEdits(p => ({ ...p, [key]: { ...(p[key] || {}), [field]: val } }));
+    setEdits(p => {
+      const origRow = rows.find(r => r.plan_key === key);
+      const origVal = Number(origRow?.[field] ?? 0);
+      const newVal  = Number(val);
+      const prevPatch = p[key] || {};
+
+      if (newVal === origVal) {
+        // value returned to original — remove this field from the patch
+        const { [field]: _removed, ...rest } = prevPatch;
+        if (!Object.keys(rest).length) {
+          const { [key]: _plan, ...others } = p;
+          return others;
+        }
+        return { ...p, [key]: rest };
+      }
+      return { ...p, [key]: { ...prevPatch, [field]: newVal } };
+    });
 
   const handleSave = async (planKey) => {
     const patch = edits[planKey];
