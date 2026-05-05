@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { importMediaPlan, confirmMediaPlanImport } from '../api';
+import { importMediaPlan, confirmMediaPlanImport, saveImportMappings } from '../api';
 
 // ── Platform meta ────────────────────────────────────────────────────────────
 const PLATFORM_DISPLAY = {
@@ -13,6 +13,20 @@ const PLATFORM_DISPLAY = {
   x:           { label: 'X (Twitter)',  color: '#1DA1F2', icon: 'X'  },
   linkedin:    { label: 'LinkedIn',     color: '#0A66C2', icon: 'in' },
 };
+
+const PLATFORM_OPTIONS = [
+  { value: 'google',      label: 'Google Ads'   },
+  { value: 'meta',        label: 'Meta Ads'      },
+  { value: 'tiktok',      label: 'TikTok Ads'   },
+  { value: 'youtube',     label: 'YouTube'       },
+  { value: 'programatik', label: 'Programatik'  },
+  { value: 'display',     label: 'Display'       },
+  { value: 'video',       label: 'Video'         },
+  { value: 'x',           label: 'X (Twitter)'  },
+  { value: 'linkedin',    label: 'LinkedIn'      },
+  { value: 'cm360',       label: 'CM360'         },
+  { value: 'other',       label: 'Diğer'         },
+];
 
 const KPI_LABELS = { impression: 'gösterim', click: 'tık', view: 'izlenme' };
 const fmtTL = (n) => `₺${Number(n || 0).toLocaleString('tr-TR')}`;
@@ -224,16 +238,22 @@ function UploadStep({ onParsed, onError }) {
 
 // ── Step 2: Review ────────────────────────────────────────────────────────────
 function ReviewStep({ parsed, brandId, onCreated }) {
-  const [name, setName]           = useState(parsed.campaign_name || '');
-  const [start, setStart]         = useState(parsed.start_date || '');
-  const [end, setEnd]             = useState(parsed.end_date || '');
-  const [lines, setLines]         = useState(parsed.lines || []);
-  const [skipped, setSkipped]     = useState(new Set());
+  const [name, setName]         = useState(parsed.campaign_name || '');
+  const [start, setStart]       = useState(parsed.start_date || '');
+  const [end, setEnd]           = useState(parsed.end_date || '');
+  const [lines, setLines]       = useState(parsed.lines || []);
+  // immutable snapshot for diff + mapping
+  const [originalLines]         = useState(() => JSON.parse(JSON.stringify(parsed.lines || [])));
+  const [skipped, setSkipped]   = useState(new Set());
   const [inlineEdits, setInlineEdits] = useState({});
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState('');
+  const [editingIdx, setEditingIdx]   = useState(null);
+  const [editDraft, setEditDraft]     = useState(null);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
 
-  const warnings      = buildWarnings(lines);
+  const appliedMappingsCount = parsed.applied_mappings_count || 0;
+
+  const warnings       = buildWarnings(lines);
   const activeWarnings = warnings.filter(w => !skipped.has(w.id) && (
     w.field === 'planned_kpi'
       ? (!lines[w.lineIdx]?.planned_kpi || Number(lines[w.lineIdx].planned_kpi) === 0)
@@ -241,31 +261,28 @@ function ReviewStep({ parsed, brandId, onCreated }) {
   ));
 
   const canCreate = name.trim() && start && end && activeWarnings.length === 0;
-
   const totalBudget = lines.reduce((s, l) => s + (Number(l.budget) || 0), 0);
 
-  // Group lines by platform for summary cards
-  const byPlatform = {};
-  lines.forEach(ln => {
-    const p = ln.platform || 'other';
-    if (!byPlatform[p]) byPlatform[p] = { budget: 0, items: [] };
-    byPlatform[p].budget += Number(ln.budget) || 0;
-    byPlatform[p].items.push(ln);
-  });
+  // Which line indices were user-modified (platform or ad_model changed)
+  const modifiedIdxs = new Set(
+    lines.map((ln, i) => {
+      const orig = originalLines[i];
+      if (!orig) return null;
+      if (ln.platform !== orig.platform || (ln.ad_model || '') !== (orig.ad_model || '')) return i;
+      return null;
+    }).filter(i => i !== null)
+  );
 
-  const updateLine = (idx, field, value) => {
+  const updateLine = (idx, field, value) =>
     setLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
-  };
 
+  // ── Inline field warnings (birim fiyat / KPI) ────────────────────────────
   const acceptEstimate = (w) => {
     if (w.estimateValue) updateLine(w.lineIdx, 'unit_price', w.estimateValue);
     setSkipped(s => new Set([...s, w.id]));
   };
-
-  const startInline = (w) => {
+  const startInline = (w) =>
     setInlineEdits(p => ({ ...p, [w.id]: { lineIdx: w.lineIdx, field: w.field, value: '' } }));
-  };
-
   const commitInline = (wId) => {
     const e = inlineEdits[wId];
     if (e && e.value) {
@@ -275,17 +292,57 @@ function ReviewStep({ parsed, brandId, onCreated }) {
     setInlineEdits(p => { const n = { ...p }; delete n[wId]; return n; });
   };
 
+  // ── Per-line platform/ad_model/budget editing ─────────────────────────────
+  const startEdit = (idx) => {
+    if (editingIdx !== null) return; // commit existing first
+    setEditingIdx(idx);
+    setEditDraft({
+      platform: lines[idx].platform || 'other',
+      ad_model: lines[idx].ad_model || '',
+      budget:   String(lines[idx].budget || ''),
+    });
+  };
+  const commitEdit = () => {
+    if (editingIdx === null) return;
+    setLines(prev => prev.map((l, i) => i === editingIdx ? {
+      ...l,
+      platform: editDraft.platform,
+      ad_model: editDraft.ad_model.trim(),
+      budget:   Number(editDraft.budget) || l.budget,
+    } : l));
+    setEditingIdx(null);
+    setEditDraft(null);
+  };
+  const cancelEdit = () => { setEditingIdx(null); setEditDraft(null); };
+
+  // ── Create handler ────────────────────────────────────────────────────────
   const handleCreate = async () => {
     if (!canCreate) return;
     setSaving(true); setError('');
     try {
+      // Save learned mappings for corrected lines
+      const mappingsToSave = lines
+        .map((ln, i) => {
+          const orig = originalLines[i];
+          if (!orig) return null;
+          if (ln.platform !== orig.platform || (ln.ad_model || '') !== (orig.ad_model || '')) {
+            return {
+              raw_value: `${orig.platform}|${orig.ad_model || ''}`,
+              platform:  ln.platform,
+              ad_model:  ln.ad_model || '',
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      if (mappingsToSave.length > 0) {
+        await saveImportMappings({ mappings: mappingsToSave, brand_id: brandId }).catch(() => {});
+      }
+
       const result = await confirmMediaPlanImport({
-        name: name.trim(),
-        total_budget: totalBudget,
-        start_date: start,
-        end_date: end,
-        brand_id: brandId,
-        lines,
+        name: name.trim(), total_budget: totalBudget,
+        start_date: start, end_date: end, brand_id: brandId, lines,
       });
       onCreated(result.id, result.name);
     } catch (err) {
@@ -296,10 +353,19 @@ function ReviewStep({ parsed, brandId, onCreated }) {
   };
 
   const inp = { background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, padding: '8px 10px', color: 'var(--text1)', fontSize: 13, fontFamily: 'var(--font)', outline: 'none' };
+  const editSel = { background: 'var(--bg3)', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 6, padding: '5px 7px', color: 'var(--text1)', fontSize: 12, fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer' };
+  const editInp = { background: 'var(--bg3)', border: '1px solid rgba(245,158,11,0.5)', borderRadius: 6, padding: '5px 8px', color: 'var(--text1)', fontSize: 12, fontFamily: 'var(--font)', outline: 'none' };
 
   return (
     <div>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 18 }}>Plan Özeti & Onay</div>
+
+      {/* Learned mappings note */}
+      {appliedMappingsCount > 0 && (
+        <div style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontSize: 12, color: '#10B981' }}>
+          ✓ {appliedMappingsCount} satır daha önce öğrenilen eşleştirmelerle otomatik parse edildi
+        </div>
+      )}
 
       {/* Campaign meta */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
@@ -319,39 +385,75 @@ function ReviewStep({ parsed, brandId, onCreated }) {
       </div>
 
       {/* Budget summary */}
-      <div style={{ background: 'rgba(0,201,167,0.07)', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: 'rgba(0,201,167,0.07)', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, color: 'var(--text3)' }}>Toplam Dijital Bütçe</span>
         <span style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--mono)', color: '#00C9A7' }}>{fmtTL(totalBudget)}</span>
       </div>
 
-      {/* Platform cards */}
-      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Platform Dağılımı</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-        {Object.entries(byPlatform).map(([platform, data]) => {
-          const pd = PLATFORM_DISPLAY[platform] || { label: platform, color: '#6B7280', icon: '?' };
+      {/* Line rows — individually editable */}
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+        Platform Satırları
+        <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>— düzenlemek için ✎ ikonuna tıklayın</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 20 }}>
+        {lines.map((ln, idx) => {
+          const pd = PLATFORM_DISPLAY[ln.platform] || { label: ln.platform || 'Diğer', color: '#6B7280', icon: '?' };
+          const isEditing  = editingIdx === idx;
+          const isModified = modifiedIdxs.has(idx);
+
+          if (isEditing) {
+            return (
+              <div key={idx} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '8px 10px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 8, flexWrap: 'wrap' }}>
+                <select value={editDraft.platform} onChange={e => setEditDraft(p => ({ ...p, platform: e.target.value }))} style={editSel}>
+                  {PLATFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <input
+                  value={editDraft.ad_model}
+                  onChange={e => setEditDraft(p => ({ ...p, ad_model: e.target.value }))}
+                  placeholder="Reklam Modeli"
+                  style={{ ...editInp, flex: '1 1 120px', minWidth: 100 }}
+                />
+                <input
+                  type="number" min="0"
+                  value={editDraft.budget}
+                  onChange={e => setEditDraft(p => ({ ...p, budget: e.target.value }))}
+                  placeholder="Bütçe (₺)"
+                  style={{ ...editInp, width: 100 }}
+                />
+                <button onClick={commitEdit} style={wBtn('#10B981')} title="Onayla">✓</button>
+                <button onClick={cancelEdit}  style={wBtn('#6B7280')} title="İptal">✗</button>
+              </div>
+            );
+          }
+
           return (
-            <div key={platform} style={{ background: 'var(--bg2)', border: `1px solid ${pd.color}20`, borderRadius: 8, padding: '10px 14px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <span style={{ width: 28, height: 28, background: `${pd.color}20`, color: pd.color, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>
+            <div key={idx} style={{
+              display: 'flex', gap: 8, alignItems: 'center', padding: '7px 10px',
+              background: isModified ? 'rgba(245,158,11,0.06)' : 'var(--bg2)',
+              border: isModified ? '1px solid rgba(245,158,11,0.25)' : '1px solid var(--border)',
+              borderRadius: 8, transition: 'background 0.15s',
+            }}>
+              <span style={{ width: 24, height: 24, background: `${pd.color}20`, color: pd.color, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, flexShrink: 0 }}>
                 {pd.icon}
               </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{pd.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', color: pd.color }}>{fmtTL(data.budget)}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {data.items.map((ln, i) => (
-                    <span key={i} style={{ fontSize: 11, background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 5, padding: '2px 8px', color: 'var(--text2)' }}>
-                      {ln.ad_model || 'Plan'}
-                      {ln.planned_kpi > 0 && (
-                        <span style={{ color: 'var(--text3)', marginLeft: 4 }}>
-                          ({fmtN(ln.planned_kpi)} {KPI_LABELS[ln.kpi_type] || ln.kpi_type || ''})
-                        </span>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: pd.color, width: 86, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pd.label}</span>
+              <span style={{ fontSize: 12, flex: 1, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {ln.ad_model || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>—</span>}
+                {ln.planned_kpi > 0 && (
+                  <span style={{ color: 'var(--text3)', marginLeft: 6, fontSize: 11 }}>
+                    ({fmtN(ln.planned_kpi)} {KPI_LABELS[ln.kpi_type] || ''})
+                  </span>
+                )}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--text2)', flexShrink: 0 }}>{fmtTL(ln.budget)}</span>
+              {isModified && (
+                <span style={{ fontSize: 10, color: '#F59E0B', flexShrink: 0, whiteSpace: 'nowrap' }}>⚡ öğrendi</span>
+              )}
+              <button
+                onClick={() => startEdit(idx)}
+                disabled={editingIdx !== null}
+                title="Düzenle"
+                style={{ ...wBtn('#6B7280'), padding: '3px 7px', flexShrink: 0, opacity: editingIdx !== null ? 0.4 : 1 }}>✎</button>
             </div>
           );
         })}
@@ -389,22 +491,17 @@ function ReviewStep({ parsed, brandId, onCreated }) {
                     {!editState && (
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         {w.hasEstimate && (
-                          <button onClick={() => acceptEstimate(w)}
-                            style={wBtn('#10B981')}>Kabul Et</button>
+                          <button onClick={() => acceptEstimate(w)} style={wBtn('#10B981')}>Kabul Et</button>
                         )}
-                        <button onClick={() => startInline(w)}
-                          style={wBtn('#0EA5E9')}>{w.hasEstimate ? 'Manuel Gir' : 'Şimdi Gir'}</button>
-                        <button onClick={() => setSkipped(s => new Set([...s, w.id]))}
-                          style={wBtn('#6B7280')}>Atla</button>
+                        <button onClick={() => startInline(w)} style={wBtn('#0EA5E9')}>{w.hasEstimate ? 'Manuel Gir' : 'Şimdi Gir'}</button>
+                        <button onClick={() => setSkipped(s => new Set([...s, w.id]))} style={wBtn('#6B7280')}>Atla</button>
                       </div>
                     )}
                   </div>
                   {editState && (
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                       <input
-                        autoFocus
-                        type="number"
-                        min="0"
+                        autoFocus type="number" min="0"
                         placeholder={w.field === 'planned_kpi' ? 'Hedef sayı' : 'Birim fiyat'}
                         value={editState.value}
                         onChange={e => setInlineEdits(p => ({ ...p, [w.id]: { ...p[w.id], value: e.target.value } }))}
@@ -434,8 +531,7 @@ function ReviewStep({ parsed, brandId, onCreated }) {
           border: 'none', cursor: canCreate && !saving ? 'pointer' : 'default',
           background: canCreate ? 'linear-gradient(135deg, #00C9A7, #0EA5E9)' : 'var(--bg2)',
           color: canCreate ? '#0B1219' : 'var(--text3)',
-          transition: 'all 0.15s', fontFamily: 'var(--font)',
-          opacity: saving ? 0.7 : 1,
+          transition: 'all 0.15s', fontFamily: 'var(--font)', opacity: saving ? 0.7 : 1,
         }}
       >
         {saving ? 'Oluşturuluyor...' : 'Kampanyayı Oluştur →'}

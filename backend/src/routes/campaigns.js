@@ -791,6 +791,13 @@ router.post('/import-plan',
       return res.status(503).json({ error: 'AI analiz servisi şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.' });
     }
 
+    // Fetch learned mappings for this company
+    const companyId = req.aiCtx.companyId;
+    const { rows: learnedMappings } = await pool.query(
+      'SELECT raw_value, platform, ad_model FROM platform_mappings WHERE company_id = $1 ORDER BY match_count DESC LIMIT 60',
+      [companyId]
+    ).catch(() => ({ rows: [] }));
+
     const Anthropic = require('@anthropic-ai/sdk');
     const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 110_000 });
 
@@ -801,6 +808,11 @@ router.post('/import-plan',
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `Sen bir medya planı analiz uzmanısın. Verilen Excel verisinden SADECE dijital plan bilgilerini çıkar. TV, radyo, gazete, dergi sheet'lerini tamamen yoksay.
+${learnedMappings.length > 0 ? `
+ÖĞRENİLMİŞ EŞLEŞTİRMELER (bu şirket için önceki importlarda kullanıcılar tarafından düzeltildi — ÖNCELİKLİ KULLAN):
+${learnedMappings.map(m => `- "${m.raw_value}" → platform: "${m.platform}", ad_model: "${m.ad_model}"`).join('\n')}
+Eğer çıkardığın bir satır bu ham değerlerden biriyle eşleşiyorsa, sağdaki platform ve ad_model değerlerini kullan.
+` : ''}
 
 Her satır için şunu çıkar:
 {
@@ -909,7 +921,13 @@ SADECE JSON yanıt ver, başka hiçbir şey ekleme:
       return res.status(422).json({ error: 'Bu dosyada dijital plan bulunamadı. Lütfen dijital plan içeren bir Excel yükleyin.' });
     }
 
-    res.json(parsed);
+    // Count how many output lines matched a learned mapping
+    const mappingTargets = new Set(learnedMappings.map(m => `${m.platform}|${m.ad_model || ''}`));
+    const appliedMappingsCount = parsed.lines.filter(ln =>
+      mappingTargets.has(`${ln.platform}|${ln.ad_model || ''}`)
+    ).length;
+
+    res.json({ ...parsed, applied_mappings_count: appliedMappingsCount });
   } catch (err) {
     console.error('[import-plan]', err.message || err);
     res.status(500).json({ error: 'İçe aktarma başarısız. Lütfen tekrar deneyin.' });
@@ -973,6 +991,34 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
     res.status(500).json({ error: err.message || 'Kampanya oluşturulamadı.' });
   } finally {
     client.release();
+  }
+});
+
+// POST /api/campaigns/import-mappings — save learned platform/ad_model corrections
+router.post('/import-mappings', authMiddleware, requireActiveSubscription, async (req, res) => {
+  const { mappings, brand_id } = req.body;
+  if (!Array.isArray(mappings) || !mappings.length) {
+    return res.status(400).json({ error: 'mappings zorunlu.' });
+  }
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+    for (const m of mappings) {
+      if (!m.raw_value || !m.platform) continue;
+      await pool.query(`
+        INSERT INTO platform_mappings
+          (company_id, raw_value, platform, ad_model, match_count, updated_at)
+        VALUES ($1, $2, $3, $4, 1, NOW())
+        ON CONFLICT (company_id, raw_value) DO UPDATE SET
+          platform    = EXCLUDED.platform,
+          ad_model    = EXCLUDED.ad_model,
+          match_count = platform_mappings.match_count + 1,
+          updated_at  = NOW()
+      `, [companyId, m.raw_value, m.platform, m.ad_model || '']);
+    }
+    res.json({ saved: mappings.length });
+  } catch (err) {
+    console.error('[import-mappings]', err);
+    res.status(500).json({ error: err.message || 'Eşleştirmeler kaydedilemedi.' });
   }
 });
 

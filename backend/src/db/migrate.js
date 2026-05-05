@@ -180,6 +180,26 @@ async function migrate() {
       END $$;
     `);
 
+    // ── Platform Mappings (öğrenen eşleştirme sistemi) ───────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+        raw_value TEXT NOT NULL,
+        platform VARCHAR(50) NOT NULL,
+        ad_model_prefix TEXT,
+        ad_model TEXT,
+        match_count INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(company_id, raw_value)
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS platform_mappings_company_idx
+        ON platform_mappings (company_id);
+    `);
+
     // ── OAuth Sessions (MCC / Meta BM import akışı) ───────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS oauth_sessions (
