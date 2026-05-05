@@ -506,6 +506,123 @@ router.put('/:id/channels/:platform/match', authMiddleware, requireActiveSubscri
   }
 });
 
+// GET /api/campaigns/:id/performance
+router.get('/:id/performance', authMiddleware, requireActiveSubscription, async (req, res) => {
+  try {
+    const { rows: [campaign] } = await pool.query(`
+      SELECT c.* FROM campaigns c
+      WHERE c.id = $1 AND (
+        c.brand_id = $2
+        OR EXISTS (SELECT 1 FROM connections WHERE agency_company_id = $2 AND brand_company_id = c.brand_id)
+      )
+    `, [req.params.id, req.user.company_id]);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+
+    const { rows: channels } = await pool.query(
+      'SELECT * FROM campaign_channels WHERE campaign_id = $1 ORDER BY created_at',
+      [req.params.id]
+    );
+
+    const channelsWithPerf = await Promise.all(channels.map(async (ch) => {
+      const { rows: [m] } = await pool.query(`
+        SELECT
+          COALESCE(SUM(m.spend), 0)::float       AS actual_spend,
+          COALESCE(AVG(NULLIF(m.roas, 0)), 0)::float AS actual_roas,
+          COALESCE(SUM(m.conversions), 0)::int    AS actual_conversions,
+          COALESCE(SUM(m.clicks), 0)::int         AS actual_clicks,
+          COALESCE(SUM(m.impressions), 0)::bigint AS actual_impressions
+        FROM integrations i
+        JOIN ad_metrics m ON m.integration_id = i.id
+          AND m.date >= $3 AND m.date <= LEAST($4::date, CURRENT_DATE)
+        WHERE i.company_id = $1 AND i.platform = $2 AND i.is_active = true
+      `, [campaign.brand_id, ch.platform, campaign.start_date, campaign.end_date]);
+
+      const allocatedBudget = parseFloat(ch.allocated_budget) || 0;
+      const actualSpend     = m.actual_spend || 0;
+      const budgetAchievement = allocatedBudget > 0
+        ? Math.round((actualSpend / allocatedBudget) * 1000) / 10
+        : null;
+
+      let kpiType   = ch.kpi_type || null;
+      let plannedKpi = null;
+      let actualKpi  = null;
+
+      if (!kpiType) {
+        if (ch.kpi_roas)       kpiType = 'roas';
+        else if (ch.kpi_cpa)   kpiType = 'cpa';
+        else if (ch.kpi_ctr)   kpiType = 'ctr';
+        else if (ch.kpi_impression) kpiType = 'impression';
+        else if (ch.kpi_conversion) kpiType = 'conversion';
+      }
+
+      if (kpiType === 'roas') {
+        plannedKpi = parseFloat(ch.kpi_roas) || null;
+        actualKpi  = m.actual_roas > 0 ? m.actual_roas : null;
+      } else if (kpiType === 'cpa') {
+        plannedKpi = parseFloat(ch.kpi_cpa) || null;
+        actualKpi  = actualSpend > 0 && m.actual_conversions > 0
+          ? Math.round((actualSpend / m.actual_conversions) * 100) / 100 : null;
+      } else if (kpiType === 'ctr') {
+        plannedKpi = parseFloat(ch.kpi_ctr) || null;
+        actualKpi  = m.actual_impressions > 0
+          ? Math.round((m.actual_clicks / m.actual_impressions) * 10000) / 100 : null;
+      } else if (kpiType === 'impression') {
+        plannedKpi = parseFloat(ch.kpi_impression) || null;
+        actualKpi  = m.actual_impressions > 0 ? m.actual_impressions : null;
+      } else if (kpiType === 'conversion') {
+        plannedKpi = parseFloat(ch.kpi_conversion) || null;
+        actualKpi  = m.actual_conversions > 0 ? m.actual_conversions : null;
+      }
+
+      let kpiAchievement = null;
+      if (plannedKpi && actualKpi !== null) {
+        kpiAchievement = kpiType === 'cpa'
+          ? Math.round((plannedKpi / actualKpi) * 1000) / 10
+          : Math.round((actualKpi / plannedKpi) * 1000) / 10;
+      }
+
+      return {
+        ...ch,
+        actual_spend:        actualSpend,
+        actual_roas:         m.actual_roas,
+        actual_conversions:  m.actual_conversions,
+        actual_clicks:       m.actual_clicks,
+        actual_impressions:  m.actual_impressions,
+        budget_achievement:  budgetAchievement,
+        kpi_type:            kpiType,
+        planned_kpi:         plannedKpi,
+        actual_kpi:          actualKpi,
+        kpi_achievement:     kpiAchievement,
+      };
+    }));
+
+    const totalAllocated = channelsWithPerf.reduce((s, c) => s + (parseFloat(c.allocated_budget) || 0), 0);
+    const totalActual    = channelsWithPerf.reduce((s, c) => s + (c.actual_spend || 0), 0);
+    const overallBudget  = totalAllocated > 0
+      ? Math.round((totalActual / totalAllocated) * 1000) / 10 : null;
+
+    const withBudget = channelsWithPerf.filter(c => c.budget_achievement !== null);
+    const onTrack = withBudget.filter(c => c.budget_achievement >= 90).length;
+    const warning = withBudget.filter(c => c.budget_achievement >= 70 && c.budget_achievement < 90).length;
+    const critical = withBudget.filter(c => c.budget_achievement < 70).length;
+
+    res.json({
+      channels: channelsWithPerf,
+      summary: {
+        total_allocated:    totalAllocated,
+        total_actual:       totalActual,
+        budget_achievement: overallBudget,
+        on_track:  onTrack,
+        warning,
+        critical,
+      },
+    });
+  } catch (err) {
+    console.error('[campaigns GET /:id/performance]', err);
+    res.status(500).json({ error: 'Performans verileri yüklenemedi.' });
+  }
+});
+
 // ── Excel Medya Planı Import ──────────────────────────────────────────────────
 
 const IGNORE_KEYWORDS   = ['tv', 'radyo', 'gazete', 'dergi', 'televizyon'];

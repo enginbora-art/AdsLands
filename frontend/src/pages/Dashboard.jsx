@@ -37,7 +37,7 @@ function Gauge({ value = 0, color = '#F59E0B' }) {
   );
 }
 
-function MetricCard({ label, value, sub, accent, danger, gauge }) {
+function MetricCard({ label, value, sub, accent, danger }) {
   const color = danger ? '#F87171' : (accent || 'var(--text1)');
   const isHex = color.startsWith('#');
   const bg    = isHex ? `${color}0D` : 'transparent';
@@ -56,20 +56,8 @@ function MetricCard({ label, value, sub, accent, danger, gauge }) {
       }}
     >
       <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      {gauge != null ? (
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
-            {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
-          </div>
-          <Gauge value={gauge} color={color} />
-        </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
-          {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
-        </>
-      )}
+      <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }

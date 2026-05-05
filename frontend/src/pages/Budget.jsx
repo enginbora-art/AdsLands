@@ -7,7 +7,7 @@ import {
   getBudgetPlan, saveBudgetPlan, getBudgetBrands,
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getCampaign, addCampaignChannel, removeCampaignChannel,
-  getPlatformCampaigns,
+  getPlatformCampaigns, getCampaignPerformance,
 } from '../api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -475,12 +475,35 @@ function ConfirmModal({ title, message, onConfirm, onClose }) {
 }
 
 // ── Campaign Detail Modal ─────────────────────────────────────────────────────
+const KPI_LABELS = { roas: 'ROAS', cpa: 'CPA (₺)', ctr: 'CTR (%)', impression: 'İmpresyon', conversion: 'Dönüşüm' };
+
+function achievementColor(pct) {
+  if (pct === null || pct === undefined) return '#6B7280';
+  if (pct >= 90) return '#00C9A7';
+  if (pct >= 70) return '#F59E0B';
+  return '#EF4444';
+}
+
+function AchievementBar({ pct }) {
+  const [w, setW] = useState(0);
+  const p = Math.min(Math.max(pct || 0, 0), 100);
+  useEffect(() => { const t = setTimeout(() => setW(p), 60); return () => clearTimeout(t); }, [p]);
+  return (
+    <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${w}%`, background: achievementColor(pct), borderRadius: 3, transition: 'width 0.8s ease-out' }} />
+    </div>
+  );
+}
+
 function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, onDelete }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [showAddCh, setShowAddCh]     = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
   const [removing, setRemoving]       = useState(null);
+  const [activeTab, setActiveTab]     = useState('kanallar');
+  const [perfData, setPerfData]       = useState(null);
+  const [perfLoading, setPerfLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -488,6 +511,15 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
   }, [campaignId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (activeTab !== 'performans') return;
+    setPerfLoading(true);
+    getCampaignPerformance(campaignId)
+      .then(setPerfData)
+      .catch(() => setPerfData(null))
+      .finally(() => setPerfLoading(false));
+  }, [activeTab, campaignId]);
 
   const handleAddChannel = async (channelData) => {
     await addCampaignChannel(campaignId, { ...channelData, brand_id: brandId });
@@ -529,10 +561,124 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
           </div>
         </div>
 
+        {/* Tab bar */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border2)', padding: '0 24px' }}>
+          {['kanallar', 'performans'].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'var(--font)', color: activeTab === tab ? 'var(--teal)' : 'var(--text3)', borderBottom: `2px solid ${activeTab === tab ? 'var(--teal)' : 'transparent'}`, marginBottom: -1, textTransform: 'capitalize', transition: 'color 0.2s' }}>
+              {tab === 'kanallar' ? 'Kanallar' : 'Performans'}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Yükleniyor...</div>
         ) : !data ? (
           <div style={{ padding: 48, textAlign: 'center', color: '#ef4444', fontSize: 13 }}>Kampanya yüklenemedi.</div>
+        ) : activeTab === 'performans' ? (
+          <div style={{ padding: 24 }}>
+            {perfLoading ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Yükleniyor...</div>
+            ) : !perfData ? (
+              <div style={{ padding: 32, textAlign: 'center', color: '#ef4444', fontSize: 13 }}>Performans verileri yüklenemedi.</div>
+            ) : (
+              <>
+                {/* Summary banner */}
+                {perfData.summary && (
+                  <div style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 12, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Genel Bütçe Gerçekleşmesi</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: achievementColor(perfData.summary.budget_achievement) }}>
+                          {perfData.summary.budget_achievement !== null ? `%${perfData.summary.budget_achievement.toFixed(1)}` : '—'}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>₺{fmt(perfData.summary.total_actual)} / ₺{fmt(perfData.summary.total_allocated)}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      {[
+                        { label: 'Hedefte', count: perfData.summary.on_track, color: '#00C9A7' },
+                        { label: 'Uyarı',   count: perfData.summary.warning,  color: '#F59E0B' },
+                        { label: 'Kritik',  count: perfData.summary.critical, color: '#EF4444' },
+                      ].map(s => (
+                        <div key={s.label} style={{ textAlign: 'center', padding: '6px 12px', borderRadius: 8, background: `${s.color}15`, border: `1px solid ${s.color}30` }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.count}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)' }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Channel performance cards */}
+                {(perfData.channels || []).length === 0 ? (
+                  <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+                    Performans takibi için kampanyaya kanal ekleyin.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {perfData.channels.map(ch => {
+                      const bPct = ch.budget_achievement;
+                      const bColor = achievementColor(bPct);
+                      return (
+                        <div key={ch.id} style={{ background: 'var(--bg3)', borderRadius: 12, padding: '14px 16px', border: `1px solid var(--border2)`, borderLeft: `3px solid ${bColor}` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                            <PlatformIcon platform={ch.platform} size={28} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{PLATFORM_LABELS[ch.platform] || ch.platform}</div>
+                              {ch.external_campaign_name && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ch.external_campaign_name}</div>}
+                            </div>
+                            {bPct !== null ? (
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: bColor }}>%{bPct.toFixed(1)}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>bütçe gerçekleşme</div>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Bütçe atanmamış</div>
+                            )}
+                          </div>
+
+                          {/* Budget progress */}
+                          <div style={{ marginBottom: ch.kpi_type ? 10 : 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+                              <span>Harcanan: ₺{fmt(ch.actual_spend)}</span>
+                              <span>Planlanan: ₺{fmt(ch.allocated_budget)}</span>
+                            </div>
+                            <AchievementBar pct={bPct} />
+                          </div>
+
+                          {/* KPI comparison */}
+                          {ch.kpi_type && ch.planned_kpi !== null && (
+                            <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{KPI_LABELS[ch.kpi_type] || ch.kpi_type}</div>
+                              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>Planlanan</div>
+                                  <div style={{ fontSize: 13, fontWeight: 700 }}>{Number(ch.planned_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                                </div>
+                                <div style={{ fontSize: 14, color: 'var(--text3)' }}>→</div>
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>Gerçekleşen</div>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: ch.actual_kpi !== null ? achievementColor(ch.kpi_achievement) : 'var(--text3)' }}>
+                                    {ch.actual_kpi !== null ? Number(ch.actual_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '—'}
+                                  </div>
+                                </div>
+                                {ch.kpi_achievement !== null && (
+                                  <div style={{ padding: '2px 8px', borderRadius: 6, background: `${achievementColor(ch.kpi_achievement)}20`, border: `1px solid ${achievementColor(ch.kpi_achievement)}40`, fontSize: 11, fontWeight: 700, color: achievementColor(ch.kpi_achievement) }}>
+                                    %{ch.kpi_achievement.toFixed(1)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         ) : (
           <div style={{ padding: 24 }}>
             {/* Summary metrics */}

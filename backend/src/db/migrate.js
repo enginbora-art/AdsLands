@@ -688,6 +688,30 @@ async function migrate() {
       END $$;
     `);
 
+    // ── Kampanya Gerçekleşenleri (Planlanan vs Gerçekleşen) ───────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_actuals (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_channel_id UUID NOT NULL REFERENCES campaign_channels(id) ON DELETE CASCADE,
+        date                DATE NOT NULL,
+        actual_spend        NUMERIC(12,2) DEFAULT 0,
+        actual_impressions  BIGINT DEFAULT 0,
+        actual_clicks       INTEGER DEFAULT 0,
+        actual_views        INTEGER DEFAULT 0,
+        vcr                 NUMERIC(5,2) DEFAULT 0,
+        cpc                 NUMERIC(10,4) DEFAULT 0,
+        cpm                 NUMERIC(10,4) DEFAULT 0,
+        cpv                 NUMERIC(10,4) DEFAULT 0,
+        source              VARCHAR(20) DEFAULT 'api',
+        fetched_at          TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(campaign_channel_id, date)
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS campaign_actuals_channel_date_idx
+        ON campaign_actuals (campaign_channel_id, date);
+    `);
+
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const adminEmail    = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_SEED_PASSWORD;
