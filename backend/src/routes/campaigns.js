@@ -635,14 +635,16 @@ router.post('/import-plan',
     }).filter(Boolean).join('\n\n').slice(0, 50000);
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(503).json({ error: 'AI servisi şu an kullanılamıyor.' });
+      return res.status(503).json({ error: 'AI analiz servisi şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.' });
     }
 
     const Anthropic = require('@anthropic-ai/sdk');
-    const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 110_000 });
 
     const t0 = Date.now();
-    const response = await client.messages.create({
+    let response;
+    try {
+      response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `Sen bir medya planı analiz uzmanısın. Verilen Excel verisinden SADECE dijital plan bilgilerini çıkar. TV, radyo, gazete, dergi sheet'lerini tamamen yoksay.
@@ -682,8 +684,24 @@ SADECE JSON yanıt ver, başka hiçbir şey ekleme:
   "lines": [...],
   "missing_fields": [string]
 }`,
-      messages: [{ role: 'user', content: sheetsText }],
-    });
+        messages: [{ role: 'user', content: sheetsText }],
+      });
+    } catch (aiErr) {
+      console.error('[import-plan] Anthropic API hatası:', aiErr.status, aiErr.message);
+      if (aiErr instanceof Anthropic.AuthenticationError || aiErr.status === 401) {
+        return res.status(503).json({ error: 'AI analiz servisi şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.' });
+      }
+      if (aiErr instanceof Anthropic.RateLimitError || aiErr.status === 429) {
+        return res.status(429).json({ error: 'AI servis kapasitesi doldu. Birkaç dakika sonra tekrar deneyin.' });
+      }
+      if (aiErr instanceof Anthropic.APITimeoutError || aiErr.code === 'ETIMEDOUT') {
+        return res.status(504).json({ error: 'Analiz çok uzun sürdü. Daha küçük bir dosya yüklemeyi deneyin.' });
+      }
+      if (aiErr.status >= 500 || aiErr instanceof Anthropic.InternalServerError) {
+        return res.status(503).json({ error: 'AI analiz servisi geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.' });
+      }
+      return res.status(503).json({ error: 'AI analiz servisi şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.' });
+    }
 
     const processMs    = Date.now() - t0;
     const inputTokens  = response.usage?.input_tokens  ?? 0;
@@ -706,8 +724,8 @@ SADECE JSON yanıt ver, başka hiçbir şey ekleme:
 
     res.json(parsed);
   } catch (err) {
-    console.error('[import-plan]', err);
-    res.status(500).json({ error: err.message || 'İçe aktarma başarısız.' });
+    console.error('[import-plan]', err.message || err);
+    res.status(500).json({ error: 'İçe aktarma başarısız. Lütfen tekrar deneyin.' });
   }
 });
 

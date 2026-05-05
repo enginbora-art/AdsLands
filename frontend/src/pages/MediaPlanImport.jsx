@@ -135,14 +135,17 @@ function UploadStep({ onParsed, onError }) {
       }
       onParsed(parsed);
     } catch (err) {
-      console.error('[importMediaPlan] status:', err.response?.status,
-        '| data:', err.response?.data, '| code:', err.code, '| msg:', err.message);
-      let msg = 'Yükleme başarısız.';
-      if (err.response?.data?.error)          msg = err.response.data.error;
-      else if (err.response?.status === 413)  msg = 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.';
-      else if (err.response?.status === 429)  msg = err.response.data?.error || 'AI kullanım limitine ulaştınız.';
-      else if (err.response?.status === 503)  msg = 'AI servisi şu an kullanılamıyor, lütfen tekrar deneyin.';
-      else if (!err.response)                 msg = 'Sunucuya ulaşılamadı. Lütfen sayfayı yenileyip tekrar deneyin.';
+      console.error('[importMediaPlan]', err.response?.status, err.code, err.message);
+      let msg = 'İçe aktarma başarısız. Lütfen tekrar deneyin.';
+      if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      } else if (err.response?.status === 413) {
+        msg = 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.';
+      } else if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+        msg = 'Analiz çok uzun sürdü. Daha küçük bir dosya yüklemeyi deneyin.';
+      } else if (!err.response) {
+        msg = 'Sunucuya ulaşılamadı. Lütfen sayfayı yenileyip tekrar deneyin.';
+      }
       onError(msg);
     } finally {
       setUploading(false);
