@@ -19,6 +19,12 @@ const PLATFORM_SCOPES = {
     'email',
     'profile',
   ],
+  cm360: [
+    'https://www.googleapis.com/auth/dfareporting',
+    'openid',
+    'email',
+    'profile',
+  ],
 };
 
 function createClient() {

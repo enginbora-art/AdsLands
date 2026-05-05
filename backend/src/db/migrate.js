@@ -175,7 +175,7 @@ async function migrate() {
       BEGIN
         ALTER TABLE integrations DROP CONSTRAINT IF EXISTS integrations_platform_check;
         ALTER TABLE integrations ADD CONSTRAINT integrations_platform_check
-          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360'));
+          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360', 'cm360'));
       EXCEPTION WHEN others THEN NULL;
       END $$;
     `);

@@ -24,6 +24,8 @@ import {
   selectDv360Advertiser,
   getGoogleAdsCustomers,
   selectGoogleAdsCustomer,
+  getCm360Profiles,
+  selectCm360Profile,
 } from '../api';
 
 const PLATFORMS = [
@@ -52,13 +54,14 @@ const PLATFORMS = [
     ]
   },
   { id: 'dv360',            name: 'Display & Video 360', color: '#1A73E8', bg: 'rgba(26,115,232,0.15)', icon: 'DV',  isGoogle: true, isDv360: true },
+  { id: 'cm360',            name: 'Campaign Manager 360', color: '#34A853', bg: 'rgba(52,168,83,0.15)',  icon: 'CM',  isGoogle: true, isCm360: true },
 ];
 
 const GROUPS = [
-  { label: 'Google Ekosistemi', ids: ['google_analytics', 'google_ads'] },
+  { label: 'Google Ekosistemi', ids: ['google_analytics', 'google_ads', 'dv360', 'cm360'] },
   { label: 'Sosyal Medya',      ids: ['meta', 'tiktok', 'linkedin'] },
   { label: 'Attribution & MMP', ids: ['appsflyer', 'adjust'] },
-  { label: 'Programatik / DSP', ids: ['adform', 'dv360'] },
+  { label: 'Programatik / DSP', ids: ['adform'] },
 ];
 
 const PLATFORM_LABELS = {
@@ -71,6 +74,7 @@ const PLATFORM_LABELS = {
   adform:           'Adform',
   linkedin:         'LinkedIn Ads',
   dv360:            'Display & Video 360',
+  cm360:            'Campaign Manager 360',
   mcc:              'Google Ads MCC',
   metabm:           'Meta Business Manager',
 };
@@ -171,6 +175,103 @@ function Dv360AdvertiserModal({ brandId, onDone, onClose }) {
             disabled={!selected || saving}
             style={{ flex: 1, padding: '10px 0', background: selected ? 'rgba(26,115,232,0.15)' : 'var(--bg3)', border: `1px solid ${selected ? 'rgba(26,115,232,0.5)' : 'var(--border2)'}`, borderRadius: 8, color: selected ? '#1A73E8' : 'var(--text3)', fontSize: 13, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
             {saving ? 'Kaydediliyor...' : 'Advertiser\'ı Seç'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CM360 Profile Seçim Modalı ────────────────────────────────────────────────
+
+function Cm360ProfileModal({ brandId, onDone, onClose }) {
+  const [profiles, setProfiles] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState(null);
+
+  useEffect(() => {
+    getCm360Profiles(brandId)
+      .then(d => { setProfiles(d.profiles || []); setSelected(d.selected_profile_id || null); })
+      .catch(e => setError(e?.response?.data?.error || 'Profil listesi alınamadı.'))
+      .finally(() => setLoading(false));
+  }, [brandId]);
+
+  const handleSave = async () => {
+    if (!selected) return;
+    const prof = profiles.find(p => p.id === selected);
+    setSaving(true);
+    try {
+      await selectCm360Profile({
+        profile_id:   prof.id,
+        profile_name: prof.name,
+        account_id:   prof.accountId,
+        account_name: prof.accountName,
+        brand_id:     brandId || undefined,
+      });
+      onDone(prof);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Kaydedilemedi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...s.modal, maxWidth: 480, padding: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>CM360 Profil Seç</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>Takip etmek istediğiniz profili seçin</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#EF4444', marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Profiller yükleniyor...</div>
+        ) : profiles.length === 0 ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>
+            Erişilebilir profil bulunamadı.<br />
+            <span style={{ fontSize: 11 }}>CM360 hesabınızda yetkili profil kontrolünü yapın.</span>
+          </div>
+        ) : (
+          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {profiles.map(prof => (
+              <label key={prof.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                background: selected === prof.id ? 'rgba(52,168,83,0.12)' : 'var(--bg3)',
+                border: selected === prof.id ? '1px solid rgba(52,168,83,0.5)' : '1px solid var(--border2)',
+                borderRadius: 8, cursor: 'pointer',
+              }}>
+                <input type="radio" name="prof" value={prof.id} checked={selected === prof.id}
+                  onChange={() => setSelected(prof.id)}
+                  style={{ accentColor: '#34A853', width: 15, height: 15, flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prof.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
+                    {prof.accountName}{prof.accountName ? ' · ' : ''}ID: {prof.id}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={s.btnSecondary}>İptal</button>
+          <button
+            onClick={handleSave}
+            disabled={!selected || saving}
+            style={{ flex: 1, padding: '10px 0', background: selected ? 'rgba(52,168,83,0.15)' : 'var(--bg3)', border: `1px solid ${selected ? 'rgba(52,168,83,0.5)' : 'var(--border2)'}`, borderRadius: 8, color: selected ? '#34A853' : 'var(--text3)', fontSize: 13, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
+            {saving ? 'Kaydediliyor...' : 'Profili Seç'}
           </button>
         </div>
       </div>
@@ -725,8 +826,10 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
   const isGA      = integration.platform === 'google_analytics';
   const isGoogAds = integration.platform === 'google_ads';
   const isDv360   = integration.platform === 'dv360';
+  const isCm360   = integration.platform === 'cm360';
   const advertiserName  = isDv360   ? (integration.extra?.advertiser_name || integration.account_id) : null;
   const customerName    = isGoogAds ? (integration.extra?.customer_name   || integration.account_id) : null;
+  const profileName     = isCm360   ? (integration.extra?.profile_name    || integration.account_id) : null;
 
   const rows             = liveData ? liveData.data : metrics;
   const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
@@ -749,6 +852,10 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
             {isDv360 && advertiserName ? (
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Advertiser: {advertiserName}
+              </div>
+            ) : isCm360 && profileName ? (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Profil: {profileName}
               </div>
             ) : isGoogAds && customerName ? (
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -812,7 +919,7 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
           ) : rows.length === 0 ? (
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>
-              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : isDv360 && !advertiserName ? ' Önce advertiser seçin.' : ''}
+              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : isDv360 && !advertiserName ? ' Önce advertiser seçin.' : isCm360 && !profileName ? ' Önce profil seçin.' : ''}
             </div>
           ) : (
             <div style={s.tableWrap}>
@@ -886,6 +993,7 @@ export default function Integrations({ onNav }) {
   const [disconnectConfirm, setDisconnectConfirm] = useState(null);
   const [dv360AdvModal, setDv360AdvModal]         = useState(false);
   const [gadsCustomerModal, setGadsCustomerModal] = useState(false);
+  const [cm360ProfileModal, setCm360ProfileModal] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -908,6 +1016,8 @@ export default function Integrations({ onNav }) {
       });
     } else if (params.get('success') === 'dv360') {
       setDv360AdvModal(true);
+    } else if (params.get('success') === 'cm360') {
+      setCm360ProfileModal(true);
     } else if (params.get('success') === 'google_ads' && params.get('needs_customer') === '1') {
       console.log('[integrations] → setGadsCustomerModal(true)');
       setGadsCustomerModal(true);
@@ -940,6 +1050,8 @@ export default function Integrations({ onNav }) {
     setVerifyParams(null);
     if (needsCustomer && platform === 'google_ads') {
       setGadsCustomerModal(true);
+    } else if (needsCustomer && platform === 'cm360') {
+      setCm360ProfileModal(true);
     } else {
       showSuccess(`${PLATFORM_LABELS[platform] || platform} başarıyla bağlandı!`);
     }
@@ -951,7 +1063,7 @@ export default function Integrations({ onNav }) {
     try {
       await logVerify(verifyParams.integrationId, 'cancelled');
       const p = verifyParams.platform;
-      if (['google_ads', 'google_analytics', 'dv360'].includes(p)) {
+      if (['google_ads', 'google_analytics', 'dv360', 'cm360'].includes(p)) {
         await disconnectGoogleIntegration(p, brandId);
       } else {
         await disconnectIntegration(verifyParams.integrationId);
@@ -972,6 +1084,12 @@ export default function Integrations({ onNav }) {
   const handleDv360AdvDone = (adv) => {
     setDv360AdvModal(false);
     showSuccess(`DV360 bağlandı: ${adv.name}`);
+    load();
+  };
+
+  const handleCm360ProfileDone = (profile) => {
+    setCm360ProfileModal(false);
+    showSuccess(`CM360 bağlandı: ${profile.name}`);
     load();
   };
 
@@ -1003,7 +1121,7 @@ export default function Integrations({ onNav }) {
   const handleDisconnectConfirmed = async () => {
     const integration = disconnectConfirm;
     setDisconnectConfirm(null);
-    const isGoogle = ['google_analytics', 'google_ads', 'dv360'].includes(integration.platform);
+    const isGoogle = ['google_analytics', 'google_ads', 'dv360', 'cm360'].includes(integration.platform);
     setDisconnecting(integration.id);
     try {
       if (isGoogle) await disconnectGoogleIntegration(integration.platform, brandId);
@@ -1176,6 +1294,13 @@ export default function Integrations({ onNav }) {
           brandId={brandId}
           onDone={handleGadsCustomerDone}
           onClose={() => { setGadsCustomerModal(false); load(); }}
+        />
+      )}
+      {cm360ProfileModal && (
+        <Cm360ProfileModal
+          brandId={brandId}
+          onDone={handleCm360ProfileDone}
+          onClose={() => { setCm360ProfileModal(false); load(); }}
         />
       )}
       {selected && (

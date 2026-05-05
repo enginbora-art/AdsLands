@@ -19,6 +19,7 @@ const { validateToken: validateAdjust, getAppName: getAdjustName } = require('..
 const { validateCredentials: validateAdform, getAccountName: getAdformName } = require('../services/adformService');
 const { getLinkedinAuthUrl, exchangeToken: exchangeLinkedinToken, getAdAccounts: getLinkedinAccounts, getAccountName: getLinkedinName } = require('../services/linkedinService');
 const { listAllAdvertisers, listCampaigns: listDv360Campaigns } = require('../services/dv360Service');
+const { getUserProfiles: getCm360Profiles, listAdvertisers: listCm360Advertisers, getCampaigns: getCm360Campaigns } = require('../services/cm360Service');
 const { encrypt, decrypt } = require('../services/tokenEncryption');
 
 // ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
@@ -35,7 +36,7 @@ function nameSimilarity(a, b) {
   return common.length / Math.max(wa.length, wb.length);
 }
 
-const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360'];
+const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360', 'cm360'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Ajans adına marka entegrasyonu yönetimi: brand_id varsa doğrulayıp döndür
@@ -79,8 +80,8 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.get('/google/connect', authMiddleware, async (req, res) => {
   const { platform, brand_id } = req.query;
-  if (!['google_analytics', 'google_ads', 'dv360'].includes(platform)) {
-    return res.status(400).json({ error: 'platform google_analytics, google_ads veya dv360 olmalı' });
+  if (!['google_analytics', 'google_ads', 'dv360', 'cm360'].includes(platform)) {
+    return res.status(400).json({ error: 'platform google_analytics, google_ads, dv360 veya cm360 olmalı' });
   }
   try {
     const companyId = await resolveCompanyId(req.user, brand_id);
@@ -126,6 +127,9 @@ router.get('/google/callback', async (req, res) => {
       needsCustomerSelection = true;
     } else if (platform === 'dv360') {
       accountId = null;
+    } else if (platform === 'cm360') {
+      accountId = null;
+      needsCustomerSelection = true; // needs profile selection modal
     }
 
     const { rows: [integration] } = await pool.query(
@@ -331,7 +335,7 @@ router.post('/log-verify', authMiddleware, async (req, res) => {
 
 router.delete('/google', authMiddleware, async (req, res) => {
   const { platform, brand_id } = req.query;
-  if (!['google_analytics', 'google_ads', 'dv360'].includes(platform)) {
+  if (!['google_analytics', 'google_ads', 'dv360', 'cm360'].includes(platform)) {
     return res.status(400).json({ error: 'Geçersiz platform.' });
   }
   try {
@@ -664,6 +668,81 @@ router.get('/dv360/campaigns', authMiddleware, async (req, res) => {
     res.json({ campaigns, advertiser_id: advertiserId });
   } catch (err) {
     console.error('[dv360/campaigns]', err);
+    res.status(500).json({ error: err.message || 'Kampanya listesi alınamadı.' });
+  }
+});
+
+// ── CM360 Profile seçimi ──────────────────────────────────────────────────────
+
+// GET /api/integrations/cm360/profiles — CM360 hesabındaki profilleri listele
+router.get('/cm360/profiles', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const { rows: [integration] } = await pool.query(
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [companyId, 'cm360']
+    );
+    if (!integration) return res.status(404).json({ error: 'CM360 entegrasyonu bulunamadı.' });
+
+    const tokens = {
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+    };
+
+    const profiles = await getCm360Profiles(tokens, integration.id);
+    res.json({ profiles, selected_profile_id: integration.extra?.profile_id || null });
+  } catch (err) {
+    console.error('[cm360/profiles]', err);
+    res.status(500).json({ error: err.message || 'Profil listesi alınamadı.' });
+  }
+});
+
+// POST /api/integrations/cm360/profile — seçilen profili kaydet
+router.post('/cm360/profile', authMiddleware, async (req, res) => {
+  const { profile_id, profile_name, account_id, account_name, brand_id } = req.body;
+  if (!profile_id) return res.status(400).json({ error: 'profile_id zorunlu.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+    const { rows: [row] } = await pool.query(
+      `UPDATE integrations
+       SET extra      = COALESCE(extra, '{}') || $1::jsonb,
+           account_id = $2,
+           status     = 'connected'
+       WHERE company_id = $3 AND platform = 'cm360' AND is_active = true
+       RETURNING id`,
+      [JSON.stringify({ profile_id: String(profile_id), profile_name, account_id, account_name }), String(account_id || profile_id), companyId]
+    );
+    if (!row) return res.status(404).json({ error: 'CM360 entegrasyonu bulunamadı.' });
+    res.json({ success: true, integration_id: row.id });
+  } catch (err) {
+    console.error('[cm360/profile POST]', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// GET /api/integrations/cm360/campaigns — seçili profildeki kampanyalar
+router.get('/cm360/campaigns', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const { rows: [integration] } = await pool.query(
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [companyId, 'cm360']
+    );
+    if (!integration) return res.status(404).json({ error: 'CM360 entegrasyonu bulunamadı.' });
+    const profileId = integration.extra?.profile_id;
+    if (!profileId) return res.status(400).json({ error: 'Profil seçilmemiş.' });
+
+    const tokens = {
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+    };
+
+    const campaigns = await getCm360Campaigns(tokens, profileId, integration.id);
+    res.json({ campaigns, profile_id: profileId });
+  } catch (err) {
+    console.error('[cm360/campaigns]', err);
     res.status(500).json({ error: err.message || 'Kampanya listesi alınamadı.' });
   }
 });

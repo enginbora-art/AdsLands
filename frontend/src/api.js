@@ -94,7 +94,7 @@ export const getIntegrations = (brandId) =>
 
 export const connectIntegration = async (platform, brandId) => {
   const b = brandId ? `&brand_id=${brandId}` : '';
-  if (platform === 'google_analytics' || platform === 'google_ads' || platform === 'dv360') {
+  if (platform === 'google_analytics' || platform === 'google_ads' || platform === 'dv360' || platform === 'cm360') {
     const { authUrl } = await api.get(`/integrations/google/connect?platform=${platform}${b}`).then(r => r.data);
     window.location.href = authUrl;
   } else if (platform === 'linkedin') {
@@ -121,6 +121,9 @@ export const selectDv360Advertiser = (data) => api.post('/integrations/dv360/adv
 export const getGoogleAdsCustomers = (brandId) =>
   api.get(`/integrations/google_ads/customers${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
 export const selectGoogleAdsCustomer = (data) => api.post('/integrations/google_ads/customer', data).then(r => r.data);
+export const getCm360Profiles = (brandId) =>
+  api.get(`/integrations/cm360/profiles${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+export const selectCm360Profile = (data) => api.post('/integrations/cm360/profile', data).then(r => r.data);
 
 // ── AI Raporları ──────────────────────────────────────────────────────────────
 export const getReports    = (brandId) =>

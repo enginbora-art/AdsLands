@@ -838,13 +838,26 @@ Birim fiyat bulunamazsa missing_fields listesine ekle:
 
 Platform normalizasyonu:
 - "Facebook", "Instagram", "Facebook & Instagram", "Facebook / İnstagram", "Meta" → "meta"
-- "YouTube", "Youtube" → "youtube"
+- "YouTube", "Youtube" → "youtube"  — ANCAK aşağıdaki YouTube özel kuralına bak
 - "Staff Programatik", "DV360", "Programatik Network", "Programmatic", "Display", "GDN", "Native" → "programatik"
 - "X", "Genart/X", "Twitter" → "x"
 - "Google", "Google Ads", "Search", "Arama", "Demand Gen" → "google"
 - "TikTok" → "tiktok"
 - "LinkedIn" → "linkedin"
 - "Video" (bağımsız) → "video"
+
+YouTube özel kuralı (ÖNEMLİ):
+Eğer satırda Network/Şirket/Platform kolonu "Programatik", "DV360", "Staff Programatik" vb. ise
+VE Site/Mecra/Yayın Ortamı kolonu "YouTube" veya "Youtube" ise:
+  → platform = "programatik" (YouTube değil)
+  → ad_model = "YouTube - [o satırdaki Reklam Modeli / Format]"
+Sadece Network/Şirket kolonu doğrudan "YouTube" ise platform = "youtube".
+
+Video IO network kuralı:
+Video veya Display kategorisindeki satırlarda Network/Şirket olarak
+Membrana, Digitalvol, Tooplay, Adplus, Mediology gibi bir network adı varsa:
+  → ad_model = "[Network Adı] - [Reklam Modeli / Format]"
+  (örnek: "Membrana - Pre-Roll", "Tooplay - Outstream")
 
 Tarih: Excel seri numarasını YYYY-MM-DD'ye çevir (epoch: 1900-01-01, -2 gün offset).
 Adserver fee, yasal işletim ücreti, alt toplam, boş satırları hariç tut.
