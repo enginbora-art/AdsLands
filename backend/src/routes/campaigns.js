@@ -927,18 +927,20 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
       const adModel  = (ln.ad_model || '').trim();
       await client.query(`
         INSERT INTO campaign_channels
-          (campaign_id, platform, ad_model, allocated_budget, planned_kpi, kpi_type,
+          (campaign_id, platform, ad_model, external_campaign_name,
+           allocated_budget, planned_kpi, kpi_type,
            buying_type, unit_price, targeting, frequency, imported_from_plan)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+        VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,true)
         ON CONFLICT (campaign_id, platform, ad_model) DO UPDATE SET
-          allocated_budget   = campaign_channels.allocated_budget + EXCLUDED.allocated_budget,
-          planned_kpi        = COALESCE(campaign_channels.planned_kpi, 0) + COALESCE(EXCLUDED.planned_kpi, 0),
-          kpi_type           = COALESCE(campaign_channels.kpi_type, EXCLUDED.kpi_type),
-          buying_type        = COALESCE(campaign_channels.buying_type, EXCLUDED.buying_type),
-          unit_price         = COALESCE(campaign_channels.unit_price, EXCLUDED.unit_price),
-          targeting          = COALESCE(campaign_channels.targeting, EXCLUDED.targeting),
-          frequency          = COALESCE(campaign_channels.frequency, EXCLUDED.frequency),
-          imported_from_plan = true
+          allocated_budget       = campaign_channels.allocated_budget + EXCLUDED.allocated_budget,
+          planned_kpi            = COALESCE(campaign_channels.planned_kpi, 0) + COALESCE(EXCLUDED.planned_kpi, 0),
+          external_campaign_name = EXCLUDED.external_campaign_name,
+          kpi_type               = COALESCE(campaign_channels.kpi_type, EXCLUDED.kpi_type),
+          buying_type            = COALESCE(campaign_channels.buying_type, EXCLUDED.buying_type),
+          unit_price             = COALESCE(campaign_channels.unit_price, EXCLUDED.unit_price),
+          targeting              = COALESCE(campaign_channels.targeting, EXCLUDED.targeting),
+          frequency              = COALESCE(campaign_channels.frequency, EXCLUDED.frequency),
+          imported_from_plan     = true
       `, [
         campaign.id, platform, adModel,
         Number(ln.budget) || 0,

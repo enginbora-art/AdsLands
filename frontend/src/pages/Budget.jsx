@@ -689,7 +689,10 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                                   <div style={{ width: 5, height: 5, borderRadius: '50%', background: amColor, flexShrink: 0 }} />
                                   <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text1)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {am.ad_model || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>model belirtilmemiş</span>}
+                                    {am.ad_model || am.external_campaign_name
+                                      ? <span>{am.ad_model || am.external_campaign_name}</span>
+                                      : <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Belirtilmemiş</span>
+                                    }
                                     {am.buying_type && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6, fontWeight: 400 }}>{am.buying_type}</span>}
                                   </div>
                                   <div style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
