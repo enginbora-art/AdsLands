@@ -22,6 +22,8 @@ import {
   importMetaBmAccounts,
   getDv360Advertisers,
   selectDv360Advertiser,
+  getGoogleAdsCustomers,
+  selectGoogleAdsCustomer,
 } from '../api';
 
 const PLATFORMS = [
@@ -169,6 +171,101 @@ function Dv360AdvertiserModal({ brandId, onDone, onClose }) {
             disabled={!selected || saving}
             style={{ flex: 1, padding: '10px 0', background: selected ? 'rgba(26,115,232,0.15)' : 'var(--bg3)', border: `1px solid ${selected ? 'rgba(26,115,232,0.5)' : 'var(--border2)'}`, borderRadius: 8, color: selected ? '#1A73E8' : 'var(--text3)', fontSize: 13, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
             {saving ? 'Kaydediliyor...' : 'Advertiser\'ı Seç'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Google Ads Customer Seçim Modalı ─────────────────────────────────────────
+
+function GoogleAdsCustomerModal({ brandId, onDone, onClose }) {
+  const [customers, setCustomers] = useState([]);
+  const [selected, setSelected]   = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState(null);
+
+  useEffect(() => {
+    getGoogleAdsCustomers(brandId)
+      .then(d => { setCustomers(d.customers || []); setSelected(d.selected_customer_id || null); })
+      .catch(e => setError(e?.response?.data?.error || 'Müşteri listesi alınamadı.'))
+      .finally(() => setLoading(false));
+  }, [brandId]);
+
+  const handleSave = async () => {
+    if (!selected) return;
+    const cust = customers.find(c => c.id === selected);
+    setSaving(true);
+    try {
+      await selectGoogleAdsCustomer({
+        customer_id:   cust.id,
+        customer_name: cust.name,
+        brand_id:      brandId || undefined,
+      });
+      onDone(cust);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Kaydedilemedi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...s.modal, maxWidth: 480, padding: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Google Ads Hesabı Seç</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>Takip etmek istediğiniz müşteri hesabını seçin</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#EF4444', marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Hesaplar yükleniyor...</div>
+        ) : customers.length === 0 ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>
+            Erişilebilir müşteri hesabı bulunamadı.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {customers.map(cust => (
+              <label key={cust.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                background: selected === cust.id ? 'rgba(66,133,244,0.12)' : 'var(--bg3)',
+                border: selected === cust.id ? '1px solid rgba(66,133,244,0.5)' : '1px solid var(--border2)',
+                borderRadius: 8, cursor: 'pointer',
+              }}>
+                <input type="radio" name="cust" value={cust.id} checked={selected === cust.id}
+                  onChange={() => setSelected(cust.id)}
+                  style={{ accentColor: '#4285F4', width: 15, height: 15, flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cust.name}
+                    {cust.isManager && <span style={{ marginLeft: 6, fontSize: 10, color: '#4285F4', background: 'rgba(66,133,244,0.15)', padding: '1px 5px', borderRadius: 4 }}>MCC</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>ID: {cust.id} · {cust.currency}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={s.btnSecondary}>İptal</button>
+          <button
+            onClick={handleSave}
+            disabled={!selected || saving}
+            style={{ flex: 1, padding: '10px 0', background: selected ? 'rgba(66,133,244,0.15)' : 'var(--bg3)', border: `1px solid ${selected ? 'rgba(66,133,244,0.5)' : 'var(--border2)'}`, borderRadius: 8, color: selected ? '#4285F4' : 'var(--text3)', fontSize: 13, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
+            {saving ? 'Kaydediliyor...' : 'Hesabı Seç'}
           </button>
         </div>
       </div>
@@ -628,7 +725,8 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
   const isGA      = integration.platform === 'google_analytics';
   const isGoogAds = integration.platform === 'google_ads';
   const isDv360   = integration.platform === 'dv360';
-  const advertiserName = isDv360 ? (integration.extra?.advertiser_name || integration.account_id) : null;
+  const advertiserName  = isDv360   ? (integration.extra?.advertiser_name || integration.account_id) : null;
+  const customerName    = isGoogAds ? (integration.extra?.customer_name   || integration.account_id) : null;
 
   const rows             = liveData ? liveData.data : metrics;
   const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
@@ -651,6 +749,10 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
             {isDv360 && advertiserName ? (
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Advertiser: {advertiserName}
+              </div>
+            ) : isGoogAds && customerName ? (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Hesap: {customerName}
               </div>
             ) : integration.account_id ? (
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -783,6 +885,7 @@ export default function Integrations({ onNav }) {
   const [importModal, setImportModal]       = useState(null);
   const [disconnectConfirm, setDisconnectConfirm] = useState(null);
   const [dv360AdvModal, setDv360AdvModal]         = useState(false);
+  const [gadsCustomerModal, setGadsCustomerModal] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -802,6 +905,8 @@ export default function Integrations({ onNav }) {
       });
     } else if (params.get('success') === 'dv360') {
       setDv360AdvModal(true);
+    } else if (params.get('success') === 'google_ads' && params.get('needs_customer') === '1') {
+      setGadsCustomerModal(true);
     } else if (params.get('success') || params.get('error')) {
       setBanner(params);
       setTimeout(() => setBanner(null), 4000);
@@ -854,6 +959,12 @@ export default function Integrations({ onNav }) {
   const handleDv360AdvDone = (adv) => {
     setDv360AdvModal(false);
     showSuccess(`DV360 bağlandı: ${adv.name}`);
+    load();
+  };
+
+  const handleGadsCustomerDone = (cust) => {
+    setGadsCustomerModal(false);
+    showSuccess(`Google Ads bağlandı: ${cust.name}`);
     load();
   };
 
@@ -1045,6 +1156,13 @@ export default function Integrations({ onNav }) {
           brandId={brandId}
           onDone={handleDv360AdvDone}
           onClose={() => { setDv360AdvModal(false); load(); }}
+        />
+      )}
+      {gadsCustomerModal && (
+        <GoogleAdsCustomerModal
+          brandId={brandId}
+          onDone={handleGadsCustomerDone}
+          onClose={() => { setGadsCustomerModal(false); load(); }}
         />
       )}
       {selected && (

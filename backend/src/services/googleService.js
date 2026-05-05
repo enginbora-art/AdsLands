@@ -308,6 +308,109 @@ async function listMccCustomers(tokens) {
   return customers;
 }
 
+// listMccCustomers ile aynı mantık; Google Ads OAuth sonrası müşteri seçimi için
+async function listAdsCustomersWithDetails(tokens, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
+  const client = createClient();
+  client.setCredentials(fresh);
+  const { token } = await client.getAccessToken();
+  const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken || devToken === 'your_developer_token') return [];
+
+  const listResp = await fetch(
+    'https://googleads.googleapis.com/v18/customers:listAccessibleCustomers',
+    { headers: { Authorization: `Bearer ${token}`, 'developer-token': devToken } }
+  );
+  if (!listResp.ok) return [];
+  const listData = await listResp.json();
+  const customerIds = (listData.resourceNames || []).map(n => n.replace('customers/', ''));
+
+  const customers = [];
+  for (const customerId of customerIds.slice(0, 50)) {
+    try {
+      const resp = await fetch(
+        `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:search`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'developer-token': devToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.manager FROM customer LIMIT 1',
+          }),
+        }
+      );
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const c = data.results?.[0]?.customer;
+      if (!c) continue;
+      customers.push({
+        id: String(c.id),
+        name: c.descriptiveName || `Hesap ${c.id}`,
+        currency: c.currencyCode || 'TRY',
+        isManager: c.manager || false,
+      });
+    } catch {
+      // bu hesabı atla
+    }
+  }
+  return customers;
+}
+
+// Tek günlük aggregate metrik — metricsFetcher cron için
+async function getAdsDailyMetric(tokens, customerId, date, integrationId = null) {
+  const fresh = await refreshIfNeeded(tokens, integrationId);
+  const client = createClient();
+  client.setCredentials(fresh);
+  const { token } = await client.getAccessToken();
+  const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken || devToken === 'your_developer_token') throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN eksik');
+
+  const cleanId = String(customerId).replace(/-/g, '');
+  const resp = await fetch(
+    `https://googleads.googleapis.com/v18/customers/${cleanId}/googleAds:search`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'developer-token': devToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `
+          SELECT segments.date,
+                 metrics.cost_micros,
+                 metrics.impressions,
+                 metrics.clicks,
+                 metrics.conversions,
+                 metrics.all_conversions_value
+          FROM campaign
+          WHERE segments.date = '${date}'
+        `,
+      }),
+    }
+  );
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Google Ads API hatası (${resp.status})`);
+  }
+
+  const data = await resp.json();
+  let spend = 0, impressions = 0, clicks = 0, conversions = 0, convValue = 0;
+  for (const r of data.results || []) {
+    spend       += parseInt(r.metrics?.costMicros          || 0) / 1_000_000;
+    impressions += parseInt(r.metrics?.impressions         || 0);
+    clicks      += parseInt(r.metrics?.clicks              || 0);
+    conversions += parseFloat(r.metrics?.conversions       || 0);
+    convValue   += parseFloat(r.metrics?.allConversionsValue || 0);
+  }
+  const roas = spend > 0 && convValue > 0 ? Math.round((convValue / spend) * 100) / 100 : 0;
+  return { date, spend, impressions, clicks, conversions, roas };
+}
+
 async function listAdsCampaigns(tokens, customerId, isYoutube = false, integrationId = null) {
   const fresh = await refreshIfNeeded(tokens, integrationId);
   const client = createClient();
@@ -364,7 +467,9 @@ module.exports = {
   getAnalyticsProperties,
   getAnalyticsData,
   getAdsData,
+  getAdsDailyMetric,
   listAdsCustomers,
+  listAdsCustomersWithDetails,
   listAdsCampaigns,
   getUserInfo,
   getAdsCustomerName,

@@ -10,6 +10,7 @@ const {
   getAnalyticsData,
   getAdsData,
   listAdsCustomers,
+  listAdsCustomersWithDetails,
   getUserInfo,
   getAdsCustomerName,
 } = require('../services/googleService');
@@ -108,14 +109,17 @@ router.get('/google/callback', async (req, res) => {
   try {
     const tokens = await getTokens(code);
     let accountId = null;
+    let needsCustomerSelection = false;
     if (platform === 'google_analytics') {
       const props = await getAnalyticsProperties(tokens).catch(() => []);
       accountId = props[0]?.propertyId || null;
     } else if (platform === 'google_ads') {
-      const customers = await listAdsCustomers(tokens).catch(() => []);
-      accountId = customers[0] || null;
+      const customers = await listAdsCustomersWithDetails(tokens).catch(() => []);
+      // Yönetici (MCC) olmayan ilk hesabı varsayılan olarak al
+      const nonMgr = customers.filter(c => !c.isManager);
+      accountId = (nonMgr[0] || customers[0])?.id || null;
+      needsCustomerSelection = customers.length > 1;
     } else if (platform === 'dv360') {
-      // accountId boş kalır; advertiser seçimi ayrı adımda yapılır
       accountId = null;
     }
 
@@ -191,7 +195,9 @@ router.get('/google/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}/integrations?${params.toString()}`);
     }
 
-    res.redirect(`${FRONTEND_URL}/integrations?success=${platform}`);
+    const successParams = new URLSearchParams({ success: platform });
+    if (needsCustomerSelection) successParams.set('needs_customer', '1');
+    res.redirect(`${FRONTEND_URL}/integrations?${successParams.toString()}`);
   } catch (err) {
     console.error('Google OAuth callback hatası:', err);
     res.redirect(`${FRONTEND_URL}/integrations?error=${platform || 'google'}`);
@@ -209,7 +215,13 @@ router.get('/google/data', authMiddleware, async (req, res) => {
       [req.user.company_id, platform]
     );
     if (!integration) return res.status(404).json({ error: 'Bağlı hesap bulunamadı.' });
-    if (!integration.account_id) {
+
+    // Google Ads için customer_id: extra'dan veya account_id'den al
+    const accountId = platform === 'google_ads'
+      ? (integration.extra?.customer_id || integration.extra?.customerId || integration.account_id)
+      : integration.account_id;
+
+    if (!accountId) {
       return res.status(400).json({ error: 'Hesap ID bulunamadı. Lütfen yeniden bağlanın.' });
     }
     const tokens = {
@@ -218,12 +230,66 @@ router.get('/google/data', authMiddleware, async (req, res) => {
       expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
     };
     const data = platform === 'google_analytics'
-      ? await getAnalyticsData(tokens, integration.account_id, integration.id)
-      : await getAdsData(tokens, integration.account_id, integration.id);
-    res.json({ platform, account_id: integration.account_id, data });
+      ? await getAnalyticsData(tokens, accountId, integration.id)
+      : await getAdsData(tokens, accountId, integration.id);
+    res.json({ platform, account_id: accountId, data });
   } catch (err) {
     console.error('Google data hatası:', err);
-    res.status(500).json({ error: err.message || 'Veri çekilemedi.' });
+    const msg = err.message?.includes('DEVELOPER_TOKEN') || err.message?.includes('developer-token')
+      ? 'Google Ads bağlantısı kontrol edilmeli.'
+      : err.message?.includes('PERMISSION_DENIED') || err.message?.includes('AuthenticationError')
+        ? 'Google Ads hesap erişimi reddedildi. Lütfen yeniden bağlanın.'
+        : err.message || 'Veri çekilemedi.';
+    res.status(err.message?.includes('DEVELOPER_TOKEN') ? 503 : 500).json({ error: msg });
+  }
+});
+
+// ── Google Ads Customer seçimi ────────────────────────────────────────────────
+
+// GET /api/integrations/google_ads/customers
+router.get('/google_ads/customers', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const { rows: [integration] } = await pool.query(
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [companyId, 'google_ads']
+    );
+    if (!integration) return res.status(404).json({ error: 'Google Ads entegrasyonu bulunamadı.' });
+
+    const tokens = {
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+    };
+    const customers = await listAdsCustomersWithDetails(tokens, integration.id);
+    const selectedId = integration.extra?.customer_id || integration.account_id || null;
+    res.json({ customers, selected_customer_id: selectedId });
+  } catch (err) {
+    console.error('[google_ads/customers]', err);
+    res.status(500).json({ error: err.message || 'Müşteri listesi alınamadı.' });
+  }
+});
+
+// POST /api/integrations/google_ads/customer — seçilen müşteriyi kaydet
+router.post('/google_ads/customer', authMiddleware, async (req, res) => {
+  const { customer_id, customer_name, brand_id } = req.body;
+  if (!customer_id) return res.status(400).json({ error: 'customer_id zorunlu.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+    const { rows: [row] } = await pool.query(
+      `UPDATE integrations
+       SET extra      = COALESCE(extra, '{}') || $1::jsonb,
+           account_id = $2,
+           status     = 'connected'
+       WHERE company_id = $3 AND platform = 'google_ads' AND is_active = true
+       RETURNING id`,
+      [JSON.stringify({ customer_id: String(customer_id), customer_name }), String(customer_id), companyId]
+    );
+    if (!row) return res.status(404).json({ error: 'Google Ads entegrasyonu bulunamadı.' });
+    res.json({ success: true, integration_id: row.id });
+  } catch (err) {
+    console.error('[google_ads/customer POST]', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
   }
 });
 

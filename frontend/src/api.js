@@ -118,6 +118,9 @@ export const connectAdform    = (data) => api.post('/integrations/adform/connect
 export const getDv360Advertisers = (brandId) =>
   api.get(`/integrations/dv360/advertisers${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
 export const selectDv360Advertiser = (data) => api.post('/integrations/dv360/advertiser', data).then(r => r.data);
+export const getGoogleAdsCustomers = (brandId) =>
+  api.get(`/integrations/google_ads/customers${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+export const selectGoogleAdsCustomer = (data) => api.post('/integrations/google_ads/customer', data).then(r => r.data);
 
 // ── AI Raporları ──────────────────────────────────────────────────────────────
 export const getReports    = (brandId) =>
