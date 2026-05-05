@@ -203,7 +203,9 @@ router.get('/google/callback', async (req, res) => {
 
     const successParams = new URLSearchParams({ success: platform });
     if (needsCustomerSelection) successParams.set('needs_customer', '1');
-    res.redirect(`${FRONTEND_URL}/integrations?${successParams.toString()}`);
+    const redirectUrl = `${FRONTEND_URL}/integrations?${successParams.toString()}`;
+    console.log('[google/callback] customers:', customers?.length ?? 'n/a', 'needsCustomer:', needsCustomerSelection, 'redirect:', redirectUrl);
+    res.redirect(redirectUrl);
   } catch (err) {
     console.error('Google OAuth callback hatası:', err);
     res.redirect(`${FRONTEND_URL}/integrations?error=${platform || 'google'}`);

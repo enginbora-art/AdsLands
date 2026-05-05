@@ -889,6 +889,8 @@ export default function Integrations({ onNav }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    console.log('[integrations] URL params:', window.location.search);
+    console.log('[integrations] success:', params.get('success'), '| needs_customer:', params.get('needs_customer'), '| verify:', params.get('verify'));
     window.history.replaceState({}, '', window.location.pathname);
 
     if (params.get('mcc_session')) {
@@ -907,7 +909,12 @@ export default function Integrations({ onNav }) {
     } else if (params.get('success') === 'dv360') {
       setDv360AdvModal(true);
     } else if (params.get('success') === 'google_ads' && params.get('needs_customer') === '1') {
+      console.log('[integrations] → setGadsCustomerModal(true)');
       setGadsCustomerModal(true);
+    } else if (params.get('success') === 'google_ads') {
+      console.log('[integrations] → google_ads success ama needs_customer YOK, banner gösteriliyor');
+      setBanner(params);
+      setTimeout(() => setBanner(null), 4000);
     } else if (params.get('success') || params.get('error')) {
       setBanner(params);
       setTimeout(() => setBanner(null), 4000);
