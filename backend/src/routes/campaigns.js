@@ -389,7 +389,7 @@ router.delete('/:id/channels/:channelId', authMiddleware, requireActiveSubscript
   }
 });
 
-const PLATFORM_TO_INTEGRATION = { google: 'google_ads', youtube: 'google_ads' };
+const PLATFORM_TO_INTEGRATION = { google: 'google_ads', youtube: 'google_ads', dv360: 'dv360' };
 const MANUAL_ONLY_PLATFORMS   = new Set(['programatik', 'display', 'video', 'x', 'other']);
 
 // GET /api/campaigns/:id/platform-campaigns?platform=xxx
@@ -437,6 +437,13 @@ router.get('/:id/platform-campaigns', authMiddleware, requireActiveSubscription,
       }
       const { listAdsCampaigns } = require('../services/googleService');
       candidates = await listAdsCampaigns(tokens, customerId, isYoutube, integration.id);
+    } else if (integrationPlatform === 'dv360') {
+      const advertiserId = integration.extra?.advertiser_id;
+      if (!advertiserId) {
+        return res.json({ campaigns: [], manual: true, message: 'DV360 advertiser seçilmemiş. Entegrasyon ayarlarından advertiser seçin.' });
+      }
+      const { listCampaigns: listDv360Campaigns } = require('../services/dv360Service');
+      candidates = await listDv360Campaigns(tokens, advertiserId, integration.id);
     } else {
       return res.json({ campaigns: [], manual: true, message: `${PLATFORM_LABELS[integrationPlatform] || platform} için otomatik eşleştirme henüz desteklenmiyor.` });
     }

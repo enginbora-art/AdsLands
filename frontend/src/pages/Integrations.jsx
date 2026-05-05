@@ -20,40 +20,43 @@ import {
   getMetaBmAuthUrl,
   getMetaBmAccounts,
   importMetaBmAccounts,
+  getDv360Advertisers,
+  selectDv360Advertiser,
 } from '../api';
 
 const PLATFORMS = [
-  { id: 'google_analytics', name: 'Google Analytics', color: '#E37400', bg: 'rgba(227,116,0,0.15)',  icon: 'GA',  isGoogle: true },
-  { id: 'google_ads',       name: 'Google Ads',        color: '#4285F4', bg: 'rgba(66,133,244,0.15)', icon: 'G',   isGoogle: true },
-  { id: 'meta',             name: 'Meta Ads',           color: '#1877F2', bg: 'rgba(24,119,242,0.15)', icon: 'M',   isGoogle: false },
-  { id: 'tiktok',           name: 'TikTok Ads',         color: '#00BFA6', bg: 'rgba(0,191,166,0.15)',  icon: 'TT',  isGoogle: false },
-  { id: 'linkedin',         name: 'LinkedIn Ads',       color: '#0A66C2', bg: 'rgba(10,102,194,0.15)', icon: 'in',  isGoogle: false },
-  { id: 'appsflyer',        name: 'AppsFlyer',          color: '#00B4D8', bg: 'rgba(0,180,216,0.15)', icon: 'AF',  isApiToken: true,
+  { id: 'google_analytics', name: 'Google Analytics', color: '#E37400', bg: 'rgba(227,116,0,0.15)',  icon: 'GA',   isGoogle: true },
+  { id: 'google_ads',       name: 'Google Ads',        color: '#4285F4', bg: 'rgba(66,133,244,0.15)', icon: 'G',    isGoogle: true },
+  { id: 'meta',             name: 'Meta Ads',           color: '#1877F2', bg: 'rgba(24,119,242,0.15)', icon: 'M',    isGoogle: false },
+  { id: 'tiktok',           name: 'TikTok Ads',         color: '#00BFA6', bg: 'rgba(0,191,166,0.15)',  icon: 'TT',   isGoogle: false },
+  { id: 'linkedin',         name: 'LinkedIn Ads',       color: '#0A66C2', bg: 'rgba(10,102,194,0.15)', icon: 'in',   isGoogle: false },
+  { id: 'appsflyer',        name: 'AppsFlyer',          color: '#00B4D8', bg: 'rgba(0,180,216,0.15)', icon: 'AF',   isApiToken: true,
     fields: [
       { key: 'api_token', label: 'API Token', placeholder: 'AppsFlyer hesabınızdan alın', required: true },
       { key: 'app_id',    label: 'App ID (Opsiyonel)', placeholder: 'com.example.app', required: false },
     ]
   },
-  { id: 'adjust',           name: 'Adjust',             color: '#EC407A', bg: 'rgba(236,64,122,0.15)', icon: 'ADJ', isApiToken: true,
+  { id: 'adjust',           name: 'Adjust',             color: '#EC407A', bg: 'rgba(236,64,122,0.15)', icon: 'ADJ',  isApiToken: true,
     fields: [
       { key: 'api_token', label: 'API Token', placeholder: 'Adjust Dashboard → Account Settings', required: true },
       { key: 'app_token', label: 'App Token', placeholder: 'Adjust app token', required: true },
     ]
   },
-  { id: 'adform',           name: 'Adform',             color: '#E84B37', bg: 'rgba(232,75,55,0.15)',  icon: 'ADF', isApiToken: true,
+  { id: 'adform',           name: 'Adform',             color: '#E84B37', bg: 'rgba(232,75,55,0.15)',  icon: 'ADF',  isApiToken: true,
     fields: [
       { key: 'tracking_id', label: 'Client Tracking ID', placeholder: 'Adform Tracking Setup ID',  required: false },
       { key: 'username',    label: 'API Username',        placeholder: 'Adform API kullanıcı adı', required: true },
       { key: 'password',    label: 'API Password',        placeholder: 'Adform API şifresi',       required: true, type: 'password' },
     ]
   },
+  { id: 'dv360',            name: 'Display & Video 360', color: '#1A73E8', bg: 'rgba(26,115,232,0.15)', icon: 'DV',  isGoogle: true, isDv360: true },
 ];
 
 const GROUPS = [
   { label: 'Google Ekosistemi', ids: ['google_analytics', 'google_ads'] },
   { label: 'Sosyal Medya',      ids: ['meta', 'tiktok', 'linkedin'] },
   { label: 'Attribution & MMP', ids: ['appsflyer', 'adjust'] },
-  { label: 'Programatik / DSP', ids: ['adform'] },
+  { label: 'Programatik / DSP', ids: ['adform', 'dv360'] },
 ];
 
 const PLATFORM_LABELS = {
@@ -65,6 +68,7 @@ const PLATFORM_LABELS = {
   adjust:           'Adjust',
   adform:           'Adform',
   linkedin:         'LinkedIn Ads',
+  dv360:            'Display & Video 360',
   mcc:              'Google Ads MCC',
   metabm:           'Meta Business Manager',
 };
@@ -75,6 +79,102 @@ const fmtDate = (str) => {
   if (str.length === 8) return `${str.slice(6, 8)}.${str.slice(4, 6)}.${str.slice(0, 4)}`;
   return new Date(str).toLocaleDateString('tr-TR');
 };
+
+// ── DV360 Advertiser Seçim Modalı ────────────────────────────────────────────
+
+function Dv360AdvertiserModal({ brandId, onDone, onClose }) {
+  const [advertisers, setAdvertisers] = useState([]);
+  const [selected, setSelected]       = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState(null);
+
+  useEffect(() => {
+    getDv360Advertisers(brandId)
+      .then(d => { setAdvertisers(d.advertisers || []); setSelected(d.selected_advertiser_id || null); })
+      .catch(e => setError(e?.response?.data?.error || 'Advertiser listesi alınamadı.'))
+      .finally(() => setLoading(false));
+  }, [brandId]);
+
+  const handleSave = async () => {
+    if (!selected) return;
+    const adv = advertisers.find(a => a.id === selected);
+    setSaving(true);
+    try {
+      await selectDv360Advertiser({
+        advertiser_id:   adv.id,
+        advertiser_name: adv.name,
+        partner_id:      adv.partnerId,
+        brand_id:        brandId || undefined,
+      });
+      onDone(adv);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Kaydedilemedi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...s.modal, maxWidth: 480, padding: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>DV360 Advertiser Seç</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>Takip etmek istediğiniz advertiser'ı seçin</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#EF4444', marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Advertiser'lar yükleniyor...</div>
+        ) : advertisers.length === 0 ? (
+          <div style={{ color: 'var(--text3)', padding: '24px 0', textAlign: 'center', fontSize: 13 }}>
+            Erişilebilir advertiser bulunamadı.<br />
+            <span style={{ fontSize: 11 }}>DV360 hesabınızın partner erişimini kontrol edin.</span>
+          </div>
+        ) : (
+          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {advertisers.map(adv => (
+              <label key={adv.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                background: selected === adv.id ? 'rgba(26,115,232,0.12)' : 'var(--bg3)',
+                border: selected === adv.id ? '1px solid rgba(26,115,232,0.5)' : '1px solid var(--border2)',
+                borderRadius: 8, cursor: 'pointer',
+              }}>
+                <input type="radio" name="adv" value={adv.id} checked={selected === adv.id}
+                  onChange={() => setSelected(adv.id)}
+                  style={{ accentColor: '#1A73E8', width: 15, height: 15, flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adv.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
+                    ID: {adv.id}{adv.partnerName ? ` · ${adv.partnerName}` : ''}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={s.btnSecondary}>İptal</button>
+          <button
+            onClick={handleSave}
+            disabled={!selected || saving}
+            style={{ flex: 1, padding: '10px 0', background: selected ? 'rgba(26,115,232,0.15)' : 'var(--bg3)', border: `1px solid ${selected ? 'rgba(26,115,232,0.5)' : 'var(--border2)'}`, borderRadius: 8, color: selected ? '#1A73E8' : 'var(--text3)', fontSize: 13, fontWeight: 700, cursor: selected && !saving ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
+            {saving ? 'Kaydediliyor...' : 'Advertiser\'ı Seç'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Platform Card ─────────────────────────────────────────────────────────────
 
@@ -527,6 +627,8 @@ function DisconnectConfirmModal({ platformId, onConfirm, onCancel }) {
 function DetailModal({ integration, platform, metrics, liveData, liveLoading, liveError, metricsLoading, onFetchLive, onRefresh, onClose }) {
   const isGA      = integration.platform === 'google_analytics';
   const isGoogAds = integration.platform === 'google_ads';
+  const isDv360   = integration.platform === 'dv360';
+  const advertiserName = isDv360 ? (integration.extra?.advertiser_name || integration.account_id) : null;
 
   const rows             = liveData ? liveData.data : metrics;
   const totalSpend       = metrics.reduce((a, m) => a + Number(m.spend       || 0), 0);
@@ -546,11 +648,15 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700 }}>{platform.name}</div>
-            {integration.account_id && (
+            {isDv360 && advertiserName ? (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Advertiser: {advertiserName}
+              </div>
+            ) : integration.account_id ? (
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Hesap: {integration.account_id}
               </div>
-            )}
+            ) : null}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right', flexShrink: 0 }}>
             <div>Son bağlantı</div>
@@ -676,6 +782,7 @@ export default function Integrations({ onNav }) {
   const [tokenModal, setTokenModal]         = useState(null);
   const [importModal, setImportModal]       = useState(null);
   const [disconnectConfirm, setDisconnectConfirm] = useState(null);
+  const [dv360AdvModal, setDv360AdvModal]         = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -693,6 +800,8 @@ export default function Integrations({ onNav }) {
         similarity:    parseFloat(params.get('similarity') || '0'),
         integrationId: params.get('integration_id'),
       });
+    } else if (params.get('success') === 'dv360') {
+      setDv360AdvModal(true);
     } else if (params.get('success') || params.get('error')) {
       setBanner(params);
       setTimeout(() => setBanner(null), 4000);
@@ -724,7 +833,7 @@ export default function Integrations({ onNav }) {
     try {
       await logVerify(verifyParams.integrationId, 'cancelled');
       const p = verifyParams.platform;
-      if (p === 'google_ads' || p === 'google_analytics') {
+      if (['google_ads', 'google_analytics', 'dv360'].includes(p)) {
         await disconnectGoogleIntegration(p, brandId);
       } else {
         await disconnectIntegration(verifyParams.integrationId);
@@ -740,6 +849,12 @@ export default function Integrations({ onNav }) {
     setConnecting(platform.id);
     try { await connectIntegration(platform.id, brandId); }
     catch (err) { console.error(err); setConnecting(null); }
+  };
+
+  const handleDv360AdvDone = (adv) => {
+    setDv360AdvModal(false);
+    showSuccess(`DV360 bağlandı: ${adv.name}`);
+    load();
   };
 
   const handleTokenSuccess = (platformId) => {
@@ -764,7 +879,7 @@ export default function Integrations({ onNav }) {
   const handleDisconnectConfirmed = async () => {
     const integration = disconnectConfirm;
     setDisconnectConfirm(null);
-    const isGoogle = integration.platform === 'google_analytics' || integration.platform === 'google_ads';
+    const isGoogle = ['google_analytics', 'google_ads', 'dv360'].includes(integration.platform);
     setDisconnecting(integration.id);
     try {
       if (isGoogle) await disconnectGoogleIntegration(integration.platform, brandId);
@@ -923,6 +1038,13 @@ export default function Integrations({ onNav }) {
           sessionId={importModal.sessionId}
           onClose={() => setImportModal(null)}
           onDone={handleImportDone}
+        />
+      )}
+      {dv360AdvModal && (
+        <Dv360AdvertiserModal
+          brandId={brandId}
+          onDone={handleDv360AdvDone}
+          onClose={() => { setDv360AdvModal(false); load(); }}
         />
       )}
       {selected && (

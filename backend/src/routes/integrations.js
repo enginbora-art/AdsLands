@@ -17,6 +17,7 @@ const { validateToken: validateAppsflyer, getAppName: getAppsflyerName } = requi
 const { validateToken: validateAdjust, getAppName: getAdjustName } = require('../services/adjustService');
 const { validateCredentials: validateAdform, getAccountName: getAdformName } = require('../services/adformService');
 const { getLinkedinAuthUrl, exchangeToken: exchangeLinkedinToken, getAdAccounts: getLinkedinAccounts, getAccountName: getLinkedinName } = require('../services/linkedinService');
+const { listAllAdvertisers, listCampaigns: listDv360Campaigns } = require('../services/dv360Service');
 const { encrypt, decrypt } = require('../services/tokenEncryption');
 
 // ── Ad hesabı / marka adı benzerlik skoru (0-1) ───────────────────────────────
@@ -33,7 +34,7 @@ function nameSimilarity(a, b) {
   return common.length / Math.max(wa.length, wb.length);
 }
 
-const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'];
+const VALID_PLATFORMS = ['google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360'];
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Ajans adına marka entegrasyonu yönetimi: brand_id varsa doğrulayıp döndür
@@ -77,8 +78,8 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.get('/google/connect', authMiddleware, async (req, res) => {
   const { platform, brand_id } = req.query;
-  if (!['google_analytics', 'google_ads'].includes(platform)) {
-    return res.status(400).json({ error: 'platform google_analytics veya google_ads olmalı' });
+  if (!['google_analytics', 'google_ads', 'dv360'].includes(platform)) {
+    return res.status(400).json({ error: 'platform google_analytics, google_ads veya dv360 olmalı' });
   }
   try {
     const companyId = await resolveCompanyId(req.user, brand_id);
@@ -113,6 +114,9 @@ router.get('/google/callback', async (req, res) => {
     } else if (platform === 'google_ads') {
       const customers = await listAdsCustomers(tokens).catch(() => []);
       accountId = customers[0] || null;
+    } else if (platform === 'dv360') {
+      // accountId boş kalır; advertiser seçimi ayrı adımda yapılır
+      accountId = null;
     }
 
     const { rows: [integration] } = await pool.query(
@@ -251,7 +255,7 @@ router.post('/log-verify', authMiddleware, async (req, res) => {
 
 router.delete('/google', authMiddleware, async (req, res) => {
   const { platform, brand_id } = req.query;
-  if (!['google_analytics', 'google_ads'].includes(platform)) {
+  if (!['google_analytics', 'google_ads', 'dv360'].includes(platform)) {
     return res.status(400).json({ error: 'Geçersiz platform.' });
   }
   try {
@@ -510,6 +514,81 @@ router.get('/linkedin/callback', async (req, res) => {
   } catch (err) {
     console.error('LinkedIn OAuth callback hatası:', err);
     res.redirect(`${FRONTEND_URL}/integrations?error=linkedin`);
+  }
+});
+
+// ── DV360 Advertiser seçimi ───────────────────────────────────────────────────
+
+// GET /api/integrations/dv360/advertisers — bağlı hesaptaki advertiser'ları listele
+router.get('/dv360/advertisers', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const { rows: [integration] } = await pool.query(
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [companyId, 'dv360']
+    );
+    if (!integration) return res.status(404).json({ error: 'DV360 entegrasyonu bulunamadı.' });
+
+    const tokens = {
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+    };
+
+    const advertisers = await listAllAdvertisers(tokens, integration.id);
+    res.json({ advertisers, selected_advertiser_id: integration.extra?.advertiser_id || null });
+  } catch (err) {
+    console.error('[dv360/advertisers]', err);
+    res.status(500).json({ error: err.message || 'Advertiser listesi alınamadı.' });
+  }
+});
+
+// POST /api/integrations/dv360/advertiser — seçilen advertiser'ı kaydet
+router.post('/dv360/advertiser', authMiddleware, async (req, res) => {
+  const { advertiser_id, advertiser_name, partner_id, brand_id } = req.body;
+  if (!advertiser_id) return res.status(400).json({ error: 'advertiser_id zorunlu.' });
+  try {
+    const companyId = await resolveCompanyId(req.user, brand_id);
+    const { rows: [row] } = await pool.query(
+      `UPDATE integrations
+       SET extra = COALESCE(extra, '{}') || $1::jsonb,
+           account_id = $2,
+           status = 'connected'
+       WHERE company_id = $3 AND platform = 'dv360' AND is_active = true
+       RETURNING id`,
+      [JSON.stringify({ advertiser_id, advertiser_name, partner_id }), String(advertiser_id), companyId]
+    );
+    if (!row) return res.status(404).json({ error: 'DV360 entegrasyonu bulunamadı.' });
+    res.json({ success: true, integration_id: row.id });
+  } catch (err) {
+    console.error('[dv360/advertiser POST]', err);
+    res.status(500).json({ error: err.message || 'Sunucu hatası.' });
+  }
+});
+
+// GET /api/integrations/dv360/campaigns — seçili advertiser'ın kampanyaları
+router.get('/dv360/campaigns', authMiddleware, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.query.brand_id);
+    const { rows: [integration] } = await pool.query(
+      'SELECT * FROM integrations WHERE company_id = $1 AND platform = $2 AND is_active = true LIMIT 1',
+      [companyId, 'dv360']
+    );
+    if (!integration) return res.status(404).json({ error: 'DV360 entegrasyonu bulunamadı.' });
+    const advertiserId = integration.extra?.advertiser_id;
+    if (!advertiserId) return res.status(400).json({ error: 'Advertiser seçilmemiş.' });
+
+    const tokens = {
+      access_token:  decrypt(integration.access_token),
+      refresh_token: decrypt(integration.refresh_token),
+      expiry_date:   integration.token_expiry ? new Date(integration.token_expiry).getTime() : null,
+    };
+
+    const campaigns = await listDv360Campaigns(tokens, advertiserId, integration.id);
+    res.json({ campaigns, advertiser_id: advertiserId });
+  } catch (err) {
+    console.error('[dv360/campaigns]', err);
+    res.status(500).json({ error: err.message || 'Kampanya listesi alınamadı.' });
   }
 });
 

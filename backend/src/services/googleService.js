@@ -13,6 +13,12 @@ const PLATFORM_SCOPES = {
     'email',
     'profile',
   ],
+  dv360: [
+    'https://www.googleapis.com/auth/display-video',
+    'openid',
+    'email',
+    'profile',
+  ],
 };
 
 function createClient() {
