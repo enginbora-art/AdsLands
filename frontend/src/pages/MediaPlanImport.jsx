@@ -74,7 +74,17 @@ function UploadStep({ onParsed, onError }) {
       const parsed = await importMediaPlan(base64, file.name);
       onParsed(parsed);
     } catch (err) {
-      onError(err?.response?.data?.error || err.message || 'Yükleme başarısız.');
+      console.error('[importMediaPlan] status:', err.response?.status,
+        '| data:', err.response?.data,
+        '| code:', err.code,
+        '| msg:', err.message);
+      let msg = 'Yükleme başarısız.';
+      if (err.response?.data?.error)          msg = err.response.data.error;
+      else if (err.response?.status === 413)  msg = 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.';
+      else if (err.response?.status === 429)  msg = err.response.data?.error || 'AI kullanım limitine ulaştınız.';
+      else if (err.response?.status === 503)  msg = 'AI servisi şu an kullanılamıyor, lütfen tekrar deneyin.';
+      else if (!err.response)                 msg = 'Sunucuya ulaşılamadı. Lütfen sayfayı yenileyip tekrar deneyin.';
+      onError(msg);
     } finally {
       setUploading(false);
     }

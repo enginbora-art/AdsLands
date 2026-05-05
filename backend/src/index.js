@@ -81,13 +81,24 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   ? ['https://adslands.com', 'https://www.adslands.com']
   : ['https://adslands.com', 'https://www.adslands.com', 'http://localhost:5173'];
 
-app.use(cors({
-  origin: allowedOrigins,
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow same-origin (no Origin header) and explicitly listed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-}));
-app.options('*', cors());
+  optionsSuccessStatus: 200,
+};
+
+// OPTIONS preflight must be handled first, before body parser
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -122,6 +133,21 @@ app.use('/api/logs',      logsRoutes);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// ── Global error handler ───────────────────────────────────────────────────────
+// Runs after all routes; ensures JSON + CORS headers on all error responses
+app.use((err, req, res, next) => {
+  // Body too large (express.json / express.urlencoded)
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({ error: 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.' });
+  }
+  // Malformed JSON
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Geçersiz istek formatı.' });
+  }
+  console.error('[unhandled error]', err);
+  res.status(err.status || 500).json({ error: err.message || 'Sunucu hatası.' });
+});
 
 app.listen(PORT, () => {
   console.log(`AdsLands API running on http://localhost:${PORT}`);
