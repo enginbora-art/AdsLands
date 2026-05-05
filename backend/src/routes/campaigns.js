@@ -591,8 +591,23 @@ router.get('/:id/performance', authMiddleware, requireActiveSubscription, async 
       const budgetAchievement = totalAllocated > 0
         ? Math.round((actualSpend / totalAllocated) * 1000) / 10 : null;
 
+      // Merge any legacy duplicate ad_model names (should not occur with unique constraint,
+      // but may exist in data imported before the constraint was added)
+      const merged = {};
+      for (const r of rows) {
+        const key = r.ad_model || '';
+        if (!merged[key]) {
+          merged[key] = { ...r };
+        } else {
+          merged[key].allocated_budget += r.allocated_budget;
+          if (merged[key].planned_kpi != null && r.planned_kpi != null)
+            merged[key].planned_kpi = (parseFloat(merged[key].planned_kpi) || 0) + (parseFloat(r.planned_kpi) || 0);
+        }
+      }
+      const deduped = Object.values(merged);
+
       // Distribute actual spend proportionally across ad_models for progress bars
-      const adModelRows = rows.map(r => {
+      const adModelRows = deduped.map(r => {
         const share = totalAllocated > 0 ? r.allocated_budget / totalAllocated : 0;
         const modelActual = Math.round(actualSpend * share * 100) / 100;
         const modelAchievement = r.allocated_budget > 0
@@ -905,7 +920,8 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
       VALUES ($1, $2, $3, $4, $5, 'draft', $6) RETURNING *
     `, [companyId, name.trim(), Number(total_budget), start_date, end_date, req.user.id]);
 
-    // One row per line — each (platform, ad_model) combination gets its own channel
+    // One row per line — each (platform, ad_model) combination gets its own channel.
+    // On duplicate ad_model within the same platform: SUM budgets and KPIs.
     for (const ln of lines) {
       const platform = (ln.platform || 'other').toLowerCase();
       const adModel  = (ln.ad_model || '').trim();
@@ -915,13 +931,13 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
            buying_type, unit_price, targeting, frequency, imported_from_plan)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
         ON CONFLICT (campaign_id, platform, ad_model) DO UPDATE SET
-          allocated_budget   = EXCLUDED.allocated_budget,
-          planned_kpi        = EXCLUDED.planned_kpi,
-          kpi_type           = EXCLUDED.kpi_type,
-          buying_type        = EXCLUDED.buying_type,
-          unit_price         = EXCLUDED.unit_price,
-          targeting          = EXCLUDED.targeting,
-          frequency          = EXCLUDED.frequency,
+          allocated_budget   = campaign_channels.allocated_budget + EXCLUDED.allocated_budget,
+          planned_kpi        = COALESCE(campaign_channels.planned_kpi, 0) + COALESCE(EXCLUDED.planned_kpi, 0),
+          kpi_type           = COALESCE(campaign_channels.kpi_type, EXCLUDED.kpi_type),
+          buying_type        = COALESCE(campaign_channels.buying_type, EXCLUDED.buying_type),
+          unit_price         = COALESCE(campaign_channels.unit_price, EXCLUDED.unit_price),
+          targeting          = COALESCE(campaign_channels.targeting, EXCLUDED.targeting),
+          frequency          = COALESCE(campaign_channels.frequency, EXCLUDED.frequency),
           imported_from_plan = true
       `, [
         campaign.id, platform, adModel,

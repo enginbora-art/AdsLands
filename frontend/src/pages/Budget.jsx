@@ -24,13 +24,20 @@ const BUDGET_PLATFORMS = [
 const PLATFORM_MAP   = Object.fromEntries(BUDGET_PLATFORMS.map(p => [p.platform, p]));
 
 const PLATFORM_LABELS = {
-  google_ads: 'Google Ads', meta: 'Meta Ads', tiktok: 'TikTok Ads',
-  linkedin: 'LinkedIn Ads', adform: 'Adform', appsflyer: 'AppsFlyer', adjust: 'Adjust',
+  google_ads:  'Google Ads',  meta:        'Meta Ads',     tiktok:      'TikTok Ads',
+  linkedin:    'LinkedIn Ads', adform:      'Adform',       appsflyer:   'AppsFlyer',
+  adjust:      'Adjust',       google:      'Google',       youtube:     'YouTube',
+  video:       'Video',        programatik: 'Programatik',  display:     'Display',
+  x:           'X (Twitter)',  other:       'Diğer',        dv360:       'Display & Video 360',
 };
 const PLATFORM_COLORS = {
-  google_ads: '#4285F4', meta: '#1877F2', tiktok: '#69C9D0',
-  linkedin: '#0A66C2', adform: '#E84B37', appsflyer: '#00B4D8', adjust: '#EC407A',
+  google_ads:  '#4285F4', meta:        '#1877F2', tiktok:      '#69C9D0',
+  linkedin:    '#0A66C2', adform:      '#E84B37', appsflyer:   '#00B4D8',
+  adjust:      '#EC407A', google:      '#4285F4', youtube:     '#FF0000',
+  video:       '#8B5CF6', programatik: '#14B8A6', display:     '#6366F1',
+  x:           '#94A3B8', other:       '#6B7280', dv360:       '#1A73E8',
 };
+const platformLabel = (p) => PLATFORM_LABELS[p] || (p ? p.charAt(0).toUpperCase() + p.slice(1) : p);
 const ALL_CAMPAIGN_PLATFORMS = ['google_ads','meta','tiktok','linkedin','adform','appsflyer','adjust'];
 
 const CHANNEL_KPIS = {
@@ -478,7 +485,24 @@ function ConfirmModal({ title, message, onConfirm, onClose }) {
 }
 
 // ── Campaign Detail Modal ─────────────────────────────────────────────────────
-const KPI_LABELS = { roas: 'ROAS', cpa: 'CPA (₺)', ctr: 'CTR (%)', impression: 'İmpresyon', conversion: 'Dönüşüm' };
+const KPI_LABELS = {
+  roas: 'ROAS', cpa: 'CPA (₺)', ctr: 'CTR (%)',
+  impression: 'İmpresyon', conversion: 'Dönüşüm', click: 'Tıklanma', view: 'İzlenme',
+};
+const KPI_NOUN = {
+  impression: 'gösterim', conversion: 'dönüşüm', click: 'tıklanma', view: 'izlenme',
+};
+
+function fmtKpiVal(type, value) {
+  if (value === null || value === undefined) return '—';
+  const n = Number(value);
+  if (['impression', 'conversion', 'click', 'view'].includes(type)) {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M`;
+    if (n >= 1_000)     return `${Math.round(n / 1_000)}K`;
+    return n.toLocaleString('tr-TR');
+  }
+  return n.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+}
 
 function achievementColor(pct) {
   if (pct === null || pct === undefined) return '#6B7280';
@@ -504,9 +528,16 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
   const [showAddCh, setShowAddCh]     = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
   const [removing, setRemoving]       = useState(null);
-  const [activeTab, setActiveTab]     = useState('kanallar');
-  const [perfData, setPerfData]       = useState(null);
-  const [perfLoading, setPerfLoading] = useState(false);
+  const [activeTab, setActiveTab]         = useState('kanallar');
+  const [perfData, setPerfData]           = useState(null);
+  const [perfLoading, setPerfLoading]     = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+
+  const toggleGroup = (plt) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    next.has(plt) ? next.delete(plt) : next.add(plt);
+    return next;
+  });
 
   const load = useCallback(() => {
     setLoading(true);
@@ -519,7 +550,11 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
     if (activeTab !== 'performans') return;
     setPerfLoading(true);
     getCampaignPerformance(campaignId)
-      .then(setPerfData)
+      .then(d => {
+        setPerfData(d);
+        // Expand all groups by default
+        if (d?.platform_groups) setExpandedGroups(new Set(d.platform_groups.map(g => g.platform)));
+      })
       .catch(() => setPerfData(null))
       .finally(() => setPerfLoading(false));
   }, [activeTab, campaignId]);
@@ -618,68 +653,63 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                     Performans takibi için kampanyaya kanal ekleyin.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {perfData.platform_groups.map(pg => {
-                      const pgColor = achievementColor(pg.budget_achievement);
+                      const pgColor  = achievementColor(pg.budget_achievement);
+                      const expanded = expandedGroups.has(pg.platform);
                       return (
                         <div key={pg.platform} style={{ background: 'var(--bg3)', borderRadius: 12, border: '1px solid var(--border2)', overflow: 'hidden' }}>
-                          {/* Platform header row */}
-                          <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <PlatformIcon platform={pg.platform} size={30} />
+                          {/* Platform header — clickable to collapse */}
+                          <div
+                            onClick={() => toggleGroup(pg.platform)}
+                            style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <PlatformIcon platform={pg.platform} size={28} />
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700 }}>{PLATFORM_LABELS[pg.platform] || pg.platform}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>₺{fmt(pg.total_actual)} / ₺{fmt(pg.total_allocated)} toplam</div>
-                            </div>
-                            {pg.budget_achievement !== null ? (
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 15, fontWeight: 800, color: pgColor }}>%{pg.budget_achievement.toFixed(1)}</div>
-                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>gerçekleşme</div>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{platformLabel(pg.platform)}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                                ₺{fmt(pg.total_allocated)} planlanan{pg.total_actual > 0 ? ` — ₺${fmt(pg.total_actual)} gerçekleşen` : ''}
                               </div>
-                            ) : (
-                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>—</div>
+                            </div>
+                            {pg.budget_achievement !== null && (
+                              <div style={{ textAlign: 'right', marginRight: 4 }}>
+                                <div style={{ fontSize: 14, fontWeight: 800, color: pgColor }}>%{pg.budget_achievement.toFixed(1)}</div>
+                              </div>
                             )}
+                            <div style={{ fontSize: 11, color: 'var(--text3)', transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</div>
                           </div>
 
                           {/* Ad model sub-rows */}
-                          {pg.ad_models.map((am, idx) => {
+                          {expanded && pg.ad_models.map((am, idx) => {
                             const amColor = achievementColor(am.budget_achievement);
                             const isLast  = idx === pg.ad_models.length - 1;
+                            const kpiNoun = KPI_NOUN[am.kpi_type];
                             return (
-                              <div key={am.id} style={{ padding: '10px 14px 10px 52px', borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.04)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: amColor, flexShrink: 0 }} />
-                                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
-                                    {am.ad_model || '(reklam modeli belirtilmemiş)'}
-                                    {am.buying_type && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>{am.buying_type}</span>}
+                              <div key={am.id || idx} style={{ padding: '9px 14px 9px 50px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: isLast ? 'none' : 'none' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: amColor, flexShrink: 0 }} />
+                                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text1)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {am.ad_model || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>model belirtilmemiş</span>}
+                                    {am.buying_type && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6, fontWeight: 400 }}>{am.buying_type}</span>}
                                   </div>
-                                  <div style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>
-                                    ₺{fmt(am.actual_spend)} / ₺{fmt(am.allocated_budget)}
+                                  <div style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                    ₺{fmt(am.allocated_budget)}
                                   </div>
-                                  {am.budget_achievement !== null && (
-                                    <div style={{ minWidth: 42, textAlign: 'right', fontSize: 12, fontWeight: 700, color: amColor }}>
-                                      %{am.budget_achievement.toFixed(1)}
-                                    </div>
-                                  )}
+                                  <div style={{ minWidth: 46, textAlign: 'right', fontSize: 12, fontWeight: 700, color: amColor, flexShrink: 0 }}>
+                                    {am.budget_achievement !== null ? `%${am.budget_achievement.toFixed(1)}` : '—'}
+                                  </div>
                                 </div>
                                 <AchievementBar pct={am.budget_achievement} />
-                                {/* KPI row */}
-                                {am.kpi_type && am.planned_kpi !== null && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                                    <span style={{ fontSize: 10, color: 'var(--text3)' }}>{KPI_LABELS[am.kpi_type] || am.kpi_type}:</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600 }}>{Number(am.planned_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
-                                    <span style={{ fontSize: 10, color: 'var(--text3)' }}>planlanan</span>
+                                {/* KPI hint */}
+                                {am.kpi_type && am.planned_kpi != null && (
+                                  <div style={{ marginTop: 5, fontSize: 10, color: 'var(--text3)' }}>
+                                    {fmtKpiVal(am.kpi_type, am.planned_kpi)}
+                                    {kpiNoun ? ` ${kpiNoun}` : ` ${KPI_LABELS[am.kpi_type] || am.kpi_type}`} hedef
                                     {am.actual_kpi !== null && (
-                                      <>
-                                        <span style={{ fontSize: 10, color: 'var(--text3)' }}>→</span>
-                                        <span style={{ fontSize: 11, fontWeight: 700, color: achievementColor(am.kpi_achievement) }}>
-                                          {Number(am.actual_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-                                        </span>
-                                        {am.kpi_achievement !== null && (
-                                          <span style={{ fontSize: 10, fontWeight: 700, color: achievementColor(am.kpi_achievement) }}>
-                                            (%{am.kpi_achievement.toFixed(1)})
-                                          </span>
-                                        )}
-                                      </>
+                                      <span style={{ marginLeft: 8, color: achievementColor(am.kpi_achievement), fontWeight: 700 }}>
+                                        → {fmtKpiVal(am.kpi_type, am.actual_kpi)}
+                                        {am.kpi_achievement !== null && ` (%${am.kpi_achievement.toFixed(1)})`}
+                                      </span>
                                     )}
                                   </div>
                                 )}
@@ -750,7 +780,7 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                     <div key={ch.id} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', gap: 12 }}>
                       <PlatformIcon platform={ch.platform} size={32} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{PLATFORM_LABELS[ch.platform]}{ch.ad_model ? ` · ${ch.ad_model}` : ''}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{platformLabel(ch.platform)}{ch.ad_model ? ` · ${ch.ad_model}` : ''}</div>
                         {ch.external_campaign_name && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.external_campaign_name}</div>}
                         {ch.external_campaign_id && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {ch.external_campaign_id}</div>}
                       </div>
