@@ -897,11 +897,12 @@ export default function Integrations({ onNav }) {
       setImportModal({ type: 'metabm', sessionId: params.get('metabm_session') });
     } else if (params.get('verify')) {
       setVerifyParams({
-        platform:      params.get('verify'),
-        accountName:   params.get('account_name'),
-        brandName:     params.get('brand_name'),
-        similarity:    parseFloat(params.get('similarity') || '0'),
-        integrationId: params.get('integration_id'),
+        platform:       params.get('verify'),
+        accountName:    params.get('account_name'),
+        brandName:      params.get('brand_name'),
+        similarity:     parseFloat(params.get('similarity') || '0'),
+        integrationId:  params.get('integration_id'),
+        needsCustomer:  params.get('needs_customer') === '1',
       });
     } else if (params.get('success') === 'dv360') {
       setDv360AdvModal(true);
@@ -928,8 +929,13 @@ export default function Integrations({ onNav }) {
   const handleVerifyConfirm = async () => {
     if (!verifyParams) return;
     try { await logVerify(verifyParams.integrationId, 'confirmed'); } catch {}
+    const { platform, needsCustomer } = verifyParams;
     setVerifyParams(null);
-    showSuccess(`${PLATFORM_LABELS[verifyParams.platform] || verifyParams.platform} başarıyla bağlandı!`);
+    if (needsCustomer && platform === 'google_ads') {
+      setGadsCustomerModal(true);
+    } else {
+      showSuccess(`${PLATFORM_LABELS[platform] || platform} başarıyla bağlandı!`);
+    }
     load();
   };
 

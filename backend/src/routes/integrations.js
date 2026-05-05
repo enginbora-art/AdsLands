@@ -114,11 +114,16 @@ router.get('/google/callback', async (req, res) => {
       const props = await getAnalyticsProperties(tokens).catch(() => []);
       accountId = props[0]?.propertyId || null;
     } else if (platform === 'google_ads') {
-      const customers = await listAdsCustomersWithDetails(tokens).catch(() => []);
+      const customers = await listAdsCustomersWithDetails(tokens).catch((e) => {
+        console.warn('[google/callback] listAdsCustomersWithDetails hatası:', e?.message);
+        return [];
+      });
+      console.log(`[google/callback] google_ads customers found: ${customers.length}`);
       // Yönetici (MCC) olmayan ilk hesabı varsayılan olarak al
       const nonMgr = customers.filter(c => !c.isManager);
       accountId = (nonMgr[0] || customers[0])?.id || null;
-      needsCustomerSelection = customers.length > 1;
+      // Hesap varsa her zaman seçim modali göster (tek hesapta da kullanıcı onaylamalı)
+      needsCustomerSelection = customers.length >= 1;
     } else if (platform === 'dv360') {
       accountId = null;
     }
@@ -192,6 +197,7 @@ router.get('/google/callback', async (req, res) => {
         similarity:      similarity.toFixed(3),
         integration_id:  integration.id,
       });
+      if (needsCustomerSelection) params.set('needs_customer', '1');
       return res.redirect(`${FRONTEND_URL}/integrations?${params.toString()}`);
     }
 
