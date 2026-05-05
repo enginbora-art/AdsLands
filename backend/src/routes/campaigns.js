@@ -313,8 +313,9 @@ router.delete('/:id', authMiddleware, requireActiveSubscription, async (req, res
 
 // POST /api/campaigns/:id/channels  (also used for updating via upsert)
 router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (req, res) => {
-  const { platform, external_campaign_id, external_campaign_name, allocated_budget, kpi } = req.body;
+  const { platform, ad_model, external_campaign_id, external_campaign_name, allocated_budget, kpi } = req.body;
   if (!platform) return res.status(400).json({ error: 'Platform gerekli.' });
+  const adModel = (ad_model || '').trim();
   try {
     const companyId = req.user.company_type === 'agency' ? req.body.brand_id || req.user.company_id : req.user.company_id;
     const { rows: [c] } = await pool.query(
@@ -324,17 +325,17 @@ router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (r
     if (!c) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
 
     const { rows: [existingCh] } = await pool.query(
-      'SELECT id FROM campaign_channels WHERE campaign_id = $1 AND platform = $2',
-      [req.params.id, platform]
+      'SELECT id FROM campaign_channels WHERE campaign_id = $1 AND platform = $2 AND ad_model = $3',
+      [req.params.id, platform, adModel]
     );
     const isChannelUpdate = !!existingCh;
 
     const { rows: [channel] } = await pool.query(`
       INSERT INTO campaign_channels
-        (campaign_id, platform, external_campaign_id, external_campaign_name, allocated_budget,
+        (campaign_id, platform, ad_model, external_campaign_id, external_campaign_name, allocated_budget,
          kpi_roas, kpi_cpa, kpi_ctr, kpi_impression, kpi_conversion)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (campaign_id, platform) DO UPDATE
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (campaign_id, platform, ad_model) DO UPDATE
         SET external_campaign_id   = EXCLUDED.external_campaign_id,
             external_campaign_name = EXCLUDED.external_campaign_name,
             allocated_budget       = EXCLUDED.allocated_budget,
@@ -345,7 +346,7 @@ router.post('/:id/channels', authMiddleware, requireActiveSubscription, async (r
             kpi_conversion         = EXCLUDED.kpi_conversion
       RETURNING *
     `, [
-      req.params.id, platform,
+      req.params.id, platform, adModel,
       external_campaign_id || null, external_campaign_name || null, allocated_budget || 0,
       kpi?.roas || null, kpi?.cpa || null, kpi?.ctr || null,
       kpi?.impression || null, kpi?.conversion || null,
@@ -519,11 +520,14 @@ router.get('/:id/performance', authMiddleware, requireActiveSubscription, async 
     if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
 
     const { rows: channels } = await pool.query(
-      'SELECT * FROM campaign_channels WHERE campaign_id = $1 ORDER BY created_at',
+      'SELECT * FROM campaign_channels WHERE campaign_id = $1 ORDER BY platform, created_at',
       [req.params.id]
     );
 
-    const channelsWithPerf = await Promise.all(channels.map(async (ch) => {
+    // Fetch platform-level actuals once per unique platform (avoid N+1 for same platform)
+    const uniquePlatforms = [...new Set(channels.map(c => c.platform))];
+    const platformActuals = {};
+    await Promise.all(uniquePlatforms.map(async (plt) => {
       const { rows: [m] } = await pool.query(`
         SELECT
           COALESCE(SUM(m.spend), 0)::float       AS actual_spend,
@@ -535,84 +539,94 @@ router.get('/:id/performance', authMiddleware, requireActiveSubscription, async 
         JOIN ad_metrics m ON m.integration_id = i.id
           AND m.date >= $3 AND m.date <= LEAST($4::date, CURRENT_DATE)
         WHERE i.company_id = $1 AND i.platform = $2 AND i.is_active = true
-      `, [campaign.brand_id, ch.platform, campaign.start_date, campaign.end_date]);
+      `, [campaign.brand_id, plt, campaign.start_date, campaign.end_date]);
+      platformActuals[plt] = m;
+    }));
 
-      const allocatedBudget = parseFloat(ch.allocated_budget) || 0;
-      const actualSpend     = m.actual_spend || 0;
-      const budgetAchievement = allocatedBudget > 0
-        ? Math.round((actualSpend / allocatedBudget) * 1000) / 10
-        : null;
-
-      let kpiType   = ch.kpi_type || null;
-      let plannedKpi = null;
-      let actualKpi  = null;
-
+    function resolveKpi(ch) {
+      let kpiType = ch.kpi_type || null;
       if (!kpiType) {
-        if (ch.kpi_roas)       kpiType = 'roas';
-        else if (ch.kpi_cpa)   kpiType = 'cpa';
-        else if (ch.kpi_ctr)   kpiType = 'ctr';
+        if (ch.kpi_roas)            kpiType = 'roas';
+        else if (ch.kpi_cpa)        kpiType = 'cpa';
+        else if (ch.kpi_ctr)        kpiType = 'ctr';
         else if (ch.kpi_impression) kpiType = 'impression';
         else if (ch.kpi_conversion) kpiType = 'conversion';
       }
+      const plannedKpi = kpiType === 'roas'       ? (parseFloat(ch.kpi_roas)       || null)
+                       : kpiType === 'cpa'         ? (parseFloat(ch.kpi_cpa)        || null)
+                       : kpiType === 'ctr'         ? (parseFloat(ch.kpi_ctr)        || null)
+                       : kpiType === 'impression'  ? (parseFloat(ch.kpi_impression) || null)
+                       : kpiType === 'conversion'  ? (parseFloat(ch.kpi_conversion) || null)
+                       : parseFloat(ch.planned_kpi) || null;
+      return { kpiType, plannedKpi };
+    }
 
-      if (kpiType === 'roas') {
-        plannedKpi = parseFloat(ch.kpi_roas) || null;
-        actualKpi  = m.actual_roas > 0 ? m.actual_roas : null;
-      } else if (kpiType === 'cpa') {
-        plannedKpi = parseFloat(ch.kpi_cpa) || null;
-        actualKpi  = actualSpend > 0 && m.actual_conversions > 0
-          ? Math.round((actualSpend / m.actual_conversions) * 100) / 100 : null;
-      } else if (kpiType === 'ctr') {
-        plannedKpi = parseFloat(ch.kpi_ctr) || null;
-        actualKpi  = m.actual_impressions > 0
-          ? Math.round((m.actual_clicks / m.actual_impressions) * 10000) / 100 : null;
-      } else if (kpiType === 'impression') {
-        plannedKpi = parseFloat(ch.kpi_impression) || null;
-        actualKpi  = m.actual_impressions > 0 ? m.actual_impressions : null;
-      } else if (kpiType === 'conversion') {
-        plannedKpi = parseFloat(ch.kpi_conversion) || null;
-        actualKpi  = m.actual_conversions > 0 ? m.actual_conversions : null;
-      }
+    // Group channels by platform
+    const grouped = {};
+    for (const ch of channels) {
+      const plt = ch.platform;
+      if (!grouped[plt]) grouped[plt] = [];
+      const m = platformActuals[plt];
+      const allocBudget = parseFloat(ch.allocated_budget) || 0;
 
-      let kpiAchievement = null;
-      if (plannedKpi && actualKpi !== null) {
-        kpiAchievement = kpiType === 'cpa'
-          ? Math.round((plannedKpi / actualKpi) * 1000) / 10
-          : Math.round((actualKpi / plannedKpi) * 1000) / 10;
-      }
+      const { kpiType, plannedKpi } = resolveKpi(ch);
+      // Actual KPI — derived from platform totals (best effort; no per-ad-model breakdown from ad_metrics)
+      const actualKpi = null; // populated when campaign_actuals has per-channel data
+
+      grouped[plt].push({
+        id: ch.id, platform: ch.platform, ad_model: ch.ad_model || '',
+        external_campaign_id: ch.external_campaign_id, external_campaign_name: ch.external_campaign_name,
+        allocated_budget: allocBudget,
+        kpi_type: kpiType, planned_kpi: plannedKpi, actual_kpi: actualKpi,
+        kpi_achievement: null,
+        buying_type: ch.buying_type,
+      });
+    }
+
+    // Build platform_groups with platform-level actuals
+    const platform_groups = Object.entries(grouped).map(([plt, rows]) => {
+      const m = platformActuals[plt];
+      const totalAllocated = rows.reduce((s, r) => s + r.allocated_budget, 0);
+      const actualSpend    = m?.actual_spend || 0;
+      const budgetAchievement = totalAllocated > 0
+        ? Math.round((actualSpend / totalAllocated) * 1000) / 10 : null;
+
+      // Distribute actual spend proportionally across ad_models for progress bars
+      const adModelRows = rows.map(r => {
+        const share = totalAllocated > 0 ? r.allocated_budget / totalAllocated : 0;
+        const modelActual = Math.round(actualSpend * share * 100) / 100;
+        const modelAchievement = r.allocated_budget > 0
+          ? Math.round((modelActual / r.allocated_budget) * 1000) / 10 : null;
+        return { ...r, actual_spend: modelActual, budget_achievement: modelAchievement };
+      });
 
       return {
-        ...ch,
-        actual_spend:        actualSpend,
-        actual_roas:         m.actual_roas,
-        actual_conversions:  m.actual_conversions,
-        actual_clicks:       m.actual_clicks,
-        actual_impressions:  m.actual_impressions,
-        budget_achievement:  budgetAchievement,
-        kpi_type:            kpiType,
-        planned_kpi:         plannedKpi,
-        actual_kpi:          actualKpi,
-        kpi_achievement:     kpiAchievement,
+        platform: plt,
+        total_allocated: totalAllocated,
+        total_actual: actualSpend,
+        budget_achievement: budgetAchievement,
+        actual_roas: m?.actual_roas || 0,
+        ad_models: adModelRows,
       };
-    }));
+    });
 
-    const totalAllocated = channelsWithPerf.reduce((s, c) => s + (parseFloat(c.allocated_budget) || 0), 0);
-    const totalActual    = channelsWithPerf.reduce((s, c) => s + (c.actual_spend || 0), 0);
+    const totalAllocated = platform_groups.reduce((s, g) => s + g.total_allocated, 0);
+    const totalActual    = platform_groups.reduce((s, g) => s + g.total_actual, 0);
     const overallBudget  = totalAllocated > 0
       ? Math.round((totalActual / totalAllocated) * 1000) / 10 : null;
 
-    const withBudget = channelsWithPerf.filter(c => c.budget_achievement !== null);
-    const onTrack = withBudget.filter(c => c.budget_achievement >= 90).length;
-    const warning = withBudget.filter(c => c.budget_achievement >= 70 && c.budget_achievement < 90).length;
-    const critical = withBudget.filter(c => c.budget_achievement < 70).length;
+    const withBudget = platform_groups.filter(g => g.budget_achievement !== null);
+    const onTrack = withBudget.filter(g => g.budget_achievement >= 90).length;
+    const warning = withBudget.filter(g => g.budget_achievement >= 70 && g.budget_achievement < 90).length;
+    const critical = withBudget.filter(g => g.budget_achievement < 70).length;
 
     res.json({
-      channels: channelsWithPerf,
+      platform_groups,
       summary: {
-        total_allocated:    totalAllocated,
-        total_actual:       totalActual,
+        total_allocated: totalAllocated,
+        total_actual:    totalActual,
         budget_achievement: overallBudget,
-        on_track:  onTrack,
+        on_track: onTrack,
         warning,
         critical,
       },
@@ -891,30 +905,16 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
       VALUES ($1, $2, $3, $4, $5, 'draft', $6) RETURNING *
     `, [companyId, name.trim(), Number(total_budget), start_date, end_date, req.user.id]);
 
-    // Group lines by platform, aggregate budget and KPI
-    const groups = {};
+    // One row per line — each (platform, ad_model) combination gets its own channel
     for (const ln of lines) {
       const platform = (ln.platform || 'other').toLowerCase();
-      if (!groups[platform]) {
-        groups[platform] = {
-          budget: 0, planned_kpi: 0, kpi_type: ln.kpi_type || null,
-          buying_type: ln.buying_type || null, unit_price: ln.unit_price || null,
-          targeting: ln.targeting || null, frequency: ln.frequency || null,
-          ad_models: [],
-        };
-      }
-      groups[platform].budget     += Number(ln.budget) || 0;
-      groups[platform].planned_kpi += Number(ln.planned_kpi) || 0;
-      if (ln.ad_model) groups[platform].ad_models.push(ln.ad_model);
-    }
-
-    for (const [platform, g] of Object.entries(groups)) {
+      const adModel  = (ln.ad_model || '').trim();
       await client.query(`
         INSERT INTO campaign_channels
-          (campaign_id, platform, allocated_budget, planned_kpi, kpi_type,
-           buying_type, unit_price, targeting, frequency, imported_from_plan, external_campaign_name)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10)
-        ON CONFLICT (campaign_id, platform) DO UPDATE SET
+          (campaign_id, platform, ad_model, allocated_budget, planned_kpi, kpi_type,
+           buying_type, unit_price, targeting, frequency, imported_from_plan)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+        ON CONFLICT (campaign_id, platform, ad_model) DO UPDATE SET
           allocated_budget   = EXCLUDED.allocated_budget,
           planned_kpi        = EXCLUDED.planned_kpi,
           kpi_type           = EXCLUDED.kpi_type,
@@ -922,13 +922,14 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
           unit_price         = EXCLUDED.unit_price,
           targeting          = EXCLUDED.targeting,
           frequency          = EXCLUDED.frequency,
-          imported_from_plan = true,
-          external_campaign_name = EXCLUDED.external_campaign_name
+          imported_from_plan = true
       `, [
-        campaign.id, platform,
-        g.budget, g.planned_kpi > 0 ? g.planned_kpi : null, g.kpi_type,
-        g.buying_type, g.unit_price, g.targeting, g.frequency,
-        g.ad_models.length ? g.ad_models.join(', ') : null,
+        campaign.id, platform, adModel,
+        Number(ln.budget) || 0,
+        ln.planned_kpi != null ? Number(ln.planned_kpi) : null,
+        ln.kpi_type || null,
+        ln.buying_type || null, ln.unit_price || null,
+        ln.targeting || null, ln.frequency || null,
       ]);
     }
 

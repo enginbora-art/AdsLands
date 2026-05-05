@@ -278,9 +278,10 @@ function CampaignFormModal({ existing, onClose, onSave, brandId }) {
 }
 
 // ── Add / Edit Channel Modal ───────────────────────────────────────────────────
-function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing, onClose, onSave }) {
+function AddChannelModal({ campaignId, campaignName, existing, onClose, onSave }) {
   const isEdit = !!existing;
   const [platform, setPlatform]       = useState(existing?.platform || '');
+  const [adModel, setAdModel]         = useState(existing?.ad_model || '');
   const [extId, setExtId]             = useState(existing?.external_campaign_id || '');
   const [extName, setExtName]         = useState(existing?.external_campaign_name || '');
   const [allocBudget, setAllocBudget] = useState(
@@ -302,13 +303,9 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
   const searchTimer                   = useRef(null);
-  // For add mode: exclude already-added platforms; for edit mode: all platforms available (platform is locked anyway)
-  const available = isEdit
-    ? ALL_CAMPAIGN_PLATFORMS
-    : ALL_CAMPAIGN_PLATFORMS.filter(p => !existingPlatforms.includes(p));
 
   useEffect(() => {
-    if (isEdit) return; // don't reset when editing
+    if (isEdit) return;
     setExtId(''); setExtName(''); setSuggestions([]); setKpiValues({});
   }, [platform]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -342,7 +339,7 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing
       if (val && String(val).trim()) kpi[key] = val;
     }
     try {
-      await onSave({ platform, external_campaign_id: extId.trim(), external_campaign_name: extName.trim() || null, allocated_budget: Number(allocBudget), kpi });
+      await onSave({ platform, ad_model: adModel.trim() || '', external_campaign_id: extId.trim(), external_campaign_name: extName.trim() || null, allocated_budget: Number(allocBudget), kpi });
       onClose();
     } catch (e) {
       setError(e?.response?.data?.error || 'Kanal eklenemedi.');
@@ -368,19 +365,25 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing
             </div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {available.map(p => (
+              {ALL_CAMPAIGN_PLATFORMS.map(p => (
                 <button key={p} onClick={() => setPlatform(p)}
                   style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', background: platform === p ? `${PLATFORM_COLORS[p]}22` : 'var(--bg3)', border: `1px solid ${platform === p ? PLATFORM_COLORS[p] + '88' : 'var(--border2)'}`, color: platform === p ? PLATFORM_COLORS[p] : 'var(--text2)' }}>
                   {PLATFORM_LABELS[p]}
                 </button>
               ))}
-              {available.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)' }}>Tüm platformlar eklenmiş.</div>}
             </div>
           )}
         </div>
 
         {platform && (
           <>
+            {/* Ad Model */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Reklam Modeli <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(opsiyonel — ör: Reach, Traffic, Search)</span></div>
+              <input value={adModel} onChange={e => setAdModel(e.target.value)}
+                placeholder="ör: Reach, Thruplay, Search, Video" style={inp} />
+            </div>
+
             {/* Campaign ID with fuzzy search */}
             <div style={{ marginBottom: 14, position: 'relative' }}>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Kampanya ID</div>
@@ -440,7 +443,7 @@ function AddChannelModal({ campaignId, campaignName, existingPlatforms, existing
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '11px 0', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 10, color: 'var(--text3)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>İptal</button>
-          <button onClick={handleSave} disabled={saving || !platform || available.length === 0}
+          <button onClick={handleSave} disabled={saving || !platform}
             style={{ flex: 2, padding: '11px 0', background: 'rgba(0,201,167,0.12)', border: '1px solid rgba(0,201,167,0.3)', borderRadius: 10, color: '#00C9A7', fontWeight: 700, fontSize: 13, cursor: saving || !platform ? 'default' : 'pointer', fontFamily: 'var(--font)', opacity: (!platform || saving) ? 0.5 : 1 }}>
             {saving ? (isEdit ? 'Güncelleniyor...' : 'Ekleniyor...') : 'Kaydet'}
           </button>
@@ -537,7 +540,6 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
         {showAddCh && data && (
           <AddChannelModal
             campaignId={campaignId} campaignName={data.name}
-            existingPlatforms={(data.channels || []).map(c => c.platform)}
             existing={editingChannel}
             onClose={() => { setShowAddCh(false); setEditingChannel(null); }}
             onSave={handleAddChannel} />
@@ -610,67 +612,80 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                   </div>
                 )}
 
-                {/* Channel performance cards */}
-                {(perfData.channels || []).length === 0 ? (
+                {/* Platform groups */}
+                {(perfData.platform_groups || []).length === 0 ? (
                   <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
                     Performans takibi için kampanyaya kanal ekleyin.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {perfData.channels.map(ch => {
-                      const bPct = ch.budget_achievement;
-                      const bColor = achievementColor(bPct);
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {perfData.platform_groups.map(pg => {
+                      const pgColor = achievementColor(pg.budget_achievement);
                       return (
-                        <div key={ch.id} style={{ background: 'var(--bg3)', borderRadius: 12, padding: '14px 16px', border: `1px solid var(--border2)`, borderLeft: `3px solid ${bColor}` }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                            <PlatformIcon platform={ch.platform} size={28} />
+                        <div key={pg.platform} style={{ background: 'var(--bg3)', borderRadius: 12, border: '1px solid var(--border2)', overflow: 'hidden' }}>
+                          {/* Platform header row */}
+                          <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <PlatformIcon platform={pg.platform} size={30} />
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600 }}>{PLATFORM_LABELS[ch.platform] || ch.platform}</div>
-                              {ch.external_campaign_name && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ch.external_campaign_name}</div>}
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{PLATFORM_LABELS[pg.platform] || pg.platform}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>₺{fmt(pg.total_actual)} / ₺{fmt(pg.total_allocated)} toplam</div>
                             </div>
-                            {bPct !== null ? (
+                            {pg.budget_achievement !== null ? (
                               <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 16, fontWeight: 800, color: bColor }}>%{bPct.toFixed(1)}</div>
-                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>bütçe gerçekleşme</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: pgColor }}>%{pg.budget_achievement.toFixed(1)}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>gerçekleşme</div>
                               </div>
                             ) : (
-                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Bütçe atanmamış</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>—</div>
                             )}
                           </div>
 
-                          {/* Budget progress */}
-                          <div style={{ marginBottom: ch.kpi_type ? 10 : 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
-                              <span>Harcanan: ₺{fmt(ch.actual_spend)}</span>
-                              <span>Planlanan: ₺{fmt(ch.allocated_budget)}</span>
-                            </div>
-                            <AchievementBar pct={bPct} />
-                          </div>
-
-                          {/* KPI comparison */}
-                          {ch.kpi_type && ch.planned_kpi !== null && (
-                            <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{KPI_LABELS[ch.kpi_type] || ch.kpi_type}</div>
-                              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                                <div style={{ textAlign: 'center' }}>
-                                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>Planlanan</div>
-                                  <div style={{ fontSize: 13, fontWeight: 700 }}>{Number(ch.planned_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                                </div>
-                                <div style={{ fontSize: 14, color: 'var(--text3)' }}>→</div>
-                                <div style={{ textAlign: 'center' }}>
-                                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>Gerçekleşen</div>
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: ch.actual_kpi !== null ? achievementColor(ch.kpi_achievement) : 'var(--text3)' }}>
-                                    {ch.actual_kpi !== null ? Number(ch.actual_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '—'}
+                          {/* Ad model sub-rows */}
+                          {pg.ad_models.map((am, idx) => {
+                            const amColor = achievementColor(am.budget_achievement);
+                            const isLast  = idx === pg.ad_models.length - 1;
+                            return (
+                              <div key={am.id} style={{ padding: '10px 14px 10px 52px', borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.04)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: amColor, flexShrink: 0 }} />
+                                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
+                                    {am.ad_model || '(reklam modeli belirtilmemiş)'}
+                                    {am.buying_type && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>{am.buying_type}</span>}
                                   </div>
+                                  <div style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>
+                                    ₺{fmt(am.actual_spend)} / ₺{fmt(am.allocated_budget)}
+                                  </div>
+                                  {am.budget_achievement !== null && (
+                                    <div style={{ minWidth: 42, textAlign: 'right', fontSize: 12, fontWeight: 700, color: amColor }}>
+                                      %{am.budget_achievement.toFixed(1)}
+                                    </div>
+                                  )}
                                 </div>
-                                {ch.kpi_achievement !== null && (
-                                  <div style={{ padding: '2px 8px', borderRadius: 6, background: `${achievementColor(ch.kpi_achievement)}20`, border: `1px solid ${achievementColor(ch.kpi_achievement)}40`, fontSize: 11, fontWeight: 700, color: achievementColor(ch.kpi_achievement) }}>
-                                    %{ch.kpi_achievement.toFixed(1)}
+                                <AchievementBar pct={am.budget_achievement} />
+                                {/* KPI row */}
+                                {am.kpi_type && am.planned_kpi !== null && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                                    <span style={{ fontSize: 10, color: 'var(--text3)' }}>{KPI_LABELS[am.kpi_type] || am.kpi_type}:</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600 }}>{Number(am.planned_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                    <span style={{ fontSize: 10, color: 'var(--text3)' }}>planlanan</span>
+                                    {am.actual_kpi !== null && (
+                                      <>
+                                        <span style={{ fontSize: 10, color: 'var(--text3)' }}>→</span>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: achievementColor(am.kpi_achievement) }}>
+                                          {Number(am.actual_kpi).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                                        </span>
+                                        {am.kpi_achievement !== null && (
+                                          <span style={{ fontSize: 10, fontWeight: 700, color: achievementColor(am.kpi_achievement) }}>
+                                            (%{am.kpi_achievement.toFixed(1)})
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            </div>
-                          )}
+                            );
+                          })}
                         </div>
                       );
                     })}
@@ -714,7 +729,7 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>Kanallar ({(data.channels || []).length})</div>
-                {data.status !== 'completed' && (data.channels || []).length < ALL_CAMPAIGN_PLATFORMS.length && (
+                {data.status !== 'completed' && (
                   <button onClick={() => setShowAddCh(true)}
                     style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none', background: 'var(--teal)', color: '#0B1219', fontFamily: 'var(--font)' }}>
                     + Kanal Ekle
@@ -735,7 +750,7 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                     <div key={ch.id} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', gap: 12 }}>
                       <PlatformIcon platform={ch.platform} size={32} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{PLATFORM_LABELS[ch.platform]}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{PLATFORM_LABELS[ch.platform]}{ch.ad_model ? ` · ${ch.ad_model}` : ''}</div>
                         {ch.external_campaign_name && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.external_campaign_name}</div>}
                         {ch.external_campaign_id && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {ch.external_campaign_id}</div>}
                       </div>

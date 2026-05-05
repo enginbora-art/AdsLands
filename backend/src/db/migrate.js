@@ -688,6 +688,26 @@ async function migrate() {
       END $$;
     `);
 
+    // ── campaign_channels: ad_model kolonu ve yeni unique constraint ─────────
+    await client.query(`
+      ALTER TABLE campaign_channels ADD COLUMN IF NOT EXISTS ad_model VARCHAR(100) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE campaign_channels DROP CONSTRAINT IF EXISTS campaign_channels_campaign_id_platform_key;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'campaign_channels_campaign_id_platform_ad_model_key'
+        ) THEN
+          ALTER TABLE campaign_channels
+            ADD CONSTRAINT campaign_channels_campaign_id_platform_ad_model_key
+            UNIQUE (campaign_id, platform, ad_model);
+        END IF;
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
+    `);
+
     // ── Kampanya Gerçekleşenleri (Planlanan vs Gerçekleşen) ───────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS campaign_actuals (
