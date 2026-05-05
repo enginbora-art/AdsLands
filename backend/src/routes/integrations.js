@@ -119,11 +119,11 @@ router.get('/google/callback', async (req, res) => {
         return [];
       });
       console.log(`[google/callback] google_ads customers found: ${customers.length}`);
-      // Yönetici (MCC) olmayan ilk hesabı varsayılan olarak al
       const nonMgr = customers.filter(c => !c.isManager);
       accountId = (nonMgr[0] || customers[0])?.id || null;
-      // Hesap varsa her zaman seçim modali göster (tek hesapta da kullanıcı onaylamalı)
-      needsCustomerSelection = customers.length >= 1;
+      // Müşteri listesi başarısız olsa bile seçim modali her zaman açılmalı.
+      // Gerçek listeleme /google_ads/customers endpoint'inde yapılır.
+      needsCustomerSelection = true;
     } else if (platform === 'dv360') {
       accountId = null;
     }
@@ -190,15 +190,17 @@ router.get('/google/callback', async (req, res) => {
     ).catch(console.error);
 
     if (!matched) {
-      const params = new URLSearchParams({
+      const verifyParams = new URLSearchParams({
         verify:          platform,
         account_name:    accountName || '',
         brand_name:      brandName,
         similarity:      similarity.toFixed(3),
         integration_id:  integration.id,
       });
-      if (needsCustomerSelection) params.set('needs_customer', '1');
-      return res.redirect(`${FRONTEND_URL}/integrations?${params.toString()}`);
+      if (needsCustomerSelection) verifyParams.set('needs_customer', '1');
+      const verifyUrl = `${FRONTEND_URL}/integrations?${verifyParams.toString()}`;
+      console.log('[google/callback] verify redirect, needsCustomer:', needsCustomerSelection, 'url:', verifyUrl);
+      return res.redirect(verifyUrl);
     }
 
     const successParams = new URLSearchParams({ success: platform });
