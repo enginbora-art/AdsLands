@@ -546,7 +546,7 @@ async function migrate() {
         start_date DATE NOT NULL,
         end_date DATE NOT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'draft'
-          CHECK (status IN ('draft', 'active', 'completed')),
+          CHECK (status IN ('draft', 'ready', 'active', 'completed')),
         created_by UUID REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -750,6 +750,17 @@ async function migrate() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS campaign_actuals_channel_date_idx
         ON campaign_actuals (campaign_channel_id, date);
+    `);
+
+    // ── campaigns.status constraint: 'ready' ekle ────────────────────────────
+    await client.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_status_check;
+        ALTER TABLE campaigns ADD CONSTRAINT campaigns_status_check
+          CHECK (status IN ('draft', 'ready', 'active', 'completed'));
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
     `);
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────

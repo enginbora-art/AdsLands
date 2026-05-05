@@ -140,6 +140,28 @@ async function checkExpiringTokens() {
   }
 }
 
+async function updateCampaignStatuses() {
+  const today = new Date().toISOString().split('T')[0];
+
+  // ready → active: start_date bugün veya geçmişte
+  const { rowCount: activatedCount } = await pool.query(`
+    UPDATE campaigns
+    SET status = 'active'
+    WHERE status = 'ready' AND start_date <= $1
+  `, [today]);
+
+  // active/ready → completed: end_date geçmiş
+  await pool.query(`
+    UPDATE campaigns
+    SET status = 'completed'
+    WHERE status IN ('active', 'ready') AND end_date < $1
+  `, [today]);
+
+  if (activatedCount > 0) {
+    console.log(`⏰ Kampanya durumu güncellendi: ${activatedCount} kampanya ready→active`);
+  }
+}
+
 function startCronJobs() {
   // Her gece 02:00'de metrikleri çek ve anomali kontrolü yap
   cron.schedule('0 2 * * *', async () => {
@@ -230,12 +252,22 @@ function startCronJobs() {
     }
   }, { timezone: 'Europe/Istanbul' });
 
+  // Her sabah 07:30 — kampanya statüsü güncelle (ready→active, active/ready→completed)
+  cron.schedule('30 7 * * *', async () => {
+    console.log('⏰ Cron: kampanya statüsü güncelleniyor...');
+    try {
+      await updateCampaignStatuses();
+    } catch (err) {
+      console.error('[Kampanya statüs cron]', err.message);
+    }
+  }, { timezone: 'Europe/Istanbul' });
+
   // Campaign anomaly checks — daily at 10:00
   cron.schedule('0 10 * * *', async () => {
     const { detectCampaignAnomalies } = require('../services/anomalyDetector');
     try {
       const { rows: companies } = await pool.query(
-        "SELECT DISTINCT brand_id AS id FROM campaigns WHERE status = 'active' AND end_date >= CURRENT_DATE"
+        "SELECT DISTINCT brand_id AS id FROM campaigns WHERE status IN ('active','ready') AND end_date >= CURRENT_DATE"
       );
       for (const c of companies) {
         await detectCampaignAnomalies(c.id).catch(err => console.error('[Kampanya anomali]', c.id, err.message));

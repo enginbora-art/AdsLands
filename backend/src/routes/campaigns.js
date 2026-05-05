@@ -81,14 +81,23 @@ async function resolveCompanyId(user, brand_id) {
 async function autoUpdateStatus(campaignId) {
   const { rows: [c] } = await pool.query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
   if (!c) return;
+  if (c.status === 'completed') return 'completed'; // completed is final
   const now = new Date();
-  const { rows: [{ count }] } = await pool.query(
-    'SELECT COUNT(*) FROM campaign_channels WHERE campaign_id = $1', [campaignId]
+  const { rows: [{ matched_count }] } = await pool.query(
+    "SELECT COUNT(*) AS matched_count FROM campaign_channels WHERE campaign_id = $1 AND external_campaign_id IS NOT NULL",
+    [campaignId]
   );
-  let newStatus = c.status;
-  if (new Date(c.end_date) < now) newStatus = 'completed';
-  else if (parseInt(count) === 0) newStatus = 'draft';
-  else newStatus = 'active';
+  const hasMatch = parseInt(matched_count) > 0;
+  let newStatus;
+  if (new Date(c.end_date) < now) {
+    newStatus = 'completed';
+  } else if (hasMatch && new Date(c.start_date) <= now) {
+    newStatus = 'active';
+  } else if (hasMatch) {
+    newStatus = 'ready';
+  } else {
+    newStatus = 'draft';
+  }
   if (newStatus !== c.status) {
     await pool.query('UPDATE campaigns SET status = $1 WHERE id = $2', [newStatus, campaignId]);
   }
@@ -121,6 +130,7 @@ router.get('/', authMiddleware, requireActiveSubscription, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT c.*,
         (SELECT COUNT(*) FROM campaign_channels cc WHERE cc.campaign_id = c.id)::int AS channel_count,
+        (SELECT COUNT(*) FROM campaign_channels cc WHERE cc.campaign_id = c.id AND cc.external_campaign_id IS NOT NULL)::int AS matched_channel_count,
         COALESCE((
           SELECT SUM(m.spend) FROM campaign_channels cc
           JOIN integrations i ON i.company_id = c.brand_id AND i.platform = cc.platform AND i.is_active = true
@@ -148,17 +158,24 @@ router.get('/', authMiddleware, requireActiveSubscription, async (req, res) => {
       FROM campaigns c
       WHERE c.brand_id = $1 ${statusClause}
       ORDER BY
-        CASE c.status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END,
+        CASE c.status WHEN 'active' THEN 0 WHEN 'ready' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,
         c.created_at DESC
     `, params);
 
-    // Auto-update statuses
+    // Auto-update statuses (lightweight — no DB query per campaign)
     const now = new Date();
     for (const c of rows) {
+      if (c.status === 'completed') continue;
       let expectedStatus = c.status;
-      if (new Date(c.end_date) < now) expectedStatus = 'completed';
-      else if (c.channel_count === 0) expectedStatus = 'draft';
-      else expectedStatus = 'active';
+      if (new Date(c.end_date) < now) {
+        expectedStatus = 'completed';
+      } else if (c.matched_channel_count > 0 && new Date(c.start_date) <= now) {
+        expectedStatus = 'active';
+      } else if (c.matched_channel_count > 0) {
+        expectedStatus = 'ready';
+      } else {
+        expectedStatus = 'draft';
+      }
       if (expectedStatus !== c.status) {
         c.status = expectedStatus;
         pool.query('UPDATE campaigns SET status = $1 WHERE id = $2', [expectedStatus, c.id]).catch(() => {});
@@ -500,10 +517,44 @@ router.put('/:id/channels/:platform/match', authMiddleware, requireActiveSubscri
     logCampaignAction(req.user, req.params.id, campaign.brand_id, 'channel_matched',
       campaign.name, req.params.platform,
       { external_campaign_id: external_campaign_id || null, match_status });
+    await autoUpdateStatus(req.params.id).catch(() => {});
     res.json(updated);
   } catch (err) {
     console.error('[campaigns PUT /:id/channels/:platform/match]', err);
     res.status(500).json({ error: 'Eşleştirme kaydedilemedi.' });
+  }
+});
+
+// PUT /api/campaigns/:id/complete — kullanıcı tarafından erken sonlandırma
+router.put('/:id/complete', authMiddleware, requireActiveSubscription, async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user, req.body?.brand_id);
+    const { rows: [campaign] } = await pool.query(
+      `SELECT c.* FROM campaigns c
+       WHERE c.id = $1 AND (
+         c.brand_id = $2
+         OR EXISTS (SELECT 1 FROM connections WHERE agency_company_id = $2 AND brand_company_id = c.brand_id)
+       )`,
+      [req.params.id, companyId]
+    );
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı.' });
+    if (campaign.status === 'draft') return res.status(400).json({ error: 'Taslak kampanyalar sonlandırılamaz. Silmek için Sil butonunu kullanın.' });
+    if (campaign.status === 'completed') return res.status(400).json({ error: 'Kampanya zaten tamamlandı.' });
+
+    const today = new Date().toISOString().split('T')[0];
+    const endDate = new Date(campaign.end_date) > new Date(today) ? today : campaign.end_date;
+
+    await pool.query(
+      "UPDATE campaigns SET status = 'completed', end_date = $1 WHERE id = $2",
+      [endDate, campaign.id]
+    );
+    logCampaignAction(req.user, campaign.id, campaign.brand_id, 'campaign_completed', campaign.name, null,
+      { reason: 'Kullanıcı kampanyayı erken sonlandırdı', end_date: endDate });
+    res.json({ success: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[campaigns PUT /:id/complete]', err);
+    res.status(500).json({ error: 'Kampanya sonlandırılamadı.' });
   }
 });
 
@@ -984,6 +1035,7 @@ router.post('/import-confirm', authMiddleware, requireActiveSubscription, async 
 
     await client.query('COMMIT');
     logCampaignAction(req.user, campaign.id, companyId, 'campaign_created', name.trim(), null, { imported: true, lines: lines.length });
+    // imported campaigns always start as draft (no matched channels yet)
     res.status(201).json({ id: campaign.id, name: campaign.name });
   } catch (err) {
     await client.query('ROLLBACK');

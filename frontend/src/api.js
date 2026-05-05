@@ -219,6 +219,7 @@ export const createCampaign        = (data) => api.post('/campaigns', data).then
 export const getCampaign           = (id) => api.get(`/campaigns/${id}`).then(r => r.data);
 export const updateCampaign        = (id, data) => api.put(`/campaigns/${id}`, data).then(r => r.data);
 export const deleteCampaign        = (id) => api.delete(`/campaigns/${id}`).then(r => r.data);
+export const completeCampaign      = (id) => api.put(`/campaigns/${id}/complete`).then(r => r.data);
 export const addCampaignChannel    = (id, data) => api.post(`/campaigns/${id}/channels`, data).then(r => r.data);
 export const removeCampaignChannel = (id, channelId) => api.delete(`/campaigns/${id}/channels/${channelId}`).then(r => r.data);
 export const getPlatformCampaigns  = (id, platform, search) =>

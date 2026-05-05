@@ -5,7 +5,7 @@ import MediaPlanImport from './MediaPlanImport';
 import CampaignMatchModal from './CampaignMatchModal';
 import {
   getBudgetPlan, saveBudgetPlan, getBudgetBrands,
-  getCampaigns, createCampaign, updateCampaign, deleteCampaign,
+  getCampaigns, createCampaign, updateCampaign, deleteCampaign, completeCampaign,
   getCampaign, addCampaignChannel, removeCampaignChannel,
   getPlatformCampaigns, getCampaignPerformance,
 } from '../api';
@@ -100,6 +100,7 @@ function ProgressBar({ pct, color = '#00C9A7' }) {
 function StatusBadge({ status }) {
   const cfg = {
     active:    { label: 'Aktif',      bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7', dot: '#00C9A7', border: '1px solid transparent' },
+    ready:     { label: 'Hazır',      bg: 'rgba(59,130,246,0.12)', color: '#3B82F6', dot: '#3B82F6', border: '1px solid transparent' },
     draft:     { label: 'Taslak',     bg: 'rgba(245,158,11,0.08)', color: '#F59E0B', dot: '#F59E0B', border: '1px dashed rgba(245,158,11,0.55)' },
     completed: { label: 'Tamamlandı', bg: 'rgba(99,102,241,0.12)', color: '#818CF8', dot: '#818CF8', border: '1px solid transparent' },
   };
@@ -461,12 +462,14 @@ function AddChannelModal({ campaignId, campaignName, existing, onClose, onSave }
 }
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
-function ConfirmModal({ title, message, onConfirm, onClose }) {
+function ConfirmModal({ title, message, onConfirm, onClose, confirmLabel, confirmStyle }) {
   const [loading, setLoading] = useState(false);
   const handleConfirm = async () => {
     setLoading(true);
     try { await onConfirm(); onClose(); } catch { setLoading(false); }
   };
+  const defaultStyle = { border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.12)', color: '#ef4444' };
+  const btnStyle = confirmStyle || defaultStyle;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }} onClick={onClose}>
       <div style={{ background: '#1a1f2e', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 14, padding: '28px 28px 24px', maxWidth: 420, width: '100%' }} onClick={e => e.stopPropagation()}>
@@ -475,8 +478,8 @@ function ConfirmModal({ title, message, onConfirm, onClose }) {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: 9, fontSize: 13, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text2)', fontWeight: 600, fontFamily: 'var(--font)' }}>İptal</button>
           <button onClick={handleConfirm} disabled={loading}
-            style={{ padding: '9px 22px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontFamily: 'var(--font)', opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Siliniyor...' : 'Evet, Sil'}
+            style={{ padding: '9px 22px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer', ...btnStyle, fontFamily: 'var(--font)', opacity: loading ? 0.7 : 1 }}>
+            {loading ? '...' : (confirmLabel || 'Evet, Sil')}
           </button>
         </div>
       </div>
@@ -522,7 +525,7 @@ function AchievementBar({ pct }) {
   );
 }
 
-function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, onDelete }) {
+function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, onDelete, onComplete }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [showAddCh, setShowAddCh]     = useState(false);
@@ -594,6 +597,10 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
             {data?.status === 'draft' && (
               <button onClick={() => onDelete(campaignId, data.name)}
                 style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', cursor: 'pointer', fontFamily: 'var(--font)' }}>Sil</button>
+            )}
+            {(data?.status === 'active' || data?.status === 'ready') && (
+              <button onClick={() => onComplete(campaignId, data.name)}
+                style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', cursor: 'pointer', fontFamily: 'var(--font)' }}>Sonlandır</button>
             )}
             {data?.status !== 'completed' && (
               <button onClick={onEdit} style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text2)', cursor: 'pointer', fontFamily: 'var(--font)' }}>Düzenle</button>
@@ -873,9 +880,10 @@ function CampaignCard({ campaign, onClick }) {
   const daysLeft = Math.max(Math.ceil((new Date(campaign.end_date) - now) / 86400000), 0);
 
   const isDraft     = campaign.status === 'draft';
+  const isReady     = campaign.status === 'ready';
   const isCompleted = campaign.status === 'completed';
-  const accentColor = isDraft ? '#64748B' : isCompleted ? '#818CF8' : '#00C9A7';
-  const borderBase  = isCompleted ? 'rgba(99,102,241,0.2)' : campaign.status === 'active' ? 'rgba(0,201,167,0.18)' : 'rgba(100,116,139,0.2)';
+  const accentColor = isDraft ? '#64748B' : isCompleted ? '#818CF8' : isReady ? '#3B82F6' : '#00C9A7';
+  const borderBase  = isCompleted ? 'rgba(99,102,241,0.2)' : campaign.status === 'active' ? 'rgba(0,201,167,0.18)' : isReady ? 'rgba(59,130,246,0.2)' : 'rgba(100,116,139,0.2)';
   const cardOpacity = isCompleted ? 0.62 : isDraft ? 0.76 : 1;
 
   return (
@@ -926,7 +934,7 @@ function CampaignCard({ campaign, onClick }) {
           <div style={{ fontSize: 10, color: 'var(--text3)' }}>Dönüşüm</div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>{fmt(campaign.total_conversions)}</div>
         </div>
-        {campaign.status === 'active' && (
+        {(campaign.status === 'active' || campaign.status === 'ready') && (
           <div style={{ marginLeft: 'auto' }}>
             <div style={{ fontSize: 10, color: 'var(--text3)' }}>Kalan</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: daysLeft <= 3 ? '#EF4444' : daysLeft <= 7 ? '#F59E0B' : 'var(--text1)' }}>{daysLeft}g</div>
@@ -976,6 +984,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const [detailId, setDetailId]           = useState(null);
   const [deleting, setDeleting]           = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, name }
+  const [confirmComplete, setConfirmComplete] = useState(null); // { id, name }
   const autoCreatedRef                    = useRef(false);
 
   const isEmbedded         = !!forceBrandId || (isAgency && !!selectedBrand);
@@ -1043,6 +1052,11 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
     try { await deleteCampaign(id); loadCampaigns(); } catch {}
     finally { setDeleting(null); }
   };
+  const handleCampaignComplete = (id, name) => { setDetailId(null); setConfirmComplete({ id, name }); };
+  const doCompleteCampaign = async () => {
+    await completeCampaign(confirmComplete.id);
+    loadCampaigns();
+  };
 
   // ── Early returns ──
   if (isAgency && !isEmbedded && !selectedBrand && brands.length === 0 && budgetPlan === undefined) {
@@ -1103,7 +1117,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
   const spentPct      = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
   const remainColor   = totalBudget != null && totalSpent > totalBudget ? '#EF4444' : spentPct >= 80 ? '#F59E0B' : '#00C9A7';
   const remainBg      = remainColor === '#EF4444' ? 'rgba(239,68,68,0.06)' : remainColor === '#F59E0B' ? 'rgba(245,158,11,0.05)' : 'rgba(0,201,167,0.04)';
-  const activeList    = campList.filter(c => c.status === 'active' || c.status === 'draft');
+  const activeList    = campList.filter(c => c.status === 'active' || c.status === 'ready' || c.status === 'draft');
   const completedList = campList.filter(c => c.status === 'completed');
   const tabList      = campTab === 'active' ? activeList : completedList;
   const filtered     = campSearch.trim()
@@ -1264,6 +1278,12 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
                     ×
                   </button>
                 )}
+                {(c.status === 'active' || c.status === 'ready') && (
+                  <button onClick={(e) => { e.stopPropagation(); handleCampaignComplete(c.id, c.name); }} title="Sonlandır"
+                    style={{ position: 'absolute', bottom: 14, right: 14, width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid rgba(99,102,241,0.25)', color: 'rgba(129,140,248,0.6)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    ■
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -1300,6 +1320,16 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
           message={`"${confirmDelete.name}" kampanyasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`}
           onConfirm={doDeleteCampaign}
           onClose={() => setConfirmDelete(null)}
+        />
+      )}
+      {confirmComplete && (
+        <ConfirmModal
+          title="Kampanyayı Sonlandır"
+          message={`"${confirmComplete.name}" kampanyasını sonlandırmak istediğinize emin misiniz? Tüm veriler korunacak, kampanya 'Tamamlandı' olarak işaretlenecek.`}
+          confirmLabel="Sonlandır"
+          confirmStyle={{ border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.12)', color: '#818CF8' }}
+          onConfirm={doCompleteCampaign}
+          onClose={() => setConfirmComplete(null)}
         />
       )}
       {showBudgetModal && (
@@ -1344,6 +1374,7 @@ export default function Budget({ forceBrandId, forceBrandName } = {}) {
             if (c) { setDetailId(null); setEditModal(c); }
           }}
           onDelete={(id, name) => { setDetailId(null); handleCampaignDelete(id, name); }}
+          onComplete={handleCampaignComplete}
           onRefresh={loadCampaigns}
         />
       )}
