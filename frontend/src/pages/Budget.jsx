@@ -528,20 +528,24 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
   const [showAddCh, setShowAddCh]     = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
   const [removing, setRemoving]       = useState(null);
-  const [activeTab, setActiveTab]         = useState('kanallar');
-  const [perfData, setPerfData]           = useState(null);
-  const [perfLoading, setPerfLoading]     = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [activeTab, setActiveTab]               = useState('kanallar');
+  const [perfData, setPerfData]                 = useState(null);
+  const [perfLoading, setPerfLoading]           = useState(false);
+  const [expandedGroups, setExpandedGroups]     = useState(new Set());
+  const [expandedChGroups, setExpandedChGroups] = useState(new Set());
 
-  const toggleGroup = (plt) => setExpandedGroups(prev => {
-    const next = new Set(prev);
-    next.has(plt) ? next.delete(plt) : next.add(plt);
-    return next;
-  });
+  const toggleGroup   = (plt) => setExpandedGroups(prev => { const n = new Set(prev); n.has(plt) ? n.delete(plt) : n.add(plt); return n; });
+  const toggleChGroup = (plt) => setExpandedChGroups(prev => { const n = new Set(prev); n.has(plt) ? n.delete(plt) : n.add(plt); return n; });
 
   const load = useCallback(() => {
     setLoading(true);
-    getCampaign(campaignId).then(setData).catch(() => {}).finally(() => setLoading(false));
+    getCampaign(campaignId)
+      .then(d => {
+        setData(d);
+        if (d?.channels) setExpandedChGroups(new Set(d.channels.map(c => c.platform)));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [campaignId]);
 
   useEffect(() => { load(); }, [load]);
@@ -758,7 +762,7 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
               </div>
             </div>
 
-            {/* Channels */}
+            {/* Channels — platform-grouped accordion */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>Kanallar ({(data.channels || []).length})</div>
@@ -777,37 +781,82 @@ function CampaignDetailModal({ campaignId, brandId, onClose, onEdit, onRefresh, 
                     + İlk Kanalı Ekle
                   </button>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {data.channels.map(ch => (
-                    <div key={ch.id} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <PlatformIcon platform={ch.platform} size={32} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{platformLabel(ch.platform)}{ch.ad_model ? ` · ${ch.ad_model}` : ''}</div>
-                        {ch.external_campaign_name && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.external_campaign_name}</div>}
-                        {ch.external_campaign_id && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {ch.external_campaign_id}</div>}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>₺{fmt(ch.metrics?.spend)}</div>
-                        {ch.metrics?.roas > 0 && <div style={{ fontSize: 11, color: '#00C9A7' }}>{Number(ch.metrics.roas).toFixed(2)}x ROAS</div>}
-                        {ch.allocated_budget > 0 && <div style={{ fontSize: 11, color: 'var(--text3)' }}>Ayrılan: ₺{fmt(ch.allocated_budget)}</div>}
-                      </div>
-                      {data.status !== 'completed' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                          <button onClick={() => { setEditingChannel(ch); setShowAddCh(true); }}
-                            style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--teal)', fontFamily: 'var(--font)' }}>
-                            Düzenle
-                          </button>
-                          <button onClick={() => handleRemoveChannel(ch.id)} disabled={removing === ch.id}
-                            style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontFamily: 'var(--font)', opacity: removing === ch.id ? 0.5 : 1 }}>
-                            Kaldır
-                          </button>
+              ) : (() => {
+                // Group by platform
+                const groups = {};
+                for (const ch of data.channels) {
+                  if (!groups[ch.platform]) groups[ch.platform] = { platform: ch.platform, channels: [], totalAllocated: 0, totalSpend: 0 };
+                  groups[ch.platform].channels.push(ch);
+                  groups[ch.platform].totalAllocated += parseFloat(ch.allocated_budget) || 0;
+                  groups[ch.platform].totalSpend     += parseFloat(ch.metrics?.spend)   || 0;
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {Object.values(groups).map(g => {
+                      const expanded = expandedChGroups.has(g.platform);
+                      return (
+                        <div key={g.platform} style={{ background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border2)', overflow: 'hidden' }}>
+                          {/* Platform header */}
+                          <div
+                            onClick={() => toggleChGroup(g.platform)}
+                            style={{ padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <PlatformIcon platform={g.platform} size={28} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{platformLabel(g.platform)}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                                ₺{fmt(g.totalAllocated)} ayrılan
+                                {g.totalSpend > 0 && <span style={{ color: '#00C9A7', marginLeft: 6 }}>₺{fmt(g.totalSpend)} harcanan</span>}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)', transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</div>
+                          </div>
+
+                          {/* Ad-model sub-rows */}
+                          {expanded && g.channels.map((ch, idx) => {
+                            const displayName = ch.ad_model || ch.external_campaign_name;
+                            const isLast = idx === g.channels.length - 1;
+                            return (
+                              <div key={ch.id} style={{ padding: '9px 13px 9px 50px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: isLast ? 'none' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text3)', flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  {displayName
+                                    ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+                                    : <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Belirtilmemiş</div>
+                                  }
+                                  {ch.external_campaign_id && (
+                                    <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'monospace' }}>ID: {ch.external_campaign_id}</div>
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 6 }}>
+                                  {ch.allocated_budget > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>₺{fmt(ch.allocated_budget)}</div>}
+                                  {ch.metrics?.spend > 0
+                                    ? <div style={{ fontSize: 11, color: '#00C9A7' }}>₺{fmt(ch.metrics.spend)} harcanan</div>
+                                    : <div style={{ fontSize: 11, color: 'var(--text3)' }}>₺0 harcanan</div>
+                                  }
+                                  {ch.metrics?.roas > 0 && <div style={{ fontSize: 10, color: '#00C9A7' }}>{Number(ch.metrics.roas).toFixed(2)}x ROAS</div>}
+                                </div>
+                                {data.status !== 'completed' && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                                    <button onClick={() => { setEditingChannel(ch); setShowAddCh(true); }}
+                                      style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid var(--border2)', background: 'transparent', color: 'var(--teal)', fontFamily: 'var(--font)' }}>
+                                      Düzenle
+                                    </button>
+                                    <button onClick={() => handleRemoveChannel(ch.id)} disabled={removing === ch.id}
+                                      style={{ padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontFamily: 'var(--font)', opacity: removing === ch.id ? 0.5 : 1 }}>
+                                      Kaldır
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
           </div>
