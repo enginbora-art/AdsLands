@@ -57,6 +57,13 @@ const FIELD_MAP = {
     conversions: raw => raw.goal_completions ?? raw.conversions,
     roas:        raw => raw.roas,
   },
+  dv360: {
+    spend:       raw => raw.actual_spend       ?? raw.spend,
+    impressions: raw => raw.actual_impressions ?? raw.impressions,
+    clicks:      raw => raw.actual_clicks      ?? raw.clicks,
+    conversions: raw => raw.conversions,
+    roas:        raw => raw.roas,
+  },
 };
 
 function validateAndNormalize(platform, rawData) {

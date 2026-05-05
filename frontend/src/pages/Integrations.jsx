@@ -710,7 +710,7 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
           ) : rows.length === 0 ? (
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>
-              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : ''}
+              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : isDv360 && !advertiserName ? ' Önce advertiser seçin.' : ''}
             </div>
           ) : (
             <div style={s.tableWrap}>
