@@ -662,6 +662,27 @@ Her satır için şunu çıkar:
   "frequency": string veya null
 }
 
+Birim fiyat ve satın alma tipi çıkarımı (ZORUNLU):
+Birim fiyat kolonları farklı isimler alabilir — şunları tara:
+"Birim Fiyat", "Unit Price", "CPM", "CPC", "CPV",
+"Birim Fiyat (CPC)", "Birim Fiyat (CPV)", "Birim Fiyat (CPM)",
+"Birim Fiyat (CPM/CPC/CPV)", "Price (CPC) (TL)", "Price (CPV) (TL)",
+"CPC (TL)", "CPM (TL)", "CPV (TL)", "Fiyat", "Birim Maliyet"
+Bu kolonlarda sayısal değer varsa unit_price olarak al.
+
+buying_type belirleme sırası:
+1. Kolon başlığında CPM / CPC / CPV geçiyorsa oradan al
+2. "Satın Alma Tipi", "Purchasing Type", "Satın Alma Modeli" kolonundan al
+3. Birim fiyatın hangi isimli kolonda olduğuna göre belirle
+4. Hiçbirinden anlaşılamazsa planlanan KPI tipinden tahmin et:
+   gösterim / impression → CPM
+   tıklanma / click → CPC
+   izlenme / view → CPV
+
+Birim fiyat bulunamazsa missing_fields listesine ekle:
+"[Platform] [Reklam Modeli] birim fiyatı eksik"
+(örnek: "Google Search birim fiyatı eksik")
+
 Platform normalizasyonu:
 - "Facebook", "Instagram", "Facebook & Instagram", "Facebook / İnstagram", "Meta" → "meta"
 - "YouTube", "Youtube" → "youtube"

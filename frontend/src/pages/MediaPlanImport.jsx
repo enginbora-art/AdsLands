@@ -32,11 +32,19 @@ function buildWarnings(lines) {
         hasEstimate: false,
       });
     }
-    if (!ln.unit_price && ln.buying_type) {
-      const estimate = (ln.platform === 'google' && ln.buying_type === 'CPC') ? { label: '₺3-6', value: 4.5 } : null;
+    if (!ln.unit_price) {
+      const bt = ln.buying_type || null;
+      const ESTIMATES = {
+        google:  { CPC: { label: '₺3–6',   value: 4.5  }, CPM: { label: '₺8–15',  value: 11   } },
+        meta:    { CPM: { label: '₺15–30',  value: 22   }, CPC: { label: '₺2–5',   value: 3.5  } },
+        youtube: { CPV: { label: '₺0.1–0.3', value: 0.2 }, CPM: { label: '₺10–20', value: 15   } },
+        tiktok:  { CPM: { label: '₺20–40',  value: 30   }, CPC: { label: '₺3–8',   value: 5.5  } },
+      };
+      const estimate = bt ? ESTIMATES[ln.platform]?.[bt] || null : null;
+      const typeLabel = bt ? ` ${bt}` : '';
       warnings.push({
         id: `price_${idx}`, lineIdx: idx, field: 'unit_price', type: 'price',
-        message: `${pLabel}${model} ${ln.buying_type} fiyatı girilmemiş${estimate ? `, yaklaşık ${estimate.label} arası öngörülüyor` : ''}`,
+        message: `${pLabel}${model} için${typeLabel} birim fiyat bulunamadı${estimate ? ` (yaklaşık ${estimate.label})` : ''}`,
         hasEstimate: !!estimate,
         estimateValue: estimate?.value,
       });
