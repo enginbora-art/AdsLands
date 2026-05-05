@@ -501,13 +501,29 @@ router.put('/:id/channels/:platform/match', authMiddleware, requireActiveSubscri
 
 // ── Excel Medya Planı Import ──────────────────────────────────────────────────
 
-const DIGITAL_KEYWORDS = ['dijital', 'digital', 'transfer'];
-const IGNORE_KEYWORDS  = ['tv', 'radyo', 'gazete', 'dergi', 'televizyon'];
+const IGNORE_KEYWORDS   = ['tv', 'radyo', 'gazete', 'dergi', 'televizyon'];
+const PHASE1_KEYWORDS   = ['dijital', 'digital', 'transfer', 'plan', 'medya'];
+const CONTENT_KEYWORDS  = [
+  'google', 'meta', 'tiktok', 'youtube', 'facebook', 'instagram', 'linkedin',
+  'cpm', 'cpc', 'cpv', 'programatik', 'display', 'video', 'search',
+  'reach', 'gösterim', 'tıklanma', 'izlenme', 'bütçe', 'budget', 'impression', 'click',
+];
 
-function isDigitalSheet(name) {
+function isIgnoredSheet(name) {
+  return IGNORE_KEYWORDS.some(k => (name || '').toLowerCase().includes(k));
+}
+function isPhase1Sheet(name) {
   const lower = (name || '').toLowerCase();
-  if (IGNORE_KEYWORDS.some(k => lower.includes(k))) return false;
-  return DIGITAL_KEYWORDS.some(k => lower.includes(k));
+  return !isIgnoredSheet(name) && PHASE1_KEYWORDS.some(k => lower.includes(k));
+}
+function scoreSheetContent(XLSX, ws) {
+  if (!ws) return 0;
+  const text = XLSX.utils.sheet_to_csv(ws, { FS: ' ', defval: '' }).toLowerCase();
+  return CONTENT_KEYWORDS.filter(k => text.includes(k)).length;
+}
+function sheetRowCount(XLSX, ws) {
+  const ref = ws?.['!ref'];
+  return ref ? XLSX.utils.decode_range(ref).e.r + 1 : 0;
 }
 
 // Multer: memory storage, 10 MB limit, xlsx/xls only
@@ -537,17 +553,65 @@ router.post('/import-plan',
 
   try {
     const XLSX = require('xlsx');
-    const buf  = req.file.buffer;
+    const buf        = req.file.buffer;
+    const forceSheet = req.body?.force_sheet || null;
 
-    // Pass 1: sheet names only — zero cell data loaded
-    const wbMeta     = XLSX.read(buf, { type: 'buffer', bookSheets: true });
-    const allNames   = wbMeta.SheetNames || [];
+    // Pass A: sheet names only — zero cell data loaded
+    const wbMeta   = XLSX.read(buf, { type: 'buffer', bookSheets: true });
+    const allNames = wbMeta.SheetNames || [];
     if (!allNames.length) {
       return res.status(422).json({ error: 'Bu dosyada dijital plan bulunamadı. Lütfen dijital plan içeren bir Excel yükleyin.' });
     }
 
-    const digitalNames = allNames.filter(isDigitalSheet);
-    const targetNames  = digitalNames.length > 0 ? digitalNames : allNames.slice(0, 5);
+    let targetNames;
+
+    if (forceSheet) {
+      // User explicitly selected a sheet — skip all heuristics
+      if (!allNames.includes(forceSheet)) {
+        return res.status(400).json({ error: 'Seçilen sheet bulunamadı.' });
+      }
+      targetNames = [forceSheet];
+
+    } else {
+      // Phase 1 — name keyword match (fast path)
+      const phase1 = allNames.filter(isPhase1Sheet);
+
+      if (phase1.length > 0) {
+        targetNames = phase1;
+
+      } else {
+        // Phase 2 — content scoring: load non-ignored sheets, first 20 rows each
+        const candidates = allNames.filter(n => !isIgnoredSheet(n));
+        const scanNames  = candidates.length > 0 ? candidates : allNames;
+
+        const wbScan = XLSX.read(buf, {
+          type: 'buffer', sheets: scanNames, sheetRows: 20, cellNF: false, cellHTML: false,
+        });
+
+        const scored = scanNames
+          .map(name => ({
+            name,
+            score:     scoreSheetContent(XLSX, wbScan.Sheets[name]),
+            row_count: sheetRowCount(XLSX, wbScan.Sheets[name]),
+          }))
+          .sort((a, b) => b.score - a.score || b.row_count - a.row_count);
+
+        const best = scored[0];
+        if (best && best.score >= 3) {
+          targetNames = [best.name];
+        } else {
+          // Phase 3 — ask the user to pick
+          const rowCounts = Object.fromEntries(
+            scanNames.map(n => [n, sheetRowCount(XLSX, wbScan.Sheets[n])])
+          );
+          return res.json({
+            needs_sheet_selection: true,
+            available_sheets: allNames.map(n => ({ name: n, row_count: rowCounts[n] ?? null })),
+            lines: [],
+          });
+        }
+      }
+    }
 
     // Pass 2: load only target sheets with cell data
     const wb = XLSX.read(buf, {

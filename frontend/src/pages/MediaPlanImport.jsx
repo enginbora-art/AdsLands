@@ -45,33 +45,98 @@ function buildWarnings(lines) {
   return warnings;
 }
 
+// ── Sheet selector (Phase 3 fallback) ────────────────────────────────────────
+function SheetSelector({ sheets, selected, onSelect, onConfirm, onCancel, uploading }) {
+  const btnBase = { padding: '9px 18px', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' };
+  return (
+    <div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)', marginBottom: 6 }}>
+        Dijital Plan Sheet'ini Seçin
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16, lineHeight: 1.6 }}>
+        Dijital plan sheet'i otomatik tespit edilemedi. Aşağıdan dijital medya planını içeren sheet'i seçin.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 20, maxHeight: 260, overflowY: 'auto' }}>
+        {sheets.map(s => (
+          <label
+            key={s.name}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
+              background: selected === s.name ? 'rgba(0,201,167,0.08)' : 'var(--bg)',
+              border: `1px solid ${selected === s.name ? 'rgba(0,201,167,0.4)' : 'var(--border)'}`,
+              borderRadius: 8, cursor: 'pointer', userSelect: 'none', transition: 'all 0.12s',
+            }}
+          >
+            <input
+              type="radio" name="sheet_sel" value={s.name}
+              checked={selected === s.name}
+              onChange={() => onSelect(s.name)}
+              style={{ accentColor: '#00C9A7', flexShrink: 0 }}
+            />
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--text1)' }}>{s.name}</span>
+            {s.row_count != null && s.row_count > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                ~{s.row_count} satır
+              </span>
+            )}
+          </label>
+        ))}
+      </div>
+      {uploading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
+          <div style={{ width: 26, height: 26, border: '2px solid var(--border2)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel} style={{ ...btnBase, background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text3)' }}>
+            ← Geri
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!selected}
+            style={{ ...btnBase, flex: 1, background: selected ? 'var(--teal)' : 'var(--border2)', color: selected ? '#0B1219' : 'var(--text3)', opacity: selected ? 1 : 0.6 }}
+          >
+            Devam Et →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Step 1: Upload ────────────────────────────────────────────────────────────
 function UploadStep({ onParsed, onError }) {
   const [dragging, setDragging]   = useState(false);
   const [uploading, setUploading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [sheetSel, setSheetSel]   = useState(null); // { file, sheets:[{name,row_count}] }
+  const [selSheet, setSelSheet]   = useState('');
   const fileInputRef = useRef(null);
 
-  const processFile = useCallback(async (file) => {
+  const processFile = useCallback(async (file, forceSheet = null) => {
     if (!file) return;
-    if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      onError('Sadece .xlsx veya .xls dosyası yükleyebilirsiniz.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      onError('Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.');
-      return;
+    if (!forceSheet) {
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        onError('Sadece .xlsx veya .xls dosyası yükleyebilirsiniz.'); return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        onError('Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.'); return;
+      }
     }
     setUploading(true);
-    setStatusMsg('Planınız analiz ediliyor...');
+    setStatusMsg(forceSheet ? 'Seçilen sheet analiz ediliyor...' : 'Planınız analiz ediliyor...');
     try {
-      const parsed = await importMediaPlan(file);
+      const parsed = await importMediaPlan(file, forceSheet);
+      if (parsed.needs_sheet_selection) {
+        const sheets = parsed.available_sheets || [];
+        setSheetSel({ file, sheets });
+        setSelSheet(sheets[0]?.name || '');
+        return;
+      }
       onParsed(parsed);
     } catch (err) {
       console.error('[importMediaPlan] status:', err.response?.status,
-        '| data:', err.response?.data,
-        '| code:', err.code,
-        '| msg:', err.message);
+        '| data:', err.response?.data, '| code:', err.code, '| msg:', err.message);
       let msg = 'Yükleme başarısız.';
       if (err.response?.data?.error)          msg = err.response.data.error;
       else if (err.response?.status === 413)  msg = 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.';
@@ -89,6 +154,19 @@ function UploadStep({ onParsed, onError }) {
     const file = e.dataTransfer.files[0];
     if (file) processFile(file);
   };
+
+  if (sheetSel) {
+    return (
+      <SheetSelector
+        sheets={sheetSel.sheets}
+        selected={selSheet}
+        onSelect={setSelSheet}
+        onConfirm={() => processFile(sheetSel.file, selSheet)}
+        onCancel={() => { setSheetSel(null); setSelSheet(''); }}
+        uploading={uploading}
+      />
+    );
+  }
 
   return (
     <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
