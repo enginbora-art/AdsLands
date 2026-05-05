@@ -169,13 +169,13 @@ async function migrate() {
       );
     `);
 
-    // Platform constraint'ini güncelle (adform + linkedin ekle)
+    // Platform constraint'ini güncelle (adform + linkedin + dv360 ekle)
     await client.query(`
       DO $$
       BEGIN
         ALTER TABLE integrations DROP CONSTRAINT IF EXISTS integrations_platform_check;
         ALTER TABLE integrations ADD CONSTRAINT integrations_platform_check
-          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin'));
+          CHECK (platform IN ('google_ads', 'meta', 'tiktok', 'google_analytics', 'appsflyer', 'adjust', 'adform', 'linkedin', 'dv360'));
       EXCEPTION WHEN others THEN NULL;
       END $$;
     `);
@@ -678,6 +678,15 @@ async function migrate() {
         [sector, metric, value]
       );
     }
+
+    // campaign_logs.user_id nullable yap (cron anomali tespiti user_id olmadan yazar)
+    await client.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE campaign_logs ALTER COLUMN user_id DROP NOT NULL;
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
+    `);
 
     // ── Seed: Platform Admin ──────────────────────────────────────────────────
     const adminEmail    = process.env.ADMIN_EMAIL;

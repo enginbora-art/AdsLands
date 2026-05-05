@@ -43,6 +43,9 @@ if (missingEnv.length) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Render (ve diğer reverse proxy'ler) arkasında doğru istemci IP tespiti için
+app.set('trust proxy', 1);
+
 // ── Güvenlik başlıkları ───────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
