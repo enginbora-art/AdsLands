@@ -501,21 +501,6 @@ router.put('/:id/channels/:platform/match', authMiddleware, requireActiveSubscri
 
 // ── Excel Medya Planı Import ──────────────────────────────────────────────────
 
-function cellText(v) {
-  if (v == null) return '';
-  if (typeof v === 'string') return v.trim();
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return String(v);
-  if (v instanceof Date) return v.toISOString().split('T')[0];
-  if (typeof v === 'object') {
-    if (v.richText) return v.richText.map(r => r.text || '').join('').trim();
-    if (v.formula && v.result != null) return cellText(v.result);
-    if (v.text) return String(v.text).trim();
-    if (v.hyperlink) return (v.text || v.hyperlink).trim();
-  }
-  return String(v);
-}
-
 const DIGITAL_KEYWORDS = ['dijital', 'digital', 'transfer'];
 const IGNORE_KEYWORDS  = ['tv', 'radyo', 'gazete', 'dergi', 'televizyon'];
 
@@ -525,46 +510,65 @@ function isDigitalSheet(name) {
   return DIGITAL_KEYWORDS.some(k => lower.includes(k));
 }
 
-// POST /api/campaigns/import-plan — parse Excel with AI
-router.post('/import-plan', authMiddleware, requireActiveSubscription, checkAiLimit('plan_import'), async (req, res) => {
-  const { file, filename } = req.body;
-  if (!file) return res.status(400).json({ error: 'Dosya gerekli.' });
+// Multer: memory storage, 10 MB limit, xlsx/xls only
+const multer = require('multer');
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/\.(xlsx|xls)$/i.test(file.originalname)) cb(null, true);
+    else cb(new Error('Sadece .xlsx veya .xls dosyası yükleyebilirsiniz.'));
+  },
+});
 
-  const approxBytes = Math.round(file.length * 0.75);
-  if (approxBytes > 10 * 1024 * 1024) {
-    return res.status(400).json({ error: 'Dosya çok büyük. Maksimum 10MB yükleyebilirsiniz.' });
-  }
+function uploadMiddleware(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    const status = err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    res.status(status).json({ error: err.message || 'Dosya yüklenemedi.' });
+  });
+}
+
+// POST /api/campaigns/import-plan — parse Excel with AI
+router.post('/import-plan',
+  authMiddleware, requireActiveSubscription, uploadMiddleware, checkAiLimit('plan_import'),
+  async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Dosya gerekli.' });
 
   try {
-    const ExcelJS = require('exceljs');
-    const buf = Buffer.from(file, 'base64');
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buf);
+    const XLSX = require('xlsx');
+    const buf  = req.file.buffer;
 
-    const allSheets = [];
-    workbook.eachSheet(sheet => {
-      const rows = [];
-      sheet.eachRow({ includeEmpty: false }, row => {
-        const cells = [];
-        row.eachCell({ includeEmpty: true }, cell => cells.push(cellText(cell.value)));
-        const nonEmpty = cells.filter(Boolean).length;
-        if (nonEmpty > 0) rows.push(cells.join('\t'));
-      });
-      if (rows.length > 0) allSheets.push({ name: sheet.name, rows });
-    });
-
-    if (allSheets.length === 0) {
+    // Pass 1: sheet names only — zero cell data loaded
+    const wbMeta     = XLSX.read(buf, { type: 'buffer', bookSheets: true });
+    const allNames   = wbMeta.SheetNames || [];
+    if (!allNames.length) {
       return res.status(422).json({ error: 'Bu dosyada dijital plan bulunamadı. Lütfen dijital plan içeren bir Excel yükleyin.' });
     }
 
-    // Prefer digital sheets; fall back to all
-    const digital = allSheets.filter(s => isDigitalSheet(s.name));
-    const chosen  = digital.length > 0 ? digital : allSheets;
+    const digitalNames = allNames.filter(isDigitalSheet);
+    const targetNames  = digitalNames.length > 0 ? digitalNames : allNames.slice(0, 5);
 
-    // Truncate to ~12k chars per sheet to stay within token budget
-    const sheetsText = chosen.map(s =>
-      `=== Sheet: ${s.name} ===\n${s.rows.slice(0, 200).join('\n')}`
-    ).join('\n\n').slice(0, 50000);
+    // Pass 2: load only target sheets with cell data
+    const wb = XLSX.read(buf, {
+      type: 'buffer',
+      sheets: targetNames,
+      cellDates: true,
+      cellNF: false,
+      cellHTML: false,
+    });
+
+    // Convert sheets → filtered tab-separated text, max 500 rows each
+    const sheetsText = targetNames.map(name => {
+      const ws = wb.Sheets[name];
+      if (!ws) return '';
+      const rows = XLSX.utils.sheet_to_csv(ws, { FS: '\t', defval: '' })
+        .split('\n')
+        .map(r => r.trim())
+        .filter(r => r.replace(/\t+/g, '').length > 0)
+        .slice(0, 500);
+      return rows.length ? `=== Sheet: ${name} ===\n${rows.join('\n')}` : '';
+    }).filter(Boolean).join('\n\n').slice(0, 50000);
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(503).json({ error: 'AI servisi şu an kullanılamıyor.' });

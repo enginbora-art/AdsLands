@@ -65,13 +65,7 @@ function UploadStep({ onParsed, onError }) {
     setUploading(true);
     setStatusMsg('Planınız analiz ediliyor...');
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = (e) => resolve(e.target.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const parsed = await importMediaPlan(base64, file.name);
+      const parsed = await importMediaPlan(file);
       onParsed(parsed);
     } catch (err) {
       console.error('[importMediaPlan] status:', err.response?.status,
