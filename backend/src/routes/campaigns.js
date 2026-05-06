@@ -899,28 +899,44 @@ Birim fiyat bulunamazsa missing_fields listesine ekle:
 "[Platform] [Reklam Modeli] birim fiyatı eksik"
 (örnek: "Google Search birim fiyatı eksik")
 
-Platform normalizasyonu:
-- "Facebook", "Instagram", "Facebook & Instagram", "Facebook / İnstagram", "Meta" → "meta"
-- "YouTube", "Youtube" → "youtube"  — ANCAK aşağıdaki YouTube özel kuralına bak
-- "Staff Programatik", "DV360", "Programatik Network", "Programmatic", "Display", "GDN", "Native" → "programatik"
-- "X", "Genart/X", "Twitter" → "x"
-- "Google", "Google Ads", "Search", "Arama", "Demand Gen" → "google"
-- "TikTok" → "tiktok"
-- "LinkedIn" → "linkedin"
-- "Video" (bağımsız) → "video"
+Platform belirleme — öncelik sırası (önce eşleşen kuralı uygula, sonrakine geçme):
 
-YouTube özel kuralı (ÖNEMLİ):
-Eğer satırda Network/Şirket/Platform kolonu "Programatik", "DV360", "Staff Programatik" vb. ise
-VE Site/Mecra/Yayın Ortamı kolonu "YouTube" veya "Youtube" ise:
-  → platform = "programatik" (YouTube değil)
-  → ad_model = "YouTube - [o satırdaki Reklam Modeli / Format]"
-Sadece Network/Şirket kolonu doğrudan "YouTube" ise platform = "youtube".
+1. Reklam Modeli bazlı (en yüksek öncelik):
+   Reklam Modeli / Format kolonu şu değerlerden birini içeriyorsa (büyük/küçük harf fark etmez):
+   "Preroll", "Liveroll", "Midroll", "Liveroll&Preroll", "Pre-roll", "Live-roll"
+   → platform = "video" (Network/Şirket ne olursa olsun)
+   → ad_model = "[Network/Şirket Adı] - [Reklam Modeli]"
+   Örnek: Membrana + Preroll → platform="video", ad_model="Membrana - Preroll"
+   Örnek: Tooplay + Liveroll&Preroll → platform="video", ad_model="Tooplay - Liveroll&Preroll"
 
-Video IO network kuralı:
-Video veya Display kategorisindeki satırlarda Network/Şirket olarak
-Membrana, Digitalvol, Tooplay, Adplus, Mediology gibi bir network adı varsa:
-  → ad_model = "[Network Adı] - [Reklam Modeli / Format]"
-  (örnek: "Membrana - Pre-Roll", "Tooplay - Outstream")
+2. Programatik + YouTube kombinasyonu:
+   Network/Şirket "Programatik", "DV360" veya "Staff Programatik" içeriyorsa
+   VE Site/Mecra/Yayın Ortamı "YouTube" veya "Youtube" ise:
+   → platform = "programatik"
+   → ad_model = "YouTube - [o satırdaki Reklam Modeli / Format]"
+   Örnek: "YouTube - Trueview", "YouTube - VRC"
+
+3. Programatik genel:
+   Network/Şirket "Programatik", "DV360", "Staff Programatik", "Programatik Network",
+   "Programmatic", "Display", "GDN", "Native" içeriyorsa:
+   → platform = "programatik"
+   → ad_model = "[Reklam Modeli]" (örnek: "DOOH", "Native")
+
+4. Video IO network kuralı:
+   Network/Şirket olarak Membrana, Digitalvol, Tooplay, Adplus, Mediology gibi bir
+   video network adı varsa VE kural 1'e girmemişse (Reklam Modeli preroll/liveroll değil):
+   → platform = "video"
+   → ad_model = "[Network Adı] - [Reklam Modeli / Format]"
+   Örnek: "Membrana - Outstream", "Tooplay - Instream"
+
+5. Diğer platformlar (standart normalizasyon):
+   - "Facebook", "Instagram", "Facebook & Instagram", "Facebook / İnstagram", "Meta" → "meta"
+   - "YouTube", "Youtube" (Network/Şirket doğrudan YouTube ise) → "youtube"
+   - "X", "Genart/X", "Twitter" → "x"
+   - "Google", "Google Ads", "Search", "Arama", "Demand Gen" → "google"
+   - "TikTok" → "tiktok"
+   - "LinkedIn" → "linkedin"
+   - "Video" (bağımsız) → "video"
 
 Tarih: Excel seri numarasını YYYY-MM-DD'ye çevir (epoch: 1900-01-01, -2 gün offset).
 Adserver fee, yasal işletim ücreti, alt toplam, boş satırları hariç tut.
