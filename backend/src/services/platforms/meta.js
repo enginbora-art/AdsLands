@@ -1,26 +1,70 @@
-function mockVal(date, offset, min, max) {
-  const d = new Date(date);
-  const h = ((d.getDate() * 13 + d.getMonth() * 29 + offset) % 100) / 100;
-  return min + (max - min) * h;
+const axios = require('axios');
+
+function findAction(list, type) {
+  return parseFloat((list || []).find(a => a.action_type === type)?.value || 0);
 }
 
-function generateMetric(date, seed) {
-  const spend = Math.round(mockVal(date, seed, 500, 1500) * 100) / 100;
-  const impressions = Math.floor(mockVal(date, seed + 1, 25000, 80000));
-  const clicks = Math.floor(impressions * mockVal(date, seed + 2, 0.015, 0.04));
-  const conversions = Math.floor(clicks * mockVal(date, seed + 3, 0.03, 0.07));
-  const roas = spend > 0 ? Math.round((conversions * 160) / spend * 100) / 100 : 0;
-  return { date, spend, impressions, clicks, conversions, roas };
+function throwIfAuthError(err) {
+  const status = err.response?.status;
+  const fbCode = err.response?.data?.error?.code;
+  // Facebook: 190 = invalid/expired token, 102 = session key invalid
+  if (status === 401 || status === 403 || fbCode === 190 || fbCode === 102) {
+    const authErr = new Error('invalid_token');
+    authErr.status = 401;
+    throw authErr;
+  }
+  throw err;
 }
 
 module.exports = {
   async fetchDailyMetrics(integration, date) {
-    const seed = parseInt(integration.id.replace(/-/g, '').slice(0, 8), 16) % 100;
-    return generateMetric(date, seed);
+    const rawId = String(integration.account_id || '').replace(/^act_/, '');
+    if (!rawId) throw new Error('Meta account_id bulunamadı');
+    if (!integration.access_token) throw new Error('Meta access_token bulunamadı');
+
+    let resp;
+    try {
+      resp = await axios.get(
+        `https://graph.facebook.com/v19.0/act_${rawId}/insights`,
+        {
+          params: {
+            access_token: integration.access_token,
+            time_range: JSON.stringify({ since: date, until: date }),
+            fields: 'spend,impressions,clicks,actions,action_values',
+            level: 'account',
+          },
+          timeout: 15000,
+        }
+      );
+    } catch (err) {
+      throwIfAuthError(err);
+    }
+
+    const row = resp.data?.data?.[0] || {};
+    const spend = parseFloat(row.spend || 0);
+
+    const purchases = findAction(row.actions, 'offsite_conversion.fb_pixel_purchase')
+                   || findAction(row.actions, 'purchase');
+    const convValue = findAction(row.action_values, 'offsite_conversion.fb_pixel_purchase')
+                   || findAction(row.action_values, 'purchase');
+
+    const roas = spend > 0 && convValue > 0
+      ? Math.round((convValue / spend) * 100) / 100 : 0;
+
+    return {
+      date,
+      spend,
+      impressions: parseInt(row.impressions || 0),
+      clicks:      parseInt(row.clicks      || 0),
+      conversions: Math.round(purchases),
+      roas,
+    };
   },
+
   async pauseCampaign(integration) {
-    console.log(`[MOCK] Meta Ads kampanya durduruldu: ${integration.account_id}`);
-    return { success: true };
+    console.log(`[Meta] pauseCampaign henüz desteklenmiyor: ${integration.account_id}`);
+    return { success: false };
   },
-  generateMetric,
+
+  generateMetric: undefined,
 };

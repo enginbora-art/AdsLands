@@ -76,8 +76,8 @@ async function checkExpiringTokens() {
   `, [trialWarnDays]);
 
   for (const row of expiring) {
-    // Google ve TikTok: refresh_token varsa otomatik yenile
-    if (['google_ads', 'google_analytics', 'tiktok'].includes(row.platform) && row.refresh_token) {
+    // Google, DV360, CM360 ve TikTok: refresh_token varsa otomatik yenile
+    if (['google_ads', 'google_analytics', 'dv360', 'cm360', 'tiktok'].includes(row.platform) && row.refresh_token) {
       try {
         await refreshWithBackoff(row);
         console.log(`⏰ Proaktif token yenileme: platform=${row.platform} company=${row.company_id}`);
@@ -124,9 +124,9 @@ async function checkExpiringTokens() {
     await sendExpiryNotification(row, daysLeft).catch(console.error);
   }
 
-  // ── 3. Süresi dolmuş tokenlar: direkt disconnect ──────────────────────────
+  // ── 3. Süresi dolmuş tokenlar: önce refresh dene, başarısız olursa disconnect ─
   const { rows: expired } = await pool.query(`
-    SELECT i.id, i.company_id, i.platform
+    SELECT i.id, i.company_id, i.platform, i.refresh_token
     FROM integrations i
     WHERE i.is_active = true
       AND i.status = 'connected'
@@ -135,6 +135,16 @@ async function checkExpiringTokens() {
   `);
 
   for (const row of expired) {
+    const canRefresh = ['google_ads', 'google_analytics', 'dv360', 'cm360', 'tiktok', 'linkedin'].includes(row.platform) && row.refresh_token;
+    if (canRefresh) {
+      try {
+        await refreshWithBackoff(row);
+        console.log(`⏰ Süresi dolmuş token yenilendi: platform=${row.platform} company=${row.company_id}`);
+        continue;
+      } catch (err) {
+        console.error(`[cron] Süresi dolmuş token refresh başarısız (${row.platform}):`, err.message);
+      }
+    }
     await markDisconnected(row.id, row.company_id, row.platform).catch(console.error);
     console.log(`⏰ Süresi dolmuş token disconnect: platform=${row.platform} company=${row.company_id}`);
   }

@@ -597,6 +597,210 @@ router.get('/linkedin/callback', async (req, res) => {
   }
 });
 
+// ── Meta OAuth ───────────────────────────────────────────────────────────────
+
+router.get('/meta/connect', authMiddleware, async (req, res) => {
+  const appId = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID;
+  if (!appId) return res.status(500).json({ error: 'META_APP_ID tanımlanmamış.' });
+  try {
+    const companyId  = await resolveCompanyId(req.user, req.query.brand_id);
+    const redirectUri = process.env.META_REDIRECT_URI
+      || `${process.env.BACKEND_URL || 'https://api.adslands.com'}/api/integrations/meta/callback`;
+    const state = Buffer.from(JSON.stringify({ companyId, brand_id: req.query.brand_id || null })).toString('base64');
+    const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?` + new URLSearchParams({
+      client_id: appId, redirect_uri: redirectUri,
+      scope: 'ads_read,ads_management,business_management',
+      state, response_type: 'code',
+    }).toString();
+    res.json({ authUrl });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.get('/meta/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error || !code) return res.redirect(`${FRONTEND_URL}/integrations?error=meta`);
+
+  let companyId, brand_id;
+  try {
+    ({ companyId, brand_id } = JSON.parse(Buffer.from(state, 'base64').toString('utf8')));
+  } catch {
+    return res.redirect(`${FRONTEND_URL}/integrations?error=meta`);
+  }
+
+  try {
+    const axios = require('axios');
+    const appId     = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.META_APP_SECRET || process.env.FACEBOOK_APP_SECRET;
+    const redirectUri = process.env.META_REDIRECT_URI
+      || `${process.env.BACKEND_URL || 'https://api.adslands.com'}/api/integrations/meta/callback`;
+
+    // 1. Kısa ömürlü token al
+    const { data: stData } = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
+      params: { client_id: appId, redirect_uri: redirectUri, client_secret: appSecret, code },
+      timeout: 12000,
+    });
+
+    // 2. Uzun ömürlü token (~60 gün)
+    const { data: llData } = await axios.get('https://graph.facebook.com/oauth/access_token', {
+      params: { grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: stData.access_token },
+      timeout: 12000,
+    });
+    const accessToken  = llData.access_token;
+    const tokenExpiry  = new Date(Date.now() + (llData.expires_in || 5_184_000) * 1000);
+
+    // 3. Ad account bilgisi
+    const { data: acctData } = await axios.get('https://graph.facebook.com/v19.0/me/adaccounts', {
+      params: { access_token: accessToken, fields: 'id,name,account_status', limit: 10 },
+      timeout: 12000,
+    });
+    const accounts   = acctData?.data || [];
+    const account    = accounts.find(a => a.account_status === 1) || accounts[0] || null;
+    const accountId   = account?.id?.replace('act_', '') || null;
+    const accountName = account?.name || null;
+
+    // 4. Kaydet
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, account_id, token_expiry, is_active, status)
+       VALUES ($1, 'meta', $2, $3, $4, true, 'connected')
+       ON CONFLICT (company_id, platform) DO UPDATE SET
+         access_token = EXCLUDED.access_token,
+         account_id   = COALESCE(EXCLUDED.account_id, integrations.account_id),
+         token_expiry = EXCLUDED.token_expiry,
+         is_active    = true, status = 'connected'
+       RETURNING *`,
+      [companyId, encrypt(accessToken), accountId, tokenExpiry]
+    );
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    // 5. İsim benzerliği
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName  = company?.name || '';
+    const similarity = nameSimilarity(accountName || '', brandName);
+    const matched    = similarity >= 0.7;
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'meta', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, accountName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched && accountName) {
+      const p = new URLSearchParams({ verify: 'meta', account_name: accountName, brand_name: brandName, similarity: similarity.toFixed(3), integration_id: integration.id, ...(brand_id ? { brand_id } : {}) });
+      return res.redirect(`${FRONTEND_URL}/integrations?${p}`);
+    }
+    res.redirect(`${FRONTEND_URL}/integrations?success=meta${brand_id ? `&brand_id=${brand_id}` : ''}`);
+  } catch (err) {
+    console.error('Meta OAuth callback hatası:', err.response?.data || err.message);
+    res.redirect(`${FRONTEND_URL}/integrations?error=meta`);
+  }
+});
+
+// ── TikTok OAuth ──────────────────────────────────────────────────────────────
+
+router.get('/tiktok/connect', authMiddleware, async (req, res) => {
+  const appId = process.env.TIKTOK_APP_ID;
+  if (!appId) return res.status(500).json({ error: 'TIKTOK_APP_ID tanımlanmamış.' });
+  try {
+    const companyId   = await resolveCompanyId(req.user, req.query.brand_id);
+    const redirectUri = process.env.TIKTOK_REDIRECT_URI
+      || `${process.env.BACKEND_URL || 'https://api.adslands.com'}/api/integrations/tiktok/callback`;
+    const state = Buffer.from(JSON.stringify({ companyId, brand_id: req.query.brand_id || null })).toString('base64');
+    const authUrl = `https://business-api.tiktok.com/portal/auth?` + new URLSearchParams({ app_id: appId, redirect_uri: redirectUri, state }).toString();
+    res.json({ authUrl });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.get('/tiktok/callback', async (req, res) => {
+  const authCode = req.query.auth_code || req.query.code;
+  const { state, error } = req.query;
+  if (error || !authCode) return res.redirect(`${FRONTEND_URL}/integrations?error=tiktok`);
+
+  let companyId, brand_id;
+  try {
+    ({ companyId, brand_id } = JSON.parse(Buffer.from(state, 'base64').toString('utf8')));
+  } catch {
+    return res.redirect(`${FRONTEND_URL}/integrations?error=tiktok`);
+  }
+
+  try {
+    const axios = require('axios');
+    const appId     = process.env.TIKTOK_APP_ID;
+    const appSecret = process.env.TIKTOK_APP_SECRET;
+
+    // 1. Token al
+    const { data: tokenData } = await axios.post(
+      'https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/token/',
+      { app_id: appId, auth_code: authCode, secret: appSecret, grant_type: 'authorization_code' },
+      { timeout: 12000 }
+    );
+    if (tokenData?.code !== 0) throw new Error(tokenData?.message || 'TikTok token exchange başarısız');
+
+    const { access_token, refresh_token, access_token_expire_in, advertiser_ids } = tokenData.data;
+    const tokenExpiry  = new Date(Date.now() + (access_token_expire_in || 86400) * 1000);
+    const advertiserId = advertiser_ids?.[0] ? String(advertiser_ids[0]) : null;
+
+    // 2. Advertiser adı
+    let accountName = advertiserId;
+    if (advertiserId) {
+      try {
+        const { data: advData } = await axios.get('https://business-api.tiktok.com/open_api/v1.3/advertiser/info/', {
+          params: { advertiser_ids: JSON.stringify([advertiserId]), fields: JSON.stringify(['advertiser_name']) },
+          headers: { 'Access-Token': access_token }, timeout: 10000,
+        });
+        accountName = advData?.data?.list?.[0]?.advertiser_name || advertiserId;
+      } catch { /* isim alınamadı */ }
+    }
+
+    // 3. Kaydet
+    const { rows: [integration] } = await pool.query(
+      `INSERT INTO integrations (company_id, platform, access_token, refresh_token, account_id, token_expiry, is_active, status)
+       VALUES ($1, 'tiktok', $2, $3, $4, $5, true, 'connected')
+       ON CONFLICT (company_id, platform) DO UPDATE SET
+         access_token  = EXCLUDED.access_token,
+         refresh_token = EXCLUDED.refresh_token,
+         account_id    = COALESCE(EXCLUDED.account_id, integrations.account_id),
+         token_expiry  = EXCLUDED.token_expiry,
+         is_active     = true, status = 'connected'
+       RETURNING *`,
+      [companyId, encrypt(access_token), refresh_token ? encrypt(refresh_token) : null, advertiserId, tokenExpiry]
+    );
+
+    // advertiser_id extra'ya yaz
+    if (advertiserId) {
+      await pool.query(
+        `UPDATE integrations SET extra = jsonb_set(COALESCE(extra,'{}'), '{advertiser_id}', $1::jsonb) WHERE id = $2`,
+        [JSON.stringify(advertiserId), integration.id]
+      ).catch(console.error);
+    }
+    await seedHistoricalMetrics(integration).catch(console.error);
+
+    // 4. İsim benzerliği
+    const { rows: [company] } = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    const brandName  = company?.name || '';
+    const similarity = nameSimilarity(accountName || '', brandName);
+    const matched    = similarity >= 0.7;
+
+    await pool.query(
+      `INSERT INTO integration_logs (integration_id, company_id, platform, account_name, brand_name, similarity, matched, action)
+       VALUES ($1, $2, 'tiktok', $3, $4, $5, $6, $7)`,
+      [integration.id, companyId, accountName, brandName, similarity, matched, matched ? 'auto_accepted' : 'pending_verify']
+    ).catch(console.error);
+
+    if (!matched && accountName) {
+      const p = new URLSearchParams({ verify: 'tiktok', account_name: accountName, brand_name: brandName, similarity: similarity.toFixed(3), integration_id: integration.id, ...(brand_id ? { brand_id } : {}) });
+      return res.redirect(`${FRONTEND_URL}/integrations?${p}`);
+    }
+    res.redirect(`${FRONTEND_URL}/integrations?success=tiktok${brand_id ? `&brand_id=${brand_id}` : ''}`);
+  } catch (err) {
+    console.error('TikTok OAuth callback hatası:', err.response?.data || err.message);
+    res.redirect(`${FRONTEND_URL}/integrations?error=tiktok`);
+  }
+});
+
 // ── DV360 Advertiser seçimi ───────────────────────────────────────────────────
 
 // GET /api/integrations/dv360/advertisers — bağlı hesaptaki advertiser'ları listele

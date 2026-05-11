@@ -62,7 +62,7 @@ async function refreshIfNeeded(tokens, integrationId = null) {
       const pool = require('../db');
       const { encrypt } = require('./tokenEncryption');
       await pool.query(
-        'UPDATE integrations SET access_token = $1, token_expiry = $2 WHERE id = $3',
+        "UPDATE integrations SET access_token = $1, token_expiry = $2, status = 'connected' WHERE id = $3",
         [encrypt(credentials.access_token), credentials.expiry_date ? new Date(credentials.expiry_date) : null, integrationId]
       );
     } catch (err) {

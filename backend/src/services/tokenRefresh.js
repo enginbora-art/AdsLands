@@ -191,6 +191,8 @@ async function refreshWithBackoff(integration, maxRetries = 3) {
       switch (integration.platform) {
         case 'google_ads':
         case 'google_analytics':
+        case 'dv360':
+        case 'cm360':
           await refreshGoogleToken(integration); break;
         case 'linkedin':
           await refreshLinkedinToken(integration); break;

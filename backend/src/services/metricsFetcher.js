@@ -21,7 +21,9 @@ async function saveMetric(integrationId, metric) {
 
 async function seedHistoricalMetrics(integration) {
   const decrypted = decryptIntegration(integration);
-  const svc  = getPlatformService(decrypted.platform);
+  const svc = getPlatformService(decrypted.platform);
+  if (!svc.generateMetric) return;
+
   const seed = parseInt(decrypted.id.replace(/-/g, '').slice(0, 8), 16) % 100;
 
   for (let i = 30; i >= 1; i--) {

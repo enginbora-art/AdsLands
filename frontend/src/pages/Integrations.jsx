@@ -822,7 +822,7 @@ function DisconnectConfirmModal({ platformId, onConfirm, onCancel }) {
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
-function DetailModal({ integration, platform, metrics, liveData, liveLoading, liveError, metricsLoading, onFetchLive, onRefresh, onClose }) {
+function DetailModal({ integration, platform, metrics, liveData, liveLoading, liveError, metricsLoading, onFetchLive, onRefresh, onClose, onSelectAdvertiser, onSelectProfile }) {
   const isGA      = integration.platform === 'google_analytics';
   const isGoogAds = integration.platform === 'google_ads';
   const isDv360   = integration.platform === 'dv360';
@@ -902,6 +902,18 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
               {liveLoading ? 'Yükleniyor...' : '⚡ Canlı Veri Al'}
             </button>
           )}
+          {isDv360 && (
+            <button onClick={onSelectAdvertiser}
+              style={{ padding: '7px 16px', background: 'rgba(26,115,232,0.1)', border: '1px solid rgba(26,115,232,0.3)', borderRadius: 8, color: '#1A73E8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              {advertiserName ? '↩ Advertiser Değiştir' : '+ Advertiser Seç'}
+            </button>
+          )}
+          {isCm360 && (
+            <button onClick={onSelectProfile}
+              style={{ padding: '7px 16px', background: 'rgba(52,168,83,0.1)', border: '1px solid rgba(52,168,83,0.3)', borderRadius: 8, color: '#34A853', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              {profileName ? '↩ Profil Değiştir' : '+ Profil Seç'}
+            </button>
+          )}
           {liveData && (
             <span style={{ fontSize: 11, color: 'var(--text3)', alignSelf: 'center', marginLeft: 4 }}>
               Canlı · Hesap: {liveData.account_id}
@@ -918,8 +930,32 @@ function DetailModal({ integration, platform, metrics, liveData, liveLoading, li
           {metricsLoading ? (
             <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>Yükleniyor...</div>
           ) : rows.length === 0 ? (
-            <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 40, fontSize: 13 }}>
-              Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : isDv360 && !advertiserName ? ' Önce advertiser seçin.' : isCm360 && !profileName ? ' Önce profil seçin.' : ''}
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              {isDv360 && !advertiserName ? (
+                <>
+                  <div style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 16 }}>
+                    Veri göstermek için önce bir DV360 advertiser seçin.
+                  </div>
+                  <button onClick={onSelectAdvertiser}
+                    style={{ padding: '9px 22px', background: 'rgba(26,115,232,0.12)', border: '1px solid rgba(26,115,232,0.4)', borderRadius: 8, color: '#1A73E8', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                    + Advertiser Seç
+                  </button>
+                </>
+              ) : isCm360 && !profileName ? (
+                <>
+                  <div style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 16 }}>
+                    Veri göstermek için önce bir CM360 profil seçin.
+                  </div>
+                  <button onClick={onSelectProfile}
+                    style={{ padding: '9px 22px', background: 'rgba(52,168,83,0.12)', border: '1px solid rgba(52,168,83,0.4)', borderRadius: 8, color: '#34A853', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                    + Profil Seç
+                  </button>
+                </>
+              ) : (
+                <div style={{ color: 'var(--text3)', fontSize: 13 }}>
+                  Henüz veri yok.{isGoogAds ? ' Canlı veri almak için ⚡ butonunu kullanın.' : ''}
+                </div>
+              )}
             </div>
           ) : (
             <div style={s.tableWrap}>
@@ -1315,6 +1351,8 @@ export default function Integrations({ onNav }) {
           onFetchLive={handleFetchLive}
           onRefresh={handleRefresh}
           onClose={() => { setSelected(null); setMetrics([]); setLiveData(null); setLiveError(null); }}
+          onSelectAdvertiser={() => { setSelected(null); setMetrics([]); setLiveData(null); setLiveError(null); setDv360AdvModal(true); }}
+          onSelectProfile={() => { setSelected(null); setMetrics([]); setLiveData(null); setLiveError(null); setCm360ProfileModal(true); }}
         />
       )}
 

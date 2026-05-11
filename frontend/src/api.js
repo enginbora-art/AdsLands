@@ -100,6 +100,9 @@ export const connectIntegration = async (platform, brandId) => {
   } else if (platform === 'linkedin') {
     const { authUrl } = await api.get(`/integrations/linkedin/connect${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
     window.location.href = authUrl;
+  } else if (platform === 'meta' || platform === 'tiktok') {
+    const { authUrl } = await api.get(`/integrations/${platform}/connect${brandId ? `?brand_id=${brandId}` : ''}`).then(r => r.data);
+    window.location.href = authUrl;
   } else {
     window.location.href = `${import.meta.env.VITE_API_URL}/integrations/${platform}/connect${brandId ? `?brand_id=${brandId}` : ''}`;
   }

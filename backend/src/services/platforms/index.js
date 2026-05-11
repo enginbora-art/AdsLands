@@ -7,8 +7,9 @@ const adjust = require('./adjust');
 const adform = require('./adform');
 const linkedin = require('./linkedin');
 const dv360    = require('./dv360');
+const cm360    = require('./cm360');
 
-const services = { google_ads: googleAds, meta, tiktok, google_analytics: googleAnalytics, appsflyer, adjust, adform, linkedin, dv360 };
+const services = { google_ads: googleAds, meta, tiktok, google_analytics: googleAnalytics, appsflyer, adjust, adform, linkedin, dv360, cm360 };
 
 module.exports = (platform) => {
   const svc = services[platform];
